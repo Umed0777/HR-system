@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+@import "tailwindcss";
+
+body{
+  font-family: "Inter", sans-serif;
+}
+/* Все стрелки Ant Design в едином стиле */
+
+/* Select */
+.ant-select-arrow {
+  color: #ff4b2b !important;
+  transition: color 0.3s;
+}
+
+/* Pagination */
+.ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination-next .ant-pagination-item-link {
+  color: #ff4b2b !important;
+  border-radius: 8px !important;
+  transition: all 0.3s;
+}
+
+.ant-pagination-prev:hover .ant-pagination-item-link,
+.ant-pagination-next:hover .ant-pagination-item-link {
+  color: #ff416c !important;
+  border-color: #ff4b2b !important;
+}
+
+/* Carousel */
+.ant-carousel .slick-prev,
+.ant-carousel .slick-next {
+  background: rgba(255, 75, 43, 0.85) !important;
+  border-radius: 50% !important;
+  width: 44px !important;
+  height: 44px !important;
+  z-index: 10;
+}
+
+.ant-carousel .slick-prev:hover,
+.ant-carousel .slick-next:hover {
+  background: #ff4b2b !important;
+  transform: scale(1.1);
+}
+
+.ant-carousel .slick-prev:before,
+.ant-carousel .slick-next:before {
+  color: white !important;
+  font-size: 22px !important;
+}
+
+/* Collapse */
+.ant-collapse-arrow {
+  color: #ff4b2b !important;
+  font-size: 14px;
+}
+
+/* Dropdown */
+.ant-dropdown-arrow {
+  background: #ff4b2b !important;
+}
+
+/* Input number (стрелки вверх/вниз) */
+.ant-input-number-handler {
+  border-color: #ff4b2b !important;
+}
+
+.ant-input-number-handler-up-inner,
+.ant-input-number-handler-down-inner {
+  color: #ff4b2b !important;
+}
+
+/* TimePicker стрелки */
+.ant-picker-suffix,
+.ant-picker-clear {
+  color: #ff4b2b !important;
+}
+
+/* DatePicker стрелки */
+.ant-picker-panel-container .ant-picker-panel .ant-picker-content th,
+.ant-picker-header-super-prev-btn,
+.ant-picker-header-super-next-btn,
+.ant-picker-header-prev-btn,
+.ant-picker-header-next-btn {
+  color: #ff4b2b !important;
+}
+
+/* активная страница */
+.ant-pagination-item-active {
+  background-color: red !important;
+  border-color: red !important;
+}
+
+.ant-pagination-item-active a {
+  color: white !important;
+}
+
+/* при наведении */
+.ant-pagination-item:hover {
+  border-color: red;
+}
+
+.ant-pagination-item:hover a {
+  color: red;
+}
