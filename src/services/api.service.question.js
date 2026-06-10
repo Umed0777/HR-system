@@ -5,9 +5,14 @@ const API = axios.create({
 });
 
 // GET ALL
-export const getQuestions = async () => {
+export const getQuestions = async (pageNumber = 1, pageSize = 10) => {
   try {
-    const res = await API.get("/api/Question");
+    const res = await API.get("/api/Question",{
+       params: {
+        PageNumber: pageNumber,
+        PageSize: pageSize,
+      },
+    })
     return res.data;
   } catch (error) {
     console.error(error);

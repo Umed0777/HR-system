@@ -12,11 +12,12 @@ export const useTestStore = create((set) => ({
   currentTest: null,
   loading: false,
   error: null,
+  totalRecords: 0,
 
-  fetchTests: async () => {
+  fetchTests: async (pageNumber = 1, pageSize = 10) => {
     set({ loading: true, error: null });
     try {
-      const res = await getTests();
+      const res = await getTests(pageNumber, pageSize);
       console.log("Fetched tests response:", res);
       
       let testsData = [];

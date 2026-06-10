@@ -19,15 +19,13 @@ import {
   Table,
   Flex,
   Avatar,
-  Divider,
   Empty,
   Steps,
   Alert,
   Progress,
-  Statistic,
+  Pagination,
 } from "antd";
 import { 
-  PlusOutlined, 
   DeleteOutlined, 
   EditOutlined, 
   FileTextOutlined,
@@ -45,7 +43,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
 import img from '../assets/image2.jpg';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 export const TestManager = () => {
   const navigate = useNavigate();
@@ -55,9 +53,14 @@ export const TestManager = () => {
     fetchTests, 
     addTest, 
     editTest, 
-    removeTest 
+    removeTest,
+    totalRecords, 
   } = useTestStore();
-  const { questions = [], fetchQuestions } = useQuestionStore();
+  const { 
+    questions = [], 
+    fetchQuestions,
+    totalRecords: totalQuestionsCount 
+  } = useQuestionStore();
 
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -77,10 +80,14 @@ export const TestManager = () => {
   const [descriptionTj, setDescriptionTj] = useState("");
   const [targetKeys, setTargetKeys] = useState([]);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
+ const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
+  // Загружаем ВСЕ вопросы (без пагинации)
   useEffect(() => {
     fetchTests();
-    fetchQuestions();
+    // Загружаем все вопросы - устанавливаем большой pageSize
+    fetchQuestions(1, 1000);
   }, []);
 
   const handleSetLang = (newLang) => {
@@ -108,7 +115,6 @@ export const TestManager = () => {
       noQuestions: "Нет доступных вопросов",
       testCreated: "Тест успешно создан",
       testUpdated: "Тест успешно обновлен",
-      startTest: "Пройти тест",
       loading: "Загрузка...",
       questionCount: "вопросов",
       createFirst: "Создать первый тест",
@@ -130,6 +136,7 @@ export const TestManager = () => {
       questionType: "Тип вопроса",
       test: "Тест",
       manual: "Ручной",
+      allQuestions: "Все вопросы",
     },
     tj: {
       title: "Идоракунии тестҳо",
@@ -150,7 +157,6 @@ export const TestManager = () => {
       noQuestions: "Саволҳо нестанд",
       testCreated: "Тест бомуваффақият эҷод шуд",
       testUpdated: "Тест бомуваффақият нав карда шуд",
-      startTest: "Гузаштани тест",
       loading: "Боркунӣ...",
       questionCount: "савол",
       createFirst: "Эҷоди тести аввал",
@@ -172,6 +178,7 @@ export const TestManager = () => {
       questionType: "Навъи савол",
       test: "Тест",
       manual: "Дастӣ",
+      allQuestions: "Ҳамаи саволҳо",
     },
   };
 
@@ -198,11 +205,10 @@ export const TestManager = () => {
     const questionKeys = test.questions?.map(q => q.id?.toString()).filter(Boolean) || [];
     setTargetKeys(questionKeys);
     
-    const selected = test.questions?.map(q => ({
-      id: q.id,
-      content: q.content,
-      type: q.type,
-    })) || [];
+    const selected = test.questions?.map(testQuestion => {
+      const fullQuestion = questions.find(q => q.id === testQuestion.id);
+      return fullQuestion || testQuestion;
+    }).filter(Boolean) || [];
     
     setSelectedQuestions(selected);
     setOpen(true);
@@ -232,14 +238,7 @@ export const TestManager = () => {
     
     const selected = newTargetKeys.map(key => {
       const question = questions.find(q => q.id === parseInt(key));
-      if (question) {
-        return {
-          id: question.id,
-          content: question.content,
-          type: question.type,
-        };
-      }
-      return null;
+      return question;
     }).filter(Boolean);
     
     setSelectedQuestions(selected);
@@ -281,11 +280,7 @@ export const TestManager = () => {
         response = await addTest(payload);
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 3000);
-        message.success({
-          content: t[lang].testCreated,
-          icon: <RocketOutlined />,
-          duration: 3,
-        });
+        message.success(t[lang].testCreated);
         
         if (response && response.id) {
           setNewTestId(response.id);
@@ -328,16 +323,13 @@ export const TestManager = () => {
 
   const getQuestionText = (question) => {
     if (!question) return "—";
-    if (question.type === 2) {
-      const parts = question.content?.split(" || ") || [];
-      return parts[0] || question.content || "—";
-    }
     if (lang === "ru") {
       return question.contentRu || question.content || "—";
     }
     return question.contentTj || question.content || "—";
   };
 
+  // Данные для Transfer - теперь включает ВСЕ вопросы
   const transferData = questions.map(q => ({
     key: q.id.toString(),
     title: getQuestionText(q),
@@ -388,13 +380,13 @@ export const TestManager = () => {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh" }}>
-        <Spin size="small" tip={t[lang].loading}>
+        <Spin size="large" tip={t[lang].loading}>
           <div style={{ padding: 50, background: "rgba(255,255,255,0.9)", borderRadius: 20 }} />
         </Spin>
       </div>
     );
   }
-
+ const totalItems = totalRecords;
   return (
     <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
       {showConfetti && (
@@ -423,20 +415,19 @@ export const TestManager = () => {
             onClick={() => handleSetLang("ru")}
             style={lang === "ru" ? { background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 } : {}}
           >
-             RU
+            RU
           </Button>
           <Button
             type={lang === "tj" ? "primary" : "default"}
             onClick={() => handleSetLang("tj")}
             style={lang === "tj" ? { background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 } : {}}
           >
-           TJ
+            TJ
           </Button>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               type="primary"
               onClick={openCreateModal}
-              // icon={<PlusOutlined />}
               style={{
                 background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
                 border: "none",
@@ -543,7 +534,6 @@ export const TestManager = () => {
                           backgroundRepeat: "no-repeat",
                         }}
                         styles={{ body: { padding: 0, background: 'transparent' } }}
-                        // onClick={() => navigate(`/test/${test.id}`)}
                       >
                         <div
                           style={{
@@ -578,30 +568,18 @@ export const TestManager = () => {
                           </Flex>
                           
                           {(lang === "ru" ? test.descriptionRu || test.description : test.descriptionTj || test.description) && (
-                            <Paragraph 
+                            <Text 
                               type="secondary" 
                               ellipsis={{ rows: 2 }}
-                              style={{ marginTop: 12, marginBottom: 0 }}
+                              style={{ marginTop: 12, marginBottom: 0, display: "block" }}
                             >
                               {lang === "ru" ? test.descriptionRu || test.description : test.descriptionTj || test.description}
-                            </Paragraph>
+                            </Text>
                           )}
                         </div>
 
                         <div style={{ padding: "16px 24px", background: "rgba(255, 255, 255, 0.9)" }}>
                           <Flex justify="end" align="center">
-                            {/* <Button 
-                              type="primary"
-                              style={{
-                                background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
-                                border: "none",
-                                borderRadius: 20,
-                              }}
-                              icon={<ArrowRightOutlined />}
-                            >
-                              {t[lang].startTest}
-                            </Button> */}
-                            
                             <Space>
                               <Button
                                 icon={<EditOutlined />}
@@ -643,9 +621,30 @@ export const TestManager = () => {
             </Row>
           </motion.div>
         )}
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: 20,
+            display: "flex",
+            justifyContent: "end",
+          }}
+        >
+          <Pagination
+            current={currentPage}
+            pageSize={pageSize}
+            total={totalItems}
+            showSizeChanger={false}
+            showQuickJumper={false}
+            pageSizeOptions={[5, 10, 20, 50]}
+            onChange={(page, size) => {
+              setCurrentPage(page);
+              setPageSize(size);
+            }}
+          />
+        </div>
       </AnimatePresence>
 
-      {/* УЛУЧШЕННОЕ МОДАЛЬНОЕ ОКНО С ПОШАГОВЫМ СОЗДАНИЕМ */}
+      {/* Модальное окно */}
       <Modal
         open={open}
         onCancel={() => {
@@ -661,7 +660,7 @@ export const TestManager = () => {
         }}
       >
         <div style={{ borderRadius: 20, overflow: "hidden" }}>
-          {/* Заголовок с градиентом */}
+          {/* Заголовок */}
           <div style={{
             background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
             padding: "24px 30px",
@@ -695,21 +694,9 @@ export const TestManager = () => {
             <Steps
               current={currentStep}
               items={[
-                { 
-                  title: t[lang].step1, 
-                  icon: <FileTextOutlined />,
-                  description: "Название и описание"
-                },
-                { 
-                  title: t[lang].step2, 
-                  icon: <QuestionCircleOutlined />,
-                  description: "Выберите вопросы"
-                },
-                { 
-                  title: t[lang].step3, 
-                  icon: <CheckCircleOutlined />,
-                  description: "Проверка"
-                },
+                { title: t[lang].step1, icon: <FileTextOutlined /> },
+                { title: t[lang].step2, icon: <QuestionCircleOutlined /> },
+                { title: t[lang].step3, icon: <CheckCircleOutlined /> },
               ]}
               style={{ marginBottom: 30 }}
             />
@@ -717,7 +704,7 @@ export const TestManager = () => {
 
           <div style={{ padding: "0 30px 30px 30px", background: "#fff" }}>
             <AnimatePresence mode="wait">
-              {/* ШАГ 1: Основная информация */}
+              {/* ШАГ 1 */}
               {currentStep === 0 && (
                 <motion.div
                   key="step1"
@@ -728,10 +715,9 @@ export const TestManager = () => {
                 >
                   <Alert
                     message={t[lang].info}
-                    description="Введите основную информацию о тесте. Название обязательно для заполнения."
+                    description="Введите основную информацию о тесте."
                     type="info"
                     showIcon
-                    icon={<InfoCircleOutlined />}
                     style={{ marginBottom: 24, borderRadius: 12 }}
                   />
                   
@@ -751,7 +737,6 @@ export const TestManager = () => {
                       placeholder={lang === "ru" ? "Введите название теста" : "Номи тестро ворид кунед"}
                       size="large"
                       style={{ borderRadius: 12 }}
-                      prefix={<FileTextOutlined style={{ color: "#ff4b2b" }} />}
                     />
                   </div>
 
@@ -777,7 +762,7 @@ export const TestManager = () => {
                 </motion.div>
               )}
 
-              {/* ШАГ 2: Выбор вопросов */}
+              {/* ШАГ 2 - Transfer с ВСЕМИ вопросами */}
               {currentStep === 1 && (
                 <motion.div
                   key="step2"
@@ -788,10 +773,9 @@ export const TestManager = () => {
                 >
                   <Alert
                     message={t[lang].info}
-                    description="Выберите вопросы для теста. Вы можете изменить порядок вопросов в следующем шаге."
+                    description={`${t[lang].allQuestions}: ${questions.length} ${t[lang].questionCount}`}
                     type="info"
                     showIcon
-                    icon={<InfoCircleOutlined />}
                     style={{ marginBottom: 24, borderRadius: 12 }}
                   />
                   
@@ -810,21 +794,27 @@ export const TestManager = () => {
                       <Transfer
                         dataSource={transferData}
                         titles={[
-                          <Space key="left"><QuestionCircleOutlined /> {t[lang].availableQuestions}</Space>,
-                          <Space key="right"><CheckCircleOutlined /> {t[lang].selectedQuestions} ({targetKeys.length})</Space>
+                          <Space key="left">
+                            <QuestionCircleOutlined /> {t[lang].availableQuestions} ({questions.length})
+                          </Space>,
+                          <Space key="right">
+                            <CheckCircleOutlined /> {t[lang].selectedQuestions} ({targetKeys.length})
+                          </Space>
                         ]}
                         targetKeys={targetKeys}
                         onChange={handleTransferChange}
                         render={item => (
                           <Flex justify="space-between" align="center">
-                            <span>{item.title}</span>
+                            <span style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {item.title}
+                            </span>
                             <Tag color={item.type === 1 ? "green" : "purple"} size="small">
                               {item.type === 1 ? "Тест" : "Ручной"}
                             </Tag>
                           </Flex>
                         )}
                         listStyle={{
-                          width: 320,
+                          width: 350,
                           height: 450,
                           borderRadius: 12,
                         }}
@@ -833,6 +823,8 @@ export const TestManager = () => {
                           item.title.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1
                         }
                         style={{ marginTop: 8 }}
+                        oneWay
+                        pagination
                       />
                       
                       {targetKeys.length > 0 && (
@@ -853,7 +845,7 @@ export const TestManager = () => {
                 </motion.div>
               )}
 
-              {/* ШАГ 3: Проверка и сохранение */}
+              {/* ШАГ 3 */}
               {currentStep === 2 && (
                 <motion.div
                   key="step3"
@@ -867,7 +859,6 @@ export const TestManager = () => {
                     description={t[lang].testReady}
                     type="success"
                     showIcon
-                    icon={<SmileOutlined />}
                     style={{ marginBottom: 24, borderRadius: 12 }}
                   />
                   
@@ -893,12 +884,6 @@ export const TestManager = () => {
                           </div>
                         </div>
                       </Flex>
-                      
-                      {(lang === "ru" ? descriptionRu : descriptionTj) && (
-                        <div style={{ marginTop: 16, padding: 12, background: "#f9f9f9", borderRadius: 12 }}>
-                          <Text type="secondary">{lang === "ru" ? descriptionRu : descriptionTj}</Text>
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -907,26 +892,17 @@ export const TestManager = () => {
                       <Text strong style={{ fontSize: 16, display: "block", marginBottom: 12 }}>
                         📋 {t[lang].questionsInfo}:
                       </Text>
-                      <Table
-                        dataSource={selectedQuestions}
-                        columns={columns}
-                        pagination={false}
-                        size="small"
-                        style={{ borderRadius: 12 }}
-                        rowKey="id"
-                      />
+                      <div style={{ maxHeight: 300, overflow: "auto" }}>
+                        <Table
+                          dataSource={selectedQuestions}
+                          columns={columns}
+                          pagination={false}
+                          size="small"
+                          style={{ borderRadius: 12 }}
+                          rowKey="id"
+                        />
+                      </div>
                     </div>
-                  )}
-
-                  {targetKeys.length === 0 && (
-                    <Alert
-                      message={t[lang].warning}
-                      description={t[lang].selectQuestions}
-                      type="warning"
-                      showIcon
-                      icon={<WarningOutlined />}
-                      style={{ marginTop: 16, borderRadius: 12 }}
-                    />
                   )}
                 </motion.div>
               )}
@@ -950,7 +926,6 @@ export const TestManager = () => {
                     style={{ 
                       background: "#ff4b2b",
                       borderRadius: 10,
-                      boxShadow: "0 2px 8px rgba(255, 75, 43, 0.3)"
                     }}
                     icon={<ArrowRightOutlined />}
                   >
@@ -964,7 +939,6 @@ export const TestManager = () => {
                     style={{ 
                       background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
                       borderRadius: 10,
-                      boxShadow: "0 4px 12px rgba(255, 75, 43, 0.4)",
                       fontWeight: "bold"
                     }}
                     icon={<RocketOutlined />}

@@ -19,16 +19,19 @@ export const useQuestionStore = create((set, get) => ({
   currentAnswer: null,
   loading: false,
   error: null,
+  totalRecords: 0,
 
   // ==================== QUESTION METHODS ====================
   
-  fetchQuestions: async () => {
+  fetchQuestions: async (pageNumber = 1, pageSize = 10) => {
     set({ loading: true, error: null });
     try {
-      const res = await getQuestions();
-      console.log("Fetched questions:", res.data); 
+      const res = await getQuestions(pageNumber, pageSize);
+      console.log("Fetched questions:", res.data);
+      console.log(res.totalRecords); 
       set({
         questions: res.data,
+        totalRecords: res.totalRecords,
         loading: false,
       });
     } catch (err) {
