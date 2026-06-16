@@ -18,6 +18,7 @@ import {
   Divider,
   Pagination,
 } from "antd";
+import { useNavigate } from "react-router-dom";
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -30,8 +31,7 @@ import {
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
-import img from "../assets/image2.jpg";
-
+import img from "../assets/image2.jpg"; 
 const { Title, Text } = Typography;
 const letters = ["A", "B", "C", "D", "E", "F"];
 
@@ -128,7 +128,7 @@ export const Question = () => {
     removeQuestion,
     totalRecords,
   } = useQuestionStore();
-
+ const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [lang, setLang] = useState(() => {
@@ -784,6 +784,8 @@ export const Question = () => {
             })}
           </Space>
         )}
+        <Flex   justify="space-between" color = 'primary' style={{ alignItems: 'flex-end' }}>
+          <Button onClick={() => navigate('/test')} danger size="middle" style={{padding: '10px 30px', height: 32}}>Cоздать тесты</Button>
         <Pagination
           current={page}
           pageSize={pageSize}
@@ -800,6 +802,7 @@ export const Question = () => {
             justifyContent: "flex-end",
           }}
         />
+        </Flex>
       </AnimatePresence>
 
       {/* Модальное окно для создания/редактирования */}

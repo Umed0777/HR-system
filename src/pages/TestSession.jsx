@@ -202,8 +202,45 @@ const Timer = ({ minutes, onTimeEnd, isActive, onTick, startTimestamp, onRemaini
   );
 };
 
+// Компонент выбора рейтинга
+const RatingSelector = ({ value, onChange, disabled = false }) => {
+  const ratingOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: 8 }}>
+      {ratingOptions.map((num) => {
+        const active = value === num;
+        return (
+          <div
+            key={num}
+            onClick={() => !disabled && onChange(num)}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              cursor: disabled ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: "bold",
+              fontSize: 15,
+              transition: "0.3s",
+              background: active ? "linear-gradient(135deg, #ff4d4f, #ff7875)" : "rgba(255,255,255,0.9)",
+              color: active ? "#fff" : "#333",
+              border: active ? "3px solid #ffd6d6" : "1px solid #e8e8e8",
+              boxShadow: active ? "0 8px 20px rgba(255, 77, 79, 0.35)" : "0 2px 6px rgba(0,0,0,0.08)",
+            }}
+          >
+            {num}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // Компонент вопроса
-const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, manualAnswer, onManualAnswerChange, lang }) => {
+const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, manualAnswer, onManualAnswerChange, ratingValue, onRatingChange, lang }) => {
   const t = {
     ru: {
       question: "Вопрос",
@@ -211,6 +248,8 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
       yourAnswer: "Ваш ответ",
       selectOption: "Выберите вариант ответа",
       textAnswer: "Введите текстовый ответ",
+      selectRating: "Выберите рейтинг (1-10)",
+      rating: "Рейтинг",
     },
     tj: {
       question: "Савол",
@@ -218,6 +257,8 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
       yourAnswer: "Ҷавоби шумо",
       selectOption: "Варианти ҷавобро интихоб кунед",
       textAnswer: "Ҷавоби матниро ворид кунед",
+      selectRating: "Баҳоро интихоб кунед (1-10)",
+      rating: "Баҳо",
     },
   };
 
@@ -254,7 +295,7 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
         <Text type="secondary">{t[lang].yourAnswer}</Text>
       </Divider>
 
-      {question?.type === 1 ? (
+      {question?.type === 1 && (
         <Radio.Group
           value={selectedOption}
           onChange={(e) => onSelectOption(e.target.value)}
@@ -284,7 +325,9 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
             })}
           </div>
         </Radio.Group>
-      ) : (
+      )}
+
+      {question?.type === 2 && (
         <TextArea
           placeholder={t[lang].textAnswer}
           value={manualAnswer || ""}
@@ -294,6 +337,25 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
           style={{ fontSize: 15, borderRadius: 8 }}
           autoComplete="off"
         />
+      )}
+
+      {question?.type === 3 && (
+        <div>
+          <Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+            {t[lang].selectRating}
+          </Text>
+          <RatingSelector 
+            value={ratingValue} 
+            onChange={onRatingChange}
+          />
+          {ratingValue && (
+            <div style={{ marginTop: 12 }}>
+              <Tag color="orange" style={{ fontSize: 14, padding: "4px 12px" }}>
+                {t[lang].rating}: {ratingValue}/10
+              </Tag>
+            </div>
+          )}
+        </div>
       )}
     </Card>
   );
@@ -452,6 +514,9 @@ const SessionDetailsModal = ({ visible, session, onClose, tests, employees, lang
 
   const getAnswerText = (answer) => {
     const question = test?.questions?.find(q => q.id === answer.questionId);
+    if (answer.optionId !== null && question?.type === 3) {
+      return `Рейтинг: ${answer.optionId}/10`;
+    }
     if (answer.optionId !== null && question?.options) {
       const option = question.options.find(o => o.id === answer.optionId);
       return lang === "ru" ? (option?.textRu || option?.text) : (option?.textTj || option?.text);
@@ -462,7 +527,8 @@ const SessionDetailsModal = ({ visible, session, onClose, tests, employees, lang
     return "—";
   };
 
-  const getAnswerType = (answer) => {
+  const getAnswerType = (answer, question) => {
+    if (question?.type === 3) return "Рейтинг";
     if (answer.optionId !== null) return "Выборочный";
     if (answer.textAnswer) return "Ручной";
     return "—";
@@ -542,34 +608,46 @@ const SessionDetailsModal = ({ visible, session, onClose, tests, employees, lang
           {activeTab === "answers" && (
             <div style={{ maxHeight: 500, overflowY: "auto" }}>
               {session.answers && session.answers.length > 0 ? (
-                session.answers.map((answer, idx) => (
-                  <Card key={idx} size="small" style={{ marginBottom: 12, borderRadius: 8 }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                      <Badge 
-                        count={idx + 1} 
-                        style={{ backgroundColor: answer.isCorrect ? "#52c41a" : "#ff4d4f" }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <Text strong>{getQuestionText(answer.questionId)}</Text>
-                        <div style={{ marginTop: 8 }}>
-                          <Text type="secondary">Тип ответа: </Text>
-                          <Tag color={answer.optionId !== null ? "blue" : "green"}>{getAnswerType(answer)}</Tag>
-                        </div>
-                        <div style={{ marginTop: 4 }}>
-                          <Text type="secondary">Ответ: </Text>
-                          <Text>{getAnswerText(answer)}</Text>
-                        </div>
-                        <div style={{ marginTop: 4 }}>
-                          {answer.isCorrect ? (
-                            <Tag color="success" icon={<CheckCircleOutlined />}>Правильно</Tag>
-                          ) : (
-                            <Tag color="error" icon={<CloseCircleOutlined />}>Неправильно</Tag>
+                session.answers.map((answer, idx) => {
+                  const question = test?.questions?.find(q => q.id === answer.questionId);
+                  return (
+                    <Card key={idx} size="small" style={{ marginBottom: 12, borderRadius: 8 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                        <Badge 
+                          count={idx + 1} 
+                          style={{ backgroundColor: question?.type === 3 ? "#faad14" : (answer.isCorrect ? "#52c41a" : "#ff4d4f") }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <Text strong>{getQuestionText(answer.questionId)}</Text>
+                          <div style={{ marginTop: 8 }}>
+                            <Text type="secondary">Тип ответа: </Text>
+                            <Tag color={question?.type === 3 ? "orange" : (answer.optionId !== null ? "blue" : "green")}>
+                              {getAnswerType(answer, question)}
+                            </Tag>
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            <Text type="secondary">Ответ: </Text>
+                            <Text>{getAnswerText(answer)}</Text>
+                          </div>
+                          {question?.type !== 3 && (
+                            <div style={{ marginTop: 4 }}>
+                              {answer.isCorrect ? (
+                                <Tag color="success" icon={<CheckCircleOutlined />}>Правильно</Tag>
+                              ) : (
+                                <Tag color="error" icon={<CloseCircleOutlined />}>Неправильно</Tag>
+                              )}
+                            </div>
+                          )}
+                          {question?.type === 3 && (
+                            <div style={{ marginTop: 4 }}>
+                              <Tag color="orange" icon={<StarOutlined />}>Рейтинг сохранен</Tag>
+                            </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  </Card>
-                ))
+                    </Card>
+                  );
+                })
               ) : (
                 <Empty description="Нет ответов" />
               )}
@@ -615,6 +693,7 @@ export const TestSession = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [manualAnswer, setManualAnswer] = useState("");
+  const [ratingValue, setRatingValue] = useState(null);
   const [sessionQuestions, setSessionQuestions] = useState([]);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [showConfirmFinish, setShowConfirmFinish] = useState(false);
@@ -663,13 +742,17 @@ export const TestSession = () => {
     
     setSelectedOptionId(null);
     setManualAnswer("");
+    setRatingValue(null);
     
     const savedAnswer = currentSessionLocal?.answers?.find(
       a => a.questionId === question.id
     );
     
     if (savedAnswer) {
-      if (savedAnswer.optionId !== null && savedAnswer.optionId !== undefined) {
+      if (question.type === 3) {
+        // Для рейтинга optionId содержит значение рейтинга
+        setRatingValue(savedAnswer.optionId);
+      } else if (savedAnswer.optionId !== null && savedAnswer.optionId !== undefined) {
         setSelectedOptionId(savedAnswer.optionId);
       } else if (savedAnswer.textAnswer) {
         setManualAnswer(savedAnswer.textAnswer);
@@ -688,6 +771,7 @@ export const TestSession = () => {
       currentQuestionIndex,
       selectedOptionId,
       manualAnswer,
+      ratingValue,
       answersHistory,
       elapsedSeconds,
       remainingSeconds,
@@ -700,7 +784,7 @@ export const TestSession = () => {
     localStorage.setItem("active_test_state", JSON.stringify(testState));
     localStorage.setItem("active_test_session", JSON.stringify(currentSessionLocal));
     setLastSaved(new Date());
-  }, [isTestActive, currentSessionLocal, sessionQuestions.length, sessionComplete, currentQuestionIndex, selectedOptionId, manualAnswer, answersHistory, elapsedSeconds, remainingSeconds, sessionStartTimestamp, selectedTestDuration]);
+  }, [isTestActive, currentSessionLocal, sessionQuestions.length, sessionComplete, currentQuestionIndex, selectedOptionId, manualAnswer, ratingValue, answersHistory, elapsedSeconds, remainingSeconds, sessionStartTimestamp, selectedTestDuration]);
 
   // Функция восстановления состояния теста
   const restoreTestState = useCallback(async () => {
@@ -739,6 +823,7 @@ export const TestSession = () => {
       setCurrentQuestionIndex(savedState.currentQuestionIndex);
       setSelectedOptionId(savedState.selectedOptionId);
       setManualAnswer(savedState.manualAnswer || "");
+      setRatingValue(savedState.ratingValue || null);
       setAnswersHistory(savedState.answersHistory);
       setElapsedSeconds(savedState.elapsedSeconds);
       setRemainingSeconds(savedState.remainingSeconds);
@@ -767,6 +852,7 @@ export const TestSession = () => {
     setCurrentQuestionIndex(0);
     setSelectedOptionId(null);
     setManualAnswer("");
+    setRatingValue(null);
     setSessionQuestions([]);
     setAnswersHistory([]);
     setElapsedSeconds(0);
@@ -834,7 +920,7 @@ export const TestSession = () => {
     if (isTestActive && currentSessionLocal && !sessionComplete) {
       saveTestState();
     }
-  }, [currentQuestionIndex, answersHistory, selectedOptionId, manualAnswer, elapsedSeconds, remainingSeconds]);
+  }, [currentQuestionIndex, answersHistory, selectedOptionId, manualAnswer, ratingValue, elapsedSeconds, remainingSeconds]);
 
   // Обработка storeCurrentSession
   useEffect(() => {
@@ -876,6 +962,7 @@ export const TestSession = () => {
         
         let selectiveAnswers = [];
         let manualAnswers = [];
+        let ratingAnswers = [];
         
         if (session.answers && session.answers.length > 0 && test?.questions) {
           session.answers.forEach((answer, idx) => {
@@ -887,7 +974,11 @@ export const TestSession = () => {
             let answerText = "";
             let answerType = "";
             
-            if (answer.optionId !== null && question?.options) {
+            if (question?.type === 3) {
+              answerText = `Рейтинг: ${answer.optionId}/10`;
+              answerType = "Рейтинг";
+              ratingAnswers.push(`${idx + 1}. ${questionText} -> ${answerText}`);
+            } else if (answer.optionId !== null && question?.options) {
               const option = question.options.find(o => o.id === answer.optionId);
               answerText = lang === "ru" 
                 ? (option?.textRu || option?.text || "")
@@ -918,6 +1009,7 @@ export const TestSession = () => {
           "Всего вопросов": session.totalQuestionsCount || 0,
           "Выборочные ответы": selectiveAnswers.join("\n"),
           "Ручные ответы": manualAnswers.join("\n"),
+          "Рейтинги": ratingAnswers.join("\n"),
         };
       });
 
@@ -927,7 +1019,7 @@ export const TestSession = () => {
         { wch: 10 }, { wch: 50 }, { wch: 40 }, { wch: 55 }, 
         { wch: 35 }, { wch: 35 }, { wch: 45 }, { wch: 40 }, 
         { wch: 40 }, { wch: 25 }, { wch: 35 }, { wch: 45 },
-        { wch: 60 }, { wch: 60 }
+        { wch: 60 }, { wch: 60 }, { wch: 60 }
       ];
       ws['!cols'] = colWidths;
       
@@ -989,6 +1081,7 @@ export const TestSession = () => {
       
       let selectiveAnswersData = [];
       let manualAnswersData = [];
+      let ratingAnswersData = [];
       
       if (session.answers && session.answers.length > 0 && test?.questions) {
         session.answers.forEach((answer, idx) => {
@@ -998,7 +1091,16 @@ export const TestSession = () => {
           let answerText = "";
           let answerType = "";
           
-          if (answer.optionId !== null && question?.options) {
+          if (question?.type === 3) {
+            answerText = `Рейтинг: ${answer.optionId}/10`;
+            answerType = "Рейтинг";
+            ratingAnswersData.push({
+              "№": idx + 1,
+              "Вопрос": question?.contentRu || question?.content || "",
+              "Ответ": answerText,
+              "Тип ответа": answerType,
+            });
+          } else if (answer.optionId !== null && question?.options) {
             const option = question.options.find(o => o.id === answer.optionId);
             answerText = option?.textRu || option?.text || "";
             answerType = "Выборочный";
@@ -1034,6 +1136,11 @@ export const TestSession = () => {
       if (manualAnswersData.length > 0) {
         const wsManual = XLSX.utils.json_to_sheet(manualAnswersData);
         XLSX.utils.book_append_sheet(wb, wsManual, "Ручные ответы");
+      }
+
+      if (ratingAnswersData.length > 0) {
+        const wsRating = XLSX.utils.json_to_sheet(ratingAnswersData);
+        XLSX.utils.book_append_sheet(wb, wsRating, "Рейтинги");
       }
       
       XLSX.writeFile(wb, `session_${session.id}_${employee?.firstName || ''}_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -1072,6 +1179,7 @@ export const TestSession = () => {
       setCurrentQuestionIndex(0);
       setSelectedOptionId(null);
       setManualAnswer("");
+      setRatingValue(null);
       setSessionComplete(false);
       setIsTestActive(true);
       setCurrentSessionLocal(session);
@@ -1138,6 +1246,7 @@ export const TestSession = () => {
       setTestModalOpen(false);
       setSelectedOptionId(null);
       setManualAnswer("");
+      setRatingValue(null);
       setSessionComplete(false);
       setIsTestActive(true);
       setCurrentSessionLocal(session);
@@ -1189,6 +1298,14 @@ export const TestSession = () => {
         return;
       }
       textAnswer = trimmedAnswer;
+    } else if (currentQ.type === 3) {
+      // Рейтинг - сохраняем в optionId
+      if (ratingValue === null || ratingValue === undefined) {
+        message.warning("Выберите рейтинг");
+        return;
+      }
+      optionId = ratingValue;
+      textAnswer = `Рейтинг: ${ratingValue}/10`;
     } else {
       message.error("Неизвестный тип вопроса");
       return;
@@ -1234,6 +1351,7 @@ export const TestSession = () => {
         setCurrentQuestionIndex(nextIndex);
         setSelectedOptionId(null);
         setManualAnswer("");
+        setRatingValue(null);
         setTimeout(() => loadSavedAnswerForQuestion(nextIndex), 50);
       }
       
@@ -1309,6 +1427,7 @@ export const TestSession = () => {
       setAnswersHistory(newHistory);
       setSelectedOptionId(null);
       setManualAnswer("");
+      setRatingValue(null);
       setSessionComplete(false);
       setIsTestActive(true);
       const duration = session.durationMinutes || selectedTestDuration || 5;
@@ -1335,6 +1454,7 @@ export const TestSession = () => {
     setCurrentQuestionIndex(index);
     setSelectedOptionId(null);
     setManualAnswer("");
+    setRatingValue(null);
     loadSavedAnswerForQuestion(index);
   };
 
@@ -1851,6 +1971,8 @@ export const TestSession = () => {
                   onSelectOption={setSelectedOptionId}
                   manualAnswer={manualAnswer}
                   onManualAnswerChange={setManualAnswer}
+                  ratingValue={ratingValue}
+                  onRatingChange={setRatingValue}
                   lang={lang}
                 />
                 <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
@@ -1863,6 +1985,7 @@ export const TestSession = () => {
                         setCurrentQuestionIndex(newIndex);
                         setSelectedOptionId(null);
                         setManualAnswer("");
+                        setRatingValue(null);
                         loadSavedAnswerForQuestion(newIndex);
                       }
                     }}
