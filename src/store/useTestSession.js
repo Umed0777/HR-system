@@ -6,7 +6,7 @@ import {
     getTestSessions,
     // exportSessionToExcel,
     // exportSessionToCsv
-} from '../services/api.service.testsession';
+} from '../services/api.service.testSession';
 
 export const useTestSessionStore = create((set, get) => ({
     sessions: [],

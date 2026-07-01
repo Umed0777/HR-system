@@ -15,10 +15,10 @@ import {
   ScheduleOutlined,
   TeamOutlined,
   UserOutlined,
-   DashboardOutlined,
+  DashboardOutlined,
 } from "@ant-design/icons";
-import img from '../assets/image8.jpg';
-import { useState } from "react";
+import img from "../assets/image8.jpg";
+import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import active from "../assets/active.png";
 
@@ -26,8 +26,17 @@ const { Sider, Content } = Layout;
 
 export const HRSystemLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    navigate("/login");
+  }
+}, []);
+  
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -39,9 +48,9 @@ export const HRSystemLayout = () => {
         width={260}
         style={{
           background: "#fff",
-          height: "90vh",
-          marginTop: '40px',
-          marginLeft: '10px',
+          height: "100vh",
+          marginTop: "0",
+          marginLeft: "10px",
           boxShadow: "0 0 10px rgba(0,0,0,0.1)",
         }}
       >
@@ -149,29 +158,49 @@ export const HRSystemLayout = () => {
               icon: <TeamOutlined />,
               label: "Сотрудники",
             },
-          {
-          key: "/select-employee",
-          icon: <UserOutlined />,
-          label: "Выбрать сотрудника",
-          },
+            {
+              key: "/select-employee",
+              icon: <UserOutlined />,
+              label: "Выбрать сотрудника",
+            },
           ]}
         />
       </Sider>
 
       {/* CONTENT */}
       <Layout>
+        <div
+          style={{
+            height: 60,
+            background: '#fff',
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
+            paddingRight: 20,
+            boxShadow: "0 2px 5px rgba(0,0,0,.1)",
+          }}
+        >
+          <Button
+            type="primary"
+            danger
+            icon={<UserOutlined />}
+            onClick={() => navigate("/login")}
+          >
+            Войти
+          </Button>
+        </div>
         <Content
           style={{
             margin: 18,
-            marginTop: 30,
+            marginTop: 20,
             padding: 24,
-      backgroundImage: `url(${img})`,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundAttachment: "fixed", 
+            backgroundImage: `url(${img})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundAttachment: "fixed",
             borderRadius: 12,
             boxShadow: "0 0 8px rgba(0,0,0,0.1)",
-            maxHeight: '760px',
+            maxHeight: "760px",
             overflow: "auto",
           }}
         >

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAnnouncementStore } from "../store/useAnnouncement";
 import { useSubDepartmentStore } from "../store/useSubdepartment";
 import { useEmployeeStore } from "../store/useEmployee";
-import img from "../assets/image2.jpg";
+import { useFolderStore } from "../store/useFolder";
 import {
   Card,
   Button,
@@ -14,13 +14,13 @@ import {
   Form,
   message,
   Tooltip,
-  Avatar,
   Tag,
   Divider,
   Empty,
   Skeleton,
   Typography,
   Select,
+  Popconfirm,
 } from "antd";
 import {
   PlusOutlined,
@@ -28,7 +28,6 @@ import {
   DeleteOutlined,
   HeartOutlined,
   HeartFilled,
-  EyeOutlined,
   CalendarOutlined,
   FileTextOutlined,
   PictureOutlined,
@@ -39,9 +38,12 @@ import {
   FilePptOutlined,
   UserOutlined,
   DownloadOutlined,
+  FileOutlined,
+  FolderOutlined,
+  FolderOpenOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import {motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
 
 const { Title, Text } = Typography;
@@ -63,15 +65,31 @@ export const Announcement = () => {
     fetchSubDepartments,
     loading: subDeptLoading,
   } = useSubDepartmentStore();
-
   const {
     employees,
     fetchEmployee,
     loading: employeeLoading,
   } = useEmployeeStore();
+  const { 
+    folders, 
+    fetchFolders, 
+    addFolder,
+    updateFolder,
+    deleteFolder,
+    loading: folderLoading 
+  } = useFolderStore();
+  
+  useEffect(() => {
+    fetchFolders();
+  }, []);
 
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [openFolder, setOpenFolder] = useState(false);
+  const [openEditFolder, setOpenEditFolder] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [editingFolder, setEditingFolder] = useState(null);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [form] = Form.useForm();
   const [preview, setPreview] = useState({
     open: false,
@@ -82,126 +100,109 @@ export const Announcement = () => {
   const [likedItems, setLikedItems] = useState({});
   const [hoveredCard, setHoveredCard] = useState(null);
 
-  // АНИМАЦИЯ И ЭФФЕКТЫ
   const [showConfetti, setShowConfetti] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [newAnnouncementId, setNewAnnouncementId] = useState(null);
   const [highlightCard, setHighlightCard] = useState(null);
 
-  // Функция для скачивания файла
+  // Скачивание файла
   const downloadFile = (url, fileName) => {
+    const fullUrl = url.startsWith('http') ? url : `${BASE_URL}${url}`;
     const link = document.createElement("a");
-    link.href = url;
+    link.href = fullUrl;
     link.download = fileName || "download";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Функции для определения типа файла
-  const isImage = (url) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(url);
-  const isVideo = (url) => /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(url);
-  const isWord = (url) => /\.(doc|docx)$/i.test(url);
-  const isExcel = (url) => /\.(xls|xlsx)$/i.test(url);
-  const isPowerPoint = (url) => /\.(ppt|pptx|pps|ppsx)$/i.test(url);
-  const isPdf = (url) => /\.(pdf)$/i.test(url);
-  const isDocument = (url) =>
-    isWord(url) || isExcel(url) || isPowerPoint(url) || isPdf(url);
-
-  const getFileType = (url) => {
-    if (!url) return "other";
-    if (isImage(url)) return "image";
-    if (isVideo(url)) return "video";
-    if (isWord(url)) return "word";
-    if (isExcel(url)) return "excel";
-    if (isPowerPoint(url)) return "powerpoint";
-    if (isPdf(url)) return "pdf";
+  // Определение типа файла - проверяем и URL и имя файла
+  const getFileType = (file) => {
+    if (!file) return "other";
+    
+    // Если file это объект с свойством path или url
+    const filePath = typeof file === 'string' ? file : (file.path || file.url || file.filePath || '');
+    
+    if (!filePath) return "other";
+    
+    if (/\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i.test(filePath)) return "image";
+    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|wmv)$/i.test(filePath)) return "video";
+    if (/\.(doc|docx)$/i.test(filePath)) return "word";
+    if (/\.(xls|xlsx)$/i.test(filePath)) return "excel";
+    if (/\.(ppt|pptx|pps|ppsx)$/i.test(filePath)) return "powerpoint";
+    if (/\.(pdf)$/i.test(filePath)) return "pdf";
     return "other";
+  };
+
+  // Получение URL файла
+  const getFileUrl = (file) => {
+    if (!file) return "";
+    if (typeof file === 'string') return file;
+    return file.path || file.url || file.filePath || "";
   };
 
   const getFileIcon = (type) => {
     switch (type) {
-      case "word":
-        return <FileWordOutlined style={{ color: "#2b5797", fontSize: 32 }} />;
-      case "excel":
-        return <FileExcelOutlined style={{ color: "#217346", fontSize: 32 }} />;
-      case "powerpoint":
-        return <FilePptOutlined style={{ color: "#d83b01", fontSize: 32 }} />;
-      case "pdf":
-        return <FilePdfOutlined style={{ color: "#ee3a43", fontSize: 32 }} />;
-      case "image":
-        return <PictureOutlined style={{ color: "#52c41a", fontSize: 32 }} />;
-      case "video":
-        return (
-          <VideoCameraOutlined style={{ color: "#1890ff", fontSize: 32 }} />
-        );
-      default:
-        return <FileTextOutlined style={{ color: "#faad14", fontSize: 32 }} />;
+      case "word": return <FileWordOutlined style={{ color: "#2b5797", fontSize: 48 }} />;
+      case "excel": return <FileExcelOutlined style={{ color: "#217346", fontSize: 48 }} />;
+      case "powerpoint": return <FilePptOutlined style={{ color: "#d83b01", fontSize: 48 }} />;
+      case "pdf": return <FilePdfOutlined style={{ color: "#ee3a43", fontSize: 48 }} />;
+      case "image": return <PictureOutlined style={{ color: "#52c41a", fontSize: 48 }} />;
+      case "video": return <VideoCameraOutlined style={{ color: "#1890ff", fontSize: 48 }} />;
+      default: return <FileOutlined style={{ color: "#faad14", fontSize: 48 }} />;
     }
   };
 
   const getFileTypeName = (type) => {
-    switch (type) {
-      case "word":
-        return "Документ Word";
-      case "excel":
-        return "Таблица Excel";
-      case "powerpoint":
-        return "Презентация PowerPoint";
-      case "pdf":
-        return "PDF документ";
-      case "image":
-        return "Изображение";
-      case "video":
-        return "Видео";
-      default:
-        return "Файл";
-    }
+    const names = {
+      word: "Документ Word",
+      excel: "Таблица Excel",
+      powerpoint: "Презентация",
+      pdf: "PDF документ",
+      image: "Изображение",
+      video: "Видео",
+    };
+    return names[type] || "Файл";
   };
 
-  const getFileName = (url) => {
-    if (!url) return "файл";
-    const parts = url.split("/");
+  const getFileName = (file) => {
+    if (!file) return "файл";
+    const filePath = typeof file === 'string' ? file : (file.path || file.url || file.filePath || '');
+    if (!filePath) return "файл";
+    
+    const parts = filePath.split("/");
     let fileName = parts[parts.length - 1];
-    fileName = decodeURIComponent(fileName);
-    if (fileName.length > 50) {
+    try { fileName = decodeURIComponent(fileName); } catch (e) {}
+    if (fileName.length > 30) {
       const ext = fileName.split(".").pop();
-      fileName = fileName.substring(0, 47) + "..." + ext;
+      fileName = fileName.substring(0, 27) + "..." + ext;
     }
     return fileName;
   };
 
   const handlePreview = (file) => {
     const url = file.url || URL.createObjectURL(file.originFileObj);
-    const isVideoFile =
-      file.type?.startsWith("video") || /\.(mp4|webm|ogg)$/i.test(file.name);
-    const isImageFile =
-      file.type?.startsWith("image") ||
-      /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+    const isVideoFile = file.type?.startsWith("video") || /\.(mp4|webm|ogg)$/i.test(file.name);
+    const isImageFile = file.type?.startsWith("image") || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
 
-    // Для изображений и видео - показываем预览
     if (isImageFile || isVideoFile) {
       setPreview({ open: true, url, isVideo: isVideoFile });
     } else {
-      // Для документов и PDF - сразу скачиваем
-      const fullUrl =
-        file.url ||
-        (file.originFileObj ? URL.createObjectURL(file.originFileObj) : "");
+      const fullUrl = file.url || (file.originFileObj ? URL.createObjectURL(file.originFileObj) : "");
       downloadFile(fullUrl, file.name);
     }
   };
 
-  // Обработка клика по файлу в объявлении
-  const handleFileClick = (fileUrl, fileType) => {
-    const fullUrl = `${BASE_URL}${fileUrl}`;
-    const fileName = getFileName(fileUrl);
+  const handleFileClick = (file) => {
+    const fileUrl = getFileUrl(file);
+    const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${BASE_URL}${fileUrl}`;
+    const fileName = getFileName(file);
+    const type = getFileType(file);
 
-    if (fileType === "image") {
+    if (type === "image") {
       setPreview({ open: true, url: fullUrl, isVideo: false });
-    } else if (fileType === "video") {
+    } else if (type === "video") {
       setPreview({ open: true, url: fullUrl, isVideo: true });
     } else {
-      // PDF и другие документы - сразу скачиваем
       downloadFile(fullUrl, fileName);
     }
   };
@@ -223,6 +224,7 @@ export const Announcement = () => {
         content: item.content,
         subDepartmentId: item?.subDepartmentId ?? null,
         employeeId: item?.employeeId ?? null,
+        folderId: item?.folderId ?? null,
       });
     } else {
       form.resetFields();
@@ -241,13 +243,11 @@ export const Announcement = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      const title =
-        !values.title || values.title === "undefined" ? "" : values.title;
-      const content =
-        !values.content || values.content === "undefined" ? "" : values.content;
+      const title = values.title || "";
+      const content = values.content || "";
       const subDepartmentId = values.subDepartmentId ?? null;
       const employeeId = values.employeeId ?? null;
-
+      const folderId = values.folderId ?? null;
       const files = fileList.map((f) => f.originFileObj).filter(Boolean);
 
       if (!title) {
@@ -255,112 +255,128 @@ export const Announcement = () => {
         return;
       }
 
-      const payload = {
-        title: title,
-        content: content,
-        subDepartmentId: subDepartmentId,
-        employeeId: employeeId,
-        files: files,
-      };
+      const payload = { title, content, subDepartmentId, employeeId, files, folderId };
 
       setPublishing(true);
 
-      let response;
       if (editingItem) {
-        response = await editAnnouncement(editingItem.id, payload);
-        message.success("Объявление успешно обновлено!");
+        await editAnnouncement(editingItem.id, payload);
+        message.success("Объявление обновлено!");
       } else {
-        response = await addAnnouncement(payload);
-
-        if (response && response.id) {
-          setNewAnnouncementId(response.id);
+        const response = await addAnnouncement(payload);
+        if (response?.id) {
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3000);
+          message.success("Объявление опубликовано! 🎉");
         }
-
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 3000);
-
-        message.success({
-          content: "Объявление успешно опубликовано! 🎉",
-          duration: 3,
-        });
       }
 
       await fetchAnnouncements();
-
-      if (!editingItem && response && response.id) {
-        setTimeout(() => {
-          setHighlightCard(response.id);
-          const element = document.getElementById(
-            `announcement-${response.id}`,
-          );
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-          setTimeout(() => setHighlightCard(null), 3000);
-        }, 500);
-      }
-
       closeModal();
     } catch (err) {
-      console.error("❌ Ошибка в handleSave:", err);
-      message.error(
-        `Ошибка при сохранении: ${err.message || "Неизвестная ошибка"}`,
-      );
+      console.error("Ошибка:", err);
+      message.error(`Ошибка: ${err.message || "Неизвестная ошибка"}`);
     } finally {
       setPublishing(false);
     }
   };
 
   const toggleLike = (id) => {
-    if (likedItems[id]) {
-      setLikedItems((prev) => ({ ...prev, [id]: false }));
-      message.info("Лайк убран");
+    setLikedItems(prev => ({ ...prev, [id]: !prev[id] }));
+    if (!likedItems[id]) {
+      message.success("❤️ Лайк поставлен!");
     } else {
-      setLikedItems((prev) => ({ ...prev, [id]: true }));
-      message.success({
-        content: "Вы поставили лайк ❤️",
-        icon: <HeartFilled style={{ color: "#ff4d4f" }} />,
-      });
+      message.info("Лайк убран");
     }
   };
 
-  const subDeptMap = new Map(
-    subdepartments.map((sd) => [Number(sd.id), sd.name]),
-  );
-
   const getSubDepartmentName = (id) => {
-    if (id === null || id === undefined) return "Без подотделения";
-    return subDeptMap.get(Number(id)) || "Без подотделения";
+    if (!id) return "Без отдела";
+    const found = subdepartments.find(s => Number(s.id) === Number(id));
+    return found?.name || "Без отдела";
   };
 
   const getEmployeeName = (id) => {
-    if (!id) return "Неизвестный автор";
-    const employee = employees.find((emp) => Number(emp.id) === Number(id));
-    if (employee) {
-      return (
-        `${employee.firstName || ""} ${employee.lastName || ""}`.trim() ||
-        "Неизвестный автор"
-      );
-    }
-    return "Неизвестный автор";
+    if (!id) return "Неизвестный";
+    const emp = employees.find(e => Number(e.id) === Number(id));
+    return emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email || "Неизвестный" : "Неизвестный";
   };
+
+  // Функции для папок
+  const handleCreateFolder = async () => {
+    if (!folderName.trim()) {
+      message.error("Введите название папки");
+      return;
+    }
+    try {
+      await addFolder({ name: folderName.trim() });
+      await fetchFolders();
+      message.success("Папка создана!");
+      setFolderName("");
+      setOpenFolder(false);
+    } catch (error) {
+      message.error("Ошибка создания папки");
+    }
+  };
+
+  const handleEditFolder = async () => {
+    if (!editingFolder || !folderName.trim()) {
+      message.error("Введите название папки");
+      return;
+    }
+    try {
+      await updateFolder(editingFolder.id, { name: folderName.trim() });
+      await fetchFolders();
+      message.success("Папка обновлена!");
+      setFolderName("");
+      setEditingFolder(null);
+      setOpenEditFolder(false);
+    } catch (error) {
+      message.error("Ошибка обновления папки");
+    }
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    try {
+      const hasAnnouncements = announcements.some(item => item.folderId === folderId);
+      if (hasAnnouncements) {
+        message.warning("Нельзя удалить папку с объявлениями");
+        return;
+      }
+      await deleteFolder(folderId);
+      await fetchFolders();
+      message.success("Папка удалена!");
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(null);
+      }
+    } catch (error) {
+      message.error("Ошибка удаления папки");
+    }
+  };
+
+  const openEditFolderModal = (folder) => {
+    setEditingFolder(folder);
+    setFolderName(folder.name);
+    setOpenEditFolder(true);
+  };
+
+  const getFilteredAnnouncements = () => {
+    if (selectedFolderId === null) return announcements;
+    return announcements.filter(item => item.folderId === selectedFolderId);
+  };
+
+  const getFolderStats = (folderId) => {
+    return announcements.filter(item => item.folderId === folderId).length;
+  };
+
+  const filteredAnnouncements = getFilteredAnnouncements();
 
   if (loading) {
     return (
-      <div style={{ padding: 24, maxWidth: 1000, margin: "0 auto" }}>
+      <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
         <Skeleton active avatar paragraph={{ rows: 3 }} />
-        <Skeleton
-          active
-          avatar
-          paragraph={{ rows: 3 }}
-          style={{ marginTop: 20 }}
-        />
-        <Skeleton
-          active
-          avatar
-          paragraph={{ rows: 3 }}
-          style={{ marginTop: 20 }}
-        />
+        <Skeleton active avatar paragraph={{ rows: 3 }} style={{ marginTop: 20 }} />
+        <Skeleton active avatar paragraph={{ rows: 3 }} style={{ marginTop: 20 }} />
       </div>
     );
   }
@@ -368,16 +384,8 @@ export const Announcement = () => {
   if (error) {
     return (
       <div style={{ padding: 50, textAlign: "center" }}>
-        <Empty
-          description={
-            <span style={{ color: "#ff4d4f" }}>Ошибка: {error}</span>
-          }
-        />
-        <Button
-          type="primary"
-          onClick={fetchAnnouncements}
-          style={{ marginTop: 20, background: "#ff4b2b" }}
-        >
+        <Empty description={<span style={{ color: "#ff4d4f" }}>Ошибка: {error}</span>} />
+        <Button type="primary" onClick={fetchAnnouncements} style={{ marginTop: 20, background: "#ff4b2b" }}>
           Попробовать снова
         </Button>
       </div>
@@ -385,7 +393,7 @@ export const Announcement = () => {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1000, margin: "0 auto" }}>
+    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
       {showConfetti && (
         <Confetti
           width={window.innerWidth}
@@ -396,24 +404,25 @@ export const Announcement = () => {
         />
       )}
 
-      <Flex
-        justify="space-between"
-        align="center"
-        style={{
-          marginBottom: 32,
-          padding: "0 8px",
-        }}
-      >
+      <Flex justify="space-between" align="center" style={{ marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
         <div>
-          <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>
-            Объявления
-          </Title>
-          <Text type="secondary" style={{ fontSize: 14 }}>
-            Всего {announcements.length} объявлений
+          <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>Объявления</Title>
+          <Text type="secondary">
+            {selectedFolderId !== null 
+              ? `В папке: ${folders.find(f => f.id === selectedFolderId)?.name || '...'} (${filteredAnnouncements.length})`
+              : `Всего ${announcements.length} объявлений`}
           </Text>
         </div>
 
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+        <Flex gap={10} align="center" wrap>
+          <Button onClick={() => setOpenFolder(true)} icon={<FolderOutlined />}>
+            Создать папку
+          </Button>
+          {selectedFolderId !== null && (
+            <Button onClick={() => setSelectedFolderId(null)} icon={<FolderOpenOutlined />}>
+              Все
+            </Button>
+          )}
           <Button
             type="primary"
             style={{
@@ -421,483 +430,332 @@ export const Announcement = () => {
               border: "none",
               boxShadow: "0 4px 12px rgba(255, 75, 43, 0.3)",
               fontWeight: "bold",
-              height: "40px",
+              height: 40,
               padding: "0 24px",
-              borderRadius: "20px",
+              borderRadius: 20,
             }}
             onClick={() => openModal()}
-            size="middle"
           >
             Добавить
           </Button>
-        </motion.div>
+        </Flex>
       </Flex>
 
-      <AnimatePresence>
-        {announcements.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Empty description="Нет объявлений" style={{ marginTop: 100 }}>
-              <Button
-                type="primary"
-                onClick={() => openModal()}
-                style={{ background: "#ff4b2b" }}
+      {/* Список папок */}
+      {folders.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <Flex gap={12} wrap>
+            <Card
+              style={{ 
+                cursor: 'pointer',
+                minWidth: 150,
+                border: selectedFolderId === null ? '2px solid #ff4b2b' : '1px solid #f0f0f0',
+                background: selectedFolderId === null ? '#fff5f5' : 'white'
+              }}
+              onClick={() => setSelectedFolderId(null)}
+              hoverable
+            >
+              <Flex vertical align="center" gap={4}>
+                <FolderOpenOutlined style={{ fontSize: 32, color: '#ff4b2b' }} />
+                <Text strong>Все</Text>
+                <Tag color="blue">{announcements.length}</Tag>
+              </Flex>
+            </Card>
+            
+            {folders.map((folder) => (
+              <Card
+                key={folder.id}
+                style={{ 
+                  cursor: 'pointer',
+                  minWidth: 150,
+                  border: selectedFolderId === folder.id ? '2px solid #ff4b2b' : '1px solid #f0f0f0',
+                  background: selectedFolderId === folder.id ? '#fff5f5' : 'white'
+                }}
+                hoverable
+                bodyStyle={{ padding: '16px' }}
               >
-                Создать первое объявление
+                <Flex vertical align="center" gap={4}>
+                  <div onClick={() => setSelectedFolderId(folder.id)} style={{ textAlign: 'center', width: '100%' }}>
+                    <FolderOutlined style={{ fontSize: 32, color: '#faad14' }} />
+                    <Text strong style={{ display: 'block' }}>{folder.name}</Text>
+                    <Tag color="blue">{getFolderStats(folder.id)}</Tag>
+                  </div>
+                  <Flex gap={4}>
+                    <Tooltip title="Редактировать папку">
+                      <Button 
+                        size="small" 
+                        type="text"
+                        icon={<EditOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditFolderModal(folder);
+                        }}
+                      />
+                    </Tooltip>
+                    <Popconfirm
+                      title="Удалить папку?"
+                      description={`Удалить "${folder.name}"?`}
+                      onConfirm={(e) => {
+                        e?.stopPropagation();
+                        handleDeleteFolder(folder.id);
+                      }}
+                      okText="Да"
+                      cancelText="Нет"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button 
+                        size="small" 
+                        type="text" 
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </Popconfirm>
+                  </Flex>
+                </Flex>
+              </Card>
+            ))}
+          </Flex>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {filteredAnnouncements.length === 0 ? (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <Empty 
+              description={selectedFolderId !== null ? "В папке нет объявлений" : "Нет объявлений"} 
+              style={{ marginTop: 100 }}
+            >
+              <Button type="primary" onClick={() => openModal()} style={{ background: "#ff4b2b" }}>
+                Создать объявление
               </Button>
             </Empty>
           </motion.div>
         ) : (
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            {announcements.map((item, index) => {
-              const isLiked = likedItems[item.id] || false;
-              const isHovered = hoveredCard === item.id;
-              const hasMedia = item.profileImagePath;
-              const createdAt =
-                item.createdAt && item.createdAt !== "0001-01-01T00:00:00"
-                  ? dayjs(item.createdAt).format("DD.MM.YYYY HH:mm")
-                  : null;
-
-              const fileType = getFileType(item.profileImagePath);
-              const employeeName = getEmployeeName(item.employeeId);
-              const isNew = newAnnouncementId === item.id;
-              const isHighlighted = highlightCard === item.id;
-              const isDocumentFile = isDocument(item.profileImagePath);
-              const fullFileUrl = hasMedia
-                ? `${BASE_URL}${item.profileImagePath}`
-                : "";
-
+            {filteredAnnouncements.map((item) => {
+              // Получаем файлы из item
+              const fileUrls = item.files || [];
+              const folder = folders.find(f => f.id === item.folderId);
+              
               return (
-                <motion.div
+                <Card
                   key={item.id}
                   id={`announcement-${item.id}`}
-                  initial={{ opacity: 0, scale: 0.8, y: 50 }}
-                  animate={{
-                    opacity: 1,
-                    scale: 1,
-                    y: 0,
-                    boxShadow: isHighlighted
-                      ? "0 0 0 3px #ff4b2b, 0 0 0 6px rgba(255, 75, 43, 0.3)"
-                      : "none",
-                  }}
-                  transition={{
-                    duration: 0.8,
-                    delay: index * 0.15,
-                    type: "spring",
-                    stiffness: 80,
-                    damping: 15,
-                  }}
-                  whileHover={{ y: -5, transition: { duration: 0.5 } }}
                   style={{
-                    borderRadius: 20,
-                    boxShadow: isHighlighted
-                      ? "0 0 0 3px #ff4b2b, 0 0 0 6px rgba(255, 75, 43, 0.3)"
-                      : "none",
+                    borderRadius: 16,
+                    boxShadow: highlightCard === item.id 
+                      ? "0 0 0 3px #ff4b2b, 0 8px 24px rgba(255,75,43,0.3)" 
+                      : "0 4px 12px rgba(0,0,0,0.08)",
+                    transition: "all 0.3s ease",
                   }}
+                  onMouseEnter={() => setHoveredCard(item.id)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  actions={[
+                    <Tooltip title="Лайк">
+                      <span onClick={() => toggleLike(item.id)}>
+                        {likedItems[item.id] ? (
+                          <HeartFilled style={{ color: "#ff4d4f", fontSize: 18 }} />
+                        ) : (
+                          <HeartOutlined style={{ fontSize: 18 }} />
+                        )}
+                      </span>
+                    </Tooltip>,
+                    <Tooltip title="Редактировать">
+                      <EditOutlined style={{ fontSize: 18 }} onClick={() => openModal(item)} />
+                    </Tooltip>,
+                    <Tooltip title="Удалить">
+                      <DeleteOutlined 
+                        style={{ fontSize: 18, color: "#ff4d4f" }} 
+                        onClick={() => {
+                          Modal.confirm({
+                            title: "Удалить объявление?",
+                            content: "Вы уверены?",
+                            okText: "Да",
+                            cancelText: "Нет",
+                            onOk: async () => {
+                              await removeAnnouncement(item.id);
+                              await fetchAnnouncements();
+                              message.success("Объявление удалено");
+                            },
+                          });
+                        }}
+                      />
+                    </Tooltip>,
+                  ]}
                 >
-                  {isNew && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", stiffness: 200 }}
-                      style={{
-                        position: "absolute",
-                        top: -10,
-                        right: -10,
-                        background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
-                        color: "white",
-                        padding: "4px 12px",
-                        borderRadius: "20px",
-                        fontSize: 12,
-                        fontWeight: "bold",
-                        zIndex: 1,
-                      }}
-                    >
-                      NEW! 🎉
-                    </motion.div>
-                  )}
-
-                  <Card
-                    onMouseEnter={() => setHoveredCard(item.id)}
-                    onMouseLeave={() => setHoveredCard(null)}
-                    style={{
-                      borderRadius: 20,
-                      boxShadow: isHovered
-                        ? "0 12px 24px rgba(0, 0, 0, 0.12)"
-                        : "0 4px 12px rgba(0, 0, 0, 0.08)",
-                      transition: "all 0.3s ease",
-                      border: "none",
-                      overflow: "hidden",
-                      backgroundImage: `url(${img})`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                      backgroundRepeat: "no-repeat",
-                    }}
-                    styles={{ body: { padding: 0, background: "transparent" } }}
-                  >
-                    <div
-                      style={{
-                        padding: "20px 24px 12px 24px",
-                        borderBottom: "1px solid rgba(0, 0, 0, 0.1)",
-                        background: "rgba(255, 255, 255, 0.9)",
-                      }}
-                    >
-                      <Flex align="center" justify="space-between">
-                        <Flex align="center" gap={12}>
-                          <Avatar
-                            style={{
-                              background:
-                                "linear-gradient(135deg, #ff416c, #ff4b2b)",
-                              verticalAlign: "middle",
-                            }}
-                            size={40}
-                          >
-                            {item.title?.charAt(0).toUpperCase()}
-                          </Avatar>
-                          <div>
-                            <Text
-                              strong
-                              style={{
-                                fontSize: 18,
-                                display: "block",
-                                color: "#1a1a1a",
-                              }}
-                            >
-                              {item.title}
-                            </Text>
-                            <Flex
-                              gap={8}
-                              align="center"
-                              style={{ marginTop: 4 }}
-                            >
-                              {createdAt && (
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                  <CalendarOutlined
-                                    style={{ marginRight: 4 }}
-                                  />
-                                  {createdAt}
-                                </Text>
-                              )}
-                              <Tag
-                                color={
-                                  item.subDepartmentId ? "blue" : "default"
-                                }
-                              >
-                                {getSubDepartmentName(item.subDepartmentId)}
-                              </Tag>
-                              <Tag icon={<UserOutlined />} color="purple">
-                                {employeeName}
-                              </Tag>
-                            </Flex>
-                          </div>
-                        </Flex>
-                        <Tag
-                          color="orange"
-                          style={{ borderRadius: 12, fontSize: 12 }}
-                        >
-                          №{index + 1}
+                  <Flex vertical gap={12}>
+                    <div>
+                      <Title level={4} style={{ margin: 0 }}>{item.title}</Title>
+                      <Flex gap={8} style={{ marginTop: 8, flexWrap: "wrap" }}>
+                        <Tag icon={<UserOutlined />} color="blue">
+                          {getEmployeeName(item.employeeId)}
                         </Tag>
+                        <Tag icon={<CalendarOutlined />} color="green">
+                          {dayjs(item.createdAt).format("DD.MM.YYYY HH:mm")}
+                        </Tag>
+                        <Tag color="orange">{getSubDepartmentName(item.subDepartmentId)}</Tag>
+                        {folder && (
+                          <Tag color="gold" icon={<FolderOutlined />}>
+                            {folder.name}
+                          </Tag>
+                        )}
                       </Flex>
                     </div>
 
-                    <div style={{ padding: "20px 24px" }}>
-                      {item.content && item.content !== "undefined" && (
-                        <div
-                          style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.95)",
-                            borderRadius: 12,
-                            padding: "8px 20px",
-                            marginBottom: hasMedia ? 20 : 0,
-                            border: "1px solid rgba(0, 0, 0, 0.1)",
-                            wordBreak: "break-word",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              whiteSpace: "pre-wrap",
-                              fontSize: 15,
-                              lineHeight: 1.7,
-                              color: "#333",
-                              display: "block",
-                            }}
-                          >
-                            {item.content}
-                          </Text>
-                        </div>
-                      )}
+                    <Text style={{ fontSize: 15 }}>{item.content}</Text>
 
-                      {hasMedia && (
-                        <div style={{ marginBottom: 20 }}>
-                          <div style={{ marginBottom: 8 }}>
-                            <Space>
-                              {getFileIcon(fileType)}
-                              <Text type="secondary" style={{ fontSize: 13 }}>
-                                {getFileTypeName(fileType)}
-                              </Text>
-                            </Space>
-                          </div>
-
-                          <div style={{ textAlign: "center" }}>
-                            {fileType === "image" ? (
-                              <div
+                    {fileUrls.length > 0 && (
+                      <div>
+                        <Divider style={{ margin: "12px 0" }} />
+                        <Flex wrap gap={16}>
+                          {fileUrls.map((file, index) => {
+                            const filePath = getFileUrl(file);
+                            const type = getFileType(file);
+                            const fileName = getFileName(file);
+                            const fullUrl = filePath.startsWith('http') ? filePath : `${BASE_URL}${filePath}`;
+                            
+                            return (
+                              <Card
+                                key={index}
+                                size="small"
                                 style={{
-                                  position: "relative",
+                                  width: 200,
                                   cursor: "pointer",
-                                  borderRadius: 12,
-                                  overflow: "hidden",
-                                  display: "inline-block",
+                                  transition: "all 0.3s ease",
+                                  border: "1px solid #f0f0f0",
                                 }}
-                                onClick={() =>
-                                  handleFileClick(
-                                    item.profileImagePath,
-                                    fileType,
-                                  )
-                                }
+                                hoverable
+                                onClick={() => handleFileClick(file)}
+                                bodyStyle={{ padding: 12 }}
                               >
-                                <img
-                                  src={fullFileUrl}
-                                  alt="preview"
-                                  style={{
-                                    maxWidth: "100%",
-                                    maxHeight: 400,
-                                    borderRadius: 12,
-                                    transition: "transform 0.3s ease",
-                                  }}
-                                  onMouseEnter={(e) =>
-                                    (e.currentTarget.style.transform =
-                                      "scale(1.02)")
-                                  }
-                                  onMouseLeave={(e) =>
-                                    (e.currentTarget.style.transform =
-                                      "scale(1)")
-                                  }
-                                />
-                                <div
-                                  style={{
-                                    position: "absolute",
-                                    bottom: 10,
-                                    right: 10,
-                                    background: "rgba(0,0,0,0.6)",
-                                    borderRadius: 20,
-                                    padding: "4px 12px",
-                                    color: "white",
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  <EyeOutlined /> Увеличить
-                                </div>
-                              </div>
-                            ) : fileType === "video" ? (
-                              <video
-                                src={fullFileUrl}
-                                controls
-                                style={{
-                                  maxWidth: "100%",
-                                  borderRadius: 12,
-                                  maxHeight: 400,
-                                  display: "inline-block",
-                                  overflow: "hidden",
-                                }}
-                              />
-                            ) : (
-                              // Документы, PDF - показываем кнопку скачивания
-                              <div style={{ textAlign: "center" }}>
-                                <div
-                                  style={{
-                                    display: "inline-flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                    gap: 16,
-                                    padding: "24px 48px",
-                                    background: "rgba(255, 255, 255, 0.95)",
-                                    borderRadius: 16,
-                                    border: "1px solid rgba(0, 0, 0, 0.1)",
-                                  }}
-                                >
-                                  {getFileIcon(fileType)}
-                                  <Text strong style={{ fontSize: 16 }}>
-                                    {getFileTypeName(fileType)}
-                                  </Text>
-                                  <Text
-                                    type="secondary"
-                                    style={{ fontSize: 13 }}
-                                  >
-                                    {getFileName(item.profileImagePath)}
-                                  </Text>
-                                  <a
-                                    href={`${BASE_URL}${item.profileImagePath}`}
-                                    download
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ textDecoration: "none" }}
-                                  >
-                                    <Button
-                                      type="primary"
-                                      icon={<DownloadOutlined />}
-                                      style={{
-                                        background:
-                                          "linear-gradient(135deg, #ff416c, #ff4b2b)",
-                                        border: "none",
-                                        borderRadius: 20,
-                                        marginTop: 8,
-                                      }}
-                                    >
-                                      Cкачать файл
-                                    </Button>
-                                  </a>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <Divider
-                      style={{
-                        margin: 0,
-                        backgroundColor: "rgba(0, 0, 0, 0.1)",
-                      }}
-                    />
-
-                    <div
-                      style={{
-                        padding: "12px 24px",
-                        background: "rgba(255, 255, 255, 0.9)",
-                      }}
-                    >
-                      <Flex justify="space-between" align="center">
-                        <motion.div
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Tooltip
-                            title={isLiked ? "Убрать лайк" : "Поставить лайк"}
-                          >
-                            <Button
-                              type="text"
-                              icon={
-                                isLiked ? (
-                                  <HeartFilled
-                                    style={{ color: "#ff4d4f", fontSize: 22 }}
-                                  />
-                                ) : (
-                                  <HeartOutlined style={{ fontSize: 22 }} />
-                                )
-                              }
-                              onClick={() => toggleLike(item.id)}
-                              style={{
-                                padding: "4px 16px",
-                                height: "auto",
-                                transition: "all 0.3s",
-                              }}
-                            >
-                              {isLiked ? "Вам нравится" : "Нравится"}
-                            </Button>
-                          </Tooltip>
-                        </motion.div>
-
-                        <Space>
-                          <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                          >
-                            <Button
-                              icon={<EditOutlined />}
-                              onClick={() => openModal(item)}
-                              style={{ borderRadius: 8 }}
-                            >
-                              Редактировать
-                            </Button>
-                          </motion.div>
-                          <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                          >
-                            <Button
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={async () => {
-                                await removeAnnouncement(item.id);
-                                message.success("Объявление удалено");
-                                await fetchAnnouncements();
-                              }}
-                              style={{ borderRadius: 8 }}
-                            >
-                              Удалить
-                            </Button>
-                          </motion.div>
-                        </Space>
-                      </Flex>
-                    </div>
-                  </Card>
-                </motion.div>
+                                <Flex vertical align="center" gap={8}>
+                                  {type === "image" ? (
+                                    <div style={{ 
+                                      width: "100%", 
+                                      height: 140, 
+                                      overflow: "hidden",
+                                      borderRadius: 8,
+                                      background: "#fafafa",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center"
+                                    }}>
+                                      <img
+                                        src={fullUrl}
+                                        alt={fileName}
+                                        style={{
+                                          width: "100%",
+                                          height: "100%",
+                                          objectFit: "cover",
+                                        }}
+                                        onError={(e) => {
+                                          e.target.style.display = 'none';
+                                          const parent = e.target.parentElement;
+                                          parent.innerHTML = `
+                                            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;">
+                                              ${getFileIcon('image')}
+                                              <span style="font-size:12px;color:#999;">Изображение</span>
+                                            </div>
+                                          `;
+                                        }}
+                                      />
+                                    </div>
+                                  ) : type === "video" ? (
+                                    <div style={{ 
+                                      width: "100%", 
+                                      height: 140, 
+                                      background: "#000",
+                                      borderRadius: 8,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      flexDirection: "column",
+                                      gap: 8
+                                    }}>
+                                      <VideoCameraOutlined style={{ fontSize: 48, color: "#fff" }} />
+                                      <span style={{ fontSize: 12, color: "#fff" }}>Видео</span>
+                                    </div>
+                                  ) : (
+                                    <div style={{ 
+                                      width: "100%", 
+                                      height: 140, 
+                                      background: "#fafafa",
+                                      borderRadius: 8,
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: 8
+                                    }}>
+                                      {getFileIcon(type)}
+                                      <span style={{ fontSize: 12, color: "#666" }}>
+                                        {getFileTypeName(type)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <Tooltip title={fileName}>
+                                    <Text ellipsis style={{ fontSize: 13, maxWidth: 180, textAlign: "center" }}>
+                                      {fileName}
+                                    </Text>
+                                  </Tooltip>
+                                  <Flex gap={4} wrap>
+                                    <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>
+                                      {getFileTypeName(type)}
+                                    </Tag>
+                                    <Tooltip title="Скачать">
+                                      <Button 
+                                        type="text" 
+                                        size="small"
+                                        icon={<DownloadOutlined />}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          downloadFile(fullUrl, fileName);
+                                        }}
+                                      />
+                                    </Tooltip>
+                                  </Flex>
+                                </Flex>
+                              </Card>
+                            );
+                          })}
+                        </Flex>
+                      </div>
+                    )}
+                  </Flex>
+                </Card>
               );
             })}
           </Space>
         )}
       </AnimatePresence>
 
+      {/* Модалка объявления */}
       <Modal
-        title={
-          <div style={{ fontSize: 20, fontWeight: 600, color: "#ff4b2b" }}>
-            {editingItem ? "Редактировать объявление" : "Новое объявление"}
-          </div>
-        }
+        title={editingItem ? "Редактировать объявление" : "Новое объявление"}
         open={open}
         onCancel={closeModal}
         footer={[
+          <Button key="cancel" onClick={closeModal}>Отмена</Button>,
           <Button
             key="submit"
             type="primary"
             onClick={handleSave}
             loading={publishing}
-            style={{
-              background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
-              border: "none",
-              borderRadius: 8,
-            }}
+            style={{ background: "linear-gradient(135deg, #ff416c, #ff4b2b)", border: "none" }}
           >
-            {editingItem
-              ? "Сохранить"
-              : publishing
-                ? "Публикация..."
-                : "Опубликовать"}
-          </Button>,
-          <Button key="cancel" onClick={closeModal} style={{ borderRadius: 8 }}>
-            Отмена
+            {editingItem ? "Сохранить" : "Опубликовать"}
           </Button>,
         ]}
         width={720}
-        styles={{ body: { padding: "24px" } }}
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="title"
-            label="Заголовок"
-            rules={[{ required: true, message: "Введите заголовок" }]}
-          >
-            <Input
-              placeholder="Введите заголовок объявления"
-              size="large"
-              style={{ borderRadius: 10 }}
-            />
+          <Form.Item name="title" label="Заголовок" rules={[{ required: true, message: "Введите заголовок" }]}>
+            <Input placeholder="Заголовок" size="large" />
           </Form.Item>
 
-          <Form.Item
-            name="content"
-            label="Содержание"
-            rules={[{ required: true, message: "Введите содержание" }]}
-          >
-            <Input.TextArea
-              placeholder="Текст объявления..."
-              autoSize={{ minRows: 4 }}
-              size="large"
-              style={{ borderRadius: 10 }}
-            />
+          <Form.Item name="content" label="Содержание" rules={[{ required: true, message: "Введите содержание" }]}>
+            <Input.TextArea placeholder="Текст..." autoSize={{ minRows: 4 }} size="large" />
           </Form.Item>
 
           <Form.Item name="subDepartmentId" label="Отдел">
@@ -905,28 +763,31 @@ export const Announcement = () => {
               placeholder="Выберите отдел"
               allowClear
               loading={subDeptLoading}
-              options={(subdepartments || []).map((s) => ({
-                label: s.name,
-                value: Number(s.id),
-              }))}
+              options={(subdepartments || []).map(s => ({ label: s.name, value: Number(s.id) }))}
             />
           </Form.Item>
 
           <Form.Item name="employeeId" label="Сотрудник">
             <Select
-              placeholder="Выберите cотрудника"
+              placeholder="Выберите сотрудника"
               allowClear
               loading={employeeLoading}
-              options={(employees || []).map((emp) => ({
-                label:
-                  `${emp.firstName || ""} ${emp.lastName || ""}`.trim() ||
-                  emp.email,
+              options={(employees || []).map(emp => ({
+                label: `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email,
                 value: Number(emp.id),
               }))}
             />
           </Form.Item>
 
-          <Form.Item label="Файлы (изображения, видео, документы, презентации)">
+          <Form.Item name="folderId" label="Папка">
+            <Select
+              placeholder="Выберите папку"
+              allowClear
+              options={(folders || []).map(f => ({ label: f.name, value: Number(f.id) }))}
+            />
+          </Form.Item>
+
+          <Form.Item label="Файлы">
             <Upload
               multiple
               listType="picture-card"
@@ -944,39 +805,40 @@ export const Announcement = () => {
         </Form>
       </Modal>
 
+      {/* Модалка просмотра */}
       <Modal
         open={preview.open}
         footer={null}
         onCancel={() => setPreview({ open: false, url: "", isVideo: false })}
         centered
         width="auto"
-        styles={{
-          body: { padding: 0, backgroundColor: "#000", borderRadius: 16 },
-        }}
+        styles={{ body: { padding: 0, backgroundColor: "#000", borderRadius: 16 } }}
       >
         {preview.isVideo ? (
-          <video
-            src={preview.url}
-            controls
-            autoPlay
-            style={{
-              width: "100%",
-              maxHeight: "80vh",
-              borderRadius: 16,
-            }}
-          />
+          <video src={preview.url} controls autoPlay style={{ width: "100%", maxHeight: "80vh", borderRadius: 16 }} />
         ) : (
-          <img
-            src={preview.url}
-            style={{
-              width: "100%",
-              maxHeight: "80vh",
-              objectFit: "contain",
-              borderRadius: 16,
-            }}
-            alt="preview"
-          />
+          <img src={preview.url} style={{ width: "100%", maxHeight: "80vh", objectFit: "contain", borderRadius: 16 }} alt="preview" />
         )}
+      </Modal>
+
+      {/* Модалка создания папки */}
+      <Modal
+        title="Создать папку"
+        open={openFolder}
+        onCancel={() => { setOpenFolder(false); setFolderName(""); }}
+        onOk={handleCreateFolder}
+      >
+        <Input placeholder="Название папки" value={folderName} onChange={(e) => setFolderName(e.target.value)} />
+      </Modal>
+
+      {/* Модалка редактирования папки */}
+      <Modal
+        title="Редактировать папку"
+        open={openEditFolder}
+        onCancel={() => { setOpenEditFolder(false); setFolderName(""); setEditingFolder(null); }}
+        onOk={handleEditFolder}
+      >
+        <Input placeholder="Название папки" value={folderName} onChange={(e) => setFolderName(e.target.value)} />
       </Modal>
     </div>
   );
