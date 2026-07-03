@@ -25,7 +25,7 @@ const Register = () => {
       });
 
       await loginUser({
-        phoneNumber: values.phoneNumber,
+       userName: values.userName,
         password: values.password,
       });
 
@@ -97,14 +97,14 @@ const Register = () => {
               </Col>
 
               <Col span={24}>
-                <Form.Item name="userName" label="Никнейм">
+                <Form.Item name="userName" label="Имя пользователя">
                   <Input size="large" placeholder="" />
                 </Form.Item>
               </Col>
 
               <Col span={24}>
-                <Form.Item name="phoneNumber" label="Телефон">
-                  <Input size="large" placeholder="" />
+                <Form.Item name="phoneNumber" label="Телефон" initialValue="+992">
+                  <Input size="large" placeholder="" maxLength={13} />
                 </Form.Item>
               </Col>
               <Col span={24}>

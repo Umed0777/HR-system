@@ -16,6 +16,7 @@ import {
   TeamOutlined,
   UserOutlined,
   DashboardOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import img from "../assets/image8.jpg";
 import { useEffect, useState } from "react";
@@ -30,13 +31,18 @@ export const HRSystemLayout = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-  const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token");
 
-  if (!token) {
-    navigate("/login");
-  }
-}, []);
-  
+    if (!token) {
+      navigate("/login");
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login", { replace: true });
+  };
+  const token = localStorage.getItem("token");
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -149,7 +155,7 @@ export const HRSystemLayout = () => {
               label: "Тесты",
             },
             {
-              key: "/test taking",
+              key: "/test-taking",
               icon: <CheckSquareOutlined />,
               label: "Сессия",
             },
@@ -172,7 +178,7 @@ export const HRSystemLayout = () => {
         <div
           style={{
             height: 60,
-            background: '#fff',
+            background: "#fff",
             display: "flex",
             justifyContent: "flex-end",
             alignItems: "center",
@@ -180,14 +186,19 @@ export const HRSystemLayout = () => {
             boxShadow: "0 2px 5px rgba(0,0,0,.1)",
           }}
         >
-          <Button
-            type="primary"
-            danger
-            icon={<UserOutlined />}
-            onClick={() => navigate("/login")}
-          >
-            Войти
-          </Button>
+          {token ? (
+            <Button danger icon={<UserOutlined />} onClick={handleLogout}>
+              Выйти
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon={<UserOutlined />}
+              onClick={() => navigate("/login")}
+            >
+              Войти
+            </Button>
+          )}
         </div>
         <Content
           style={{

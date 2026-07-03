@@ -29,11 +29,11 @@ loginUser: async (data) => {
     if (!token) {
       throw new Error("TOKEN NOT FOUND");
     }
-
-    localStorage.setItem("token", token);
-
     console.log("STORED TOKEN:", localStorage.getItem("token"));
+    const oneDay = 24 * 60 * 60 * 1000;
 
+localStorage.setItem("token", token);
+localStorage.setItem("tokenExpire", Date.now() + oneDay);
     set({
       user: res.data,
       token,

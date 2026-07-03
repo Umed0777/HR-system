@@ -8,6 +8,7 @@ const Login = () => {
     const navigate = useNavigate();
 
   const onFinish = async (values) => {
+     console.log("LOGIN VALUES:", values);
     try {
       await loginUser(values);
       message.success("Успешный вход");
@@ -46,9 +47,9 @@ const Login = () => {
 
         <Form layout="vertical" onFinish={onFinish}>
           <Form.Item
-            name="phoneNumber"
-            label="Телефон"
-            rules={[{ required: true, message: "Введите телефон" }]}
+            name="userName"
+            label="Имя пользователя"
+            rules={[{ required: true, message: "Введите имя пользователя" }]}
           >
             <Input placeholder="" size="large" />
           </Form.Item>
