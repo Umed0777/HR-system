@@ -28,6 +28,7 @@ export const getEmployeeId = async (id) => {
 };
 export const createEmployee = async (data) => {
   try {
+       console.log("Отправляем:", data);
     const res = await API.post("/api/Employee", data);
     return res.data;
   } catch (error) {

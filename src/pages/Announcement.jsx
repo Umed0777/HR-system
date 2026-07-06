@@ -1178,25 +1178,44 @@ export const Announcement = () => {
       </Modal>
 
       {/* Редактировать папку */}
-      <Modal
-        title="Редактировать папку"
-        open={openEditFolder}
-        onCancel={() => {
-          setOpenEditFolder(false);
-          setFolderName("");
-          setEditingFolder(null);
-        }}
-        onOk={handleEditFolder}
-        okText="Сохранить"
-        cancelText="Отмена"
-      >
-        <Input
-          placeholder="Название папки"
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
-          onPressEnter={handleEditFolder}
-        />
-      </Modal>
+    <Modal
+  title="Редактировать папку"
+  open={openEditFolder}
+  onCancel={() => {
+    setOpenEditFolder(false);
+    setFolderName("");
+    setEditingFolder(null);
+  }}
+  footer={[
+    <Button
+      key="save"
+      type="primary"
+      danger
+      onClick={handleEditFolder}
+    >
+      Сохранить
+    </Button>,
+    <Button
+    danger
+      key="cancel"
+      onClick={() => {
+        setOpenEditFolder(false);
+        setFolderName("");
+        setEditingFolder(null);
+      }}
+    >
+      Отмена
+    </Button>,
+
+  ]}
+>
+  <Input
+    placeholder="Название папки"
+    value={folderName}
+    onChange={(e) => setFolderName(e.target.value)}
+    onPressEnter={handleEditFolder}
+  />
+</Modal>
     </div>
   );
 };
