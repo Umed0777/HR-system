@@ -41,7 +41,6 @@ import {
   MinusOutlined,
   CheckOutlined,
   SearchOutlined,
-  StarOutlined,
   FilterOutlined,
   ClearOutlined,
 } from "@ant-design/icons";
@@ -51,6 +50,15 @@ import img from '../assets/image2.jpg';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
+
+// Компонент для отображения статистики
+const StatItem = ({ icon, label, value }) => (
+  <div style={{ textAlign: 'center' }}>
+    <div style={{ fontSize: 24, marginBottom: 4 }}>{icon}</div>
+    <div style={{ fontSize: 20, fontWeight: 'bold' }}>{value}</div>
+    <div style={{ fontSize: 12, color: '#8c8c8c' }}>{label}</div>
+  </div>
+);
 
 export const TestManager = () => {
   const navigate = useNavigate();
@@ -89,6 +97,8 @@ export const TestManager = () => {
   const [descriptionTj, setDescriptionTj] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedTest, setSelectedTest] = useState(null);
 
   useEffect(() => {
     fetchTests();
@@ -106,6 +116,11 @@ export const TestManager = () => {
       }
     });
     return usedIds;
+  };
+
+  const openPreview = (test) => {
+    setSelectedTest(test);
+    setPreviewOpen(true);
   };
 
   // Получаем доступные вопросы (не используются в тестах)
@@ -168,7 +183,6 @@ export const TestManager = () => {
       questionsSelected: "вопросов выбрано",
       searchPlaceholder: "Поиск вопросов...",
       allTypes: "Все типы",
-      rating: "Рейтинг",
       noQuestionsFound: "Вопросы не найдены",
       noAvailableQuestions: "Нет доступных вопросов для добавления в тест",
       createQuestionFirst: "Создайте вопросы перед созданием теста",
@@ -179,6 +193,11 @@ export const TestManager = () => {
       showing: "Показано",
       of: "из",
       questionsFound: "вопросов найдено",
+      preview: "Просмотр теста",
+      noQuestionsInTest: "Нет вопросов в этом тесте",
+      created: "Создан",
+      totalQuestionsLabel: "Всего вопросов",
+      correctAnswer: "Правильный ответ",
     },
     tj: {
       title: "Идоракунии тестҳо",
@@ -228,7 +247,6 @@ export const TestManager = () => {
       questionsSelected: "савол интихоб шуд",
       searchPlaceholder: "Ҷустуҷӯи саволҳо...",
       allTypes: "Ҳамаи навъҳо",
-      rating: "Баҳо",
       noQuestionsFound: "Саволҳо ёфт нашуд",
       noAvailableQuestions: "Барои илова ба тест саволҳо нестанд",
       createQuestionFirst: "Пеш аз эҷоди тест саволҳо эҷод кунед",
@@ -239,6 +257,11 @@ export const TestManager = () => {
       showing: "Нишон дода шуд",
       of: "аз",
       questionsFound: "савол ёфт шуд",
+      preview: "Дидани тест",
+      noQuestionsInTest: "Дар ин тест саволҳо нест",
+      created: "Эҷод шуд",
+      totalQuestionsLabel: "Ҳамагӣ саволҳо",
+      correctAnswer: "Ҷавоби дуруст",
     },
   };
 
@@ -345,8 +368,6 @@ export const TestManager = () => {
               textTj: correctOption.textTj || correctOption.text || "",
             };
           }
-        } else if (question.type === 3) {
-          correctAnswer = { optionId: question.optionId || null };
         }
       }
       
@@ -448,17 +469,13 @@ export const TestManager = () => {
       }
     }
     
-    if (question.type === 3 && question.optionId) {
-      return `${question.optionId}/10`;
-    }
-    
     return "—";
   };
 
   const getTypeLabel = (type) => {
-    if (type === 1) return { label: t[lang].test, color: "#52c41a", icon: <CheckCircleOutlined /> };
-    if (type === 2) return { label: t[lang].manual, color: "#722ed1", icon: <QuestionCircleOutlined /> };
-    return { label: t[lang].rating, color: "#faad14", icon: <StarOutlined /> };
+    if (type === 1) return { label: "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
+    if (type === 2) return { label: "Ручной", color: "#722ed1", icon: <QuestionCircleOutlined /> };
+    return { label: "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
   };
 
   // Получаем доступные вопросы (не используются в тестах)
@@ -477,14 +494,10 @@ export const TestManager = () => {
   // Для отображения в модалке: вопросы теста + отфильтрованные доступные
   const getDisplayQuestions = () => {
     if (editingItem) {
-      // При редактировании показываем ВСЕ вопросы теста + отфильтрованные доступные
       const testQuestionIds = new Set(selectedQuestionIds);
       const displayIds = new Set();
       
-      // Добавляем вопросы теста
       testQuestionIds.forEach(id => displayIds.add(id));
-      
-      // Добавляем отфильтрованные доступные вопросы
       filteredAvailableQuestions.forEach(q => displayIds.add(q.id));
       
       return questions.filter(q => displayIds.has(q.id));
@@ -493,9 +506,6 @@ export const TestManager = () => {
   };
 
   const displayQuestions = getDisplayQuestions();
-
-  // Проверяем, есть ли результаты поиска
-  const hasSearchResults = displayQuestions.length > 0;
 
   const columns = [
     {
@@ -538,7 +548,7 @@ export const TestManager = () => {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh" }}>
-        <Spin size="large" tip={t[lang].loading}>
+        <Spin size="small" tip={t[lang].loading}>
           <div style={{ padding: 50, background: "rgba(255,255,255,0.9)", borderRadius: 20 }} />
         </Spin>
       </div>
@@ -584,7 +594,6 @@ export const TestManager = () => {
           style={{ marginBottom: 24, borderRadius: 12 }}
         />
 
-        {/* Панель управления с фильтрами */}
         <div style={{ 
           background: "#f8f9fa", 
           padding: "16px 20px", 
@@ -640,9 +649,6 @@ export const TestManager = () => {
                 <Option value="2">
                   <span style={{ color: "#722ed1" }}>✏️ {t[lang].manual}</span>
                 </Option>
-                <Option value="3">
-                  <span style={{ color: "#faad14" }}>⭐ {t[lang].rating}</span>
-                </Option>
               </Select>
               
               {(searchTerm || filterType !== "all") && (
@@ -661,7 +667,6 @@ export const TestManager = () => {
             </Space>
           </Flex>
           
-          {/* Статистика поиска */}
           {availableQuestions.length > 0 && (
             <div style={{ marginTop: 12 }}>
               <Text type="secondary" style={{ fontSize: 13 }}>
@@ -678,7 +683,6 @@ export const TestManager = () => {
           )}
         </div>
 
-        {/* Список вопросов */}
         {displayQuestions.length === 0 ? (
           <Empty
             description={
@@ -772,16 +776,9 @@ export const TestManager = () => {
                               <Tag color={typeInfo.color} icon={typeInfo.icon} style={{ borderRadius: 20, border: 'none' }}>
                                 {typeInfo.label}
                               </Tag>
-                              {question.type !== 3 && (
-                                <Tag color="green" style={{ borderRadius: 20, fontSize: 12, border: 'none' }}>
-                                  ✅ {getCorrectAnswerText(question)}
-                                </Tag>
-                              )}
-                              {question.type === 3 && (
-                                <Tag color="gold" style={{ borderRadius: 20, fontSize: 12, border: 'none' }}>
-                                  ⭐ {getCorrectAnswerText(question)}
-                                </Tag>
-                              )}
+                              <Tag color="green" style={{ borderRadius: 20, fontSize: 12, border: 'none' }}>
+                                ✅ {getCorrectAnswerText(question)}
+                              </Tag>
                               {isUsed && !isSelected && (
                                 <Tag color="red" style={{ borderRadius: 20, border: 'none' }}>
                                   🔒 {t[lang].usedInTests}
@@ -821,7 +818,6 @@ export const TestManager = () => {
           </div>
         )}
 
-        {/* Прогресс выбора */}
         {displayQuestions.length > 0 && (
           <div style={{ 
             marginTop: 24, 
@@ -983,6 +979,7 @@ export const TestManager = () => {
                       )}
                       
                       <Card
+                        onClick={() => openPreview(test)}
                         onMouseEnter={() => setHoveredCard(test.id)}
                         onMouseLeave={() => setHoveredCard(null)}
                         style={{
@@ -1107,7 +1104,7 @@ export const TestManager = () => {
         </div>
       </AnimatePresence>
 
-      {/* Модальное окно */}
+      {/* Модальное окно создания/редактирования */}
       <Modal
         open={open}
         onCancel={() => {
@@ -1336,6 +1333,136 @@ export const TestManager = () => {
               </Space>
             </div>
           </div>
+        </div>
+      </Modal>
+
+      {/* Модальное окно предпросмотра */}
+      <Modal
+        open={previewOpen}
+        footer={null}
+        onCancel={() => setPreviewOpen(false)}
+        width={900}
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 20px',  alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 18, fontWeight: 600 }}>
+              {lang === "ru" 
+                ? selectedTest?.titleRu || selectedTest?.title || "Без названия"
+                : selectedTest?.titleTj || selectedTest?.title || "Безунвон"
+              }
+            </span>
+            <Space wrap>
+              <Tag color="blue" style={{ borderRadius: 20, padding: '4px 12px' }}>
+                <ClockCircleOutlined /> {selectedTest?.questions?.length || 0} {t[lang].questionCount}
+              </Tag>
+            </Space>
+          </div>
+        }
+        styles={{
+          header: {
+            borderBottom: '1px solid #f0f0f0',
+            paddingBottom: 16,
+          },
+          body: {
+            paddingTop: 20,
+          }
+        }}
+      >
+        {/* Описание теста */}
+        {selectedTest && (selectedTest.descriptionRu || selectedTest.description || selectedTest.descriptionTj) && (
+          <div style={{ 
+            marginBottom: 20, 
+            padding: '12px 16px', 
+            background: '#f8f9fa', 
+            borderRadius: 8,
+            borderLeft: '4px solid #ff4b2b'
+          }}>
+            <Text>
+              {lang === "ru" 
+                ? selectedTest.descriptionRu || selectedTest.description 
+                : selectedTest.descriptionTj || selectedTest.description}
+            </Text>
+          </div>
+        )}
+
+        {/* Таблица вопросов */}
+        <Table
+          dataSource={selectedTest?.questions || []}
+          rowKey="id"
+          columns={[
+            {
+              title: "№",
+              key: "index",
+              width: 60,
+              render: (_, __, index) => (
+                <Badge count={index + 1} style={{ backgroundColor: "#ff4b2b" }} />
+              ),
+            },
+            {
+              title: lang === "ru" ? "Вопрос" : "Савол",
+              key: "question",
+              render: (_, record) => (
+                <div>
+                  <Text style={{ fontSize: 15 }}>
+                    {lang === "ru" ? record.contentRu || record.content : record.contentTj || record.content}
+                  </Text>
+                  {/* Показываем правильный ответ для тестов и ручных вопросов */}
+                  {(record.type === 1 || record.type === 2) && (
+                    <div style={{ marginTop: 6 }}>
+                      <Tag color="green" style={{ fontSize: 12, borderRadius: 20, border: 'none' }}>
+                        ✅ {t[lang].correctAnswer}: {getCorrectAnswerText(record)}
+                      </Tag>
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+            {
+              title: lang === "ru" ? "Тип" : "Навъ",
+              key: "type",
+              width: 130,
+              render: (_, record) => {
+                const typeInfo = getTypeLabel(record.type);
+                return (
+                  <Tag color={typeInfo.color} icon={typeInfo.icon} style={{ borderRadius: 20, border: 'none' }}>
+                    {typeInfo.label}
+                  </Tag>
+                );
+              },
+            },
+          ]}
+          pagination={false}
+          locale={{
+            emptyText: t[lang].noQuestionsInTest
+          }}
+          style={{ borderRadius: 12 }}
+        />
+
+        {/* Статистика теста */}
+        <div style={{ 
+          marginTop: 20, 
+          padding: '16px 20px', 
+          background: 'linear-gradient(135deg, #f8f9fa, #ffffff)', 
+          borderRadius: 12,
+          border: '1px solid #f0f0f0'
+        }}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12}>
+              <StatItem 
+                icon={<QuestionCircleOutlined style={{ color: '#ff4b2b' }} />} 
+                label={t[lang].totalQuestionsLabel} 
+                value={selectedTest?.questions?.length || 0} 
+              />
+            </Col>
+            <Col xs={24} sm={12}>
+              <StatItem 
+                icon={<ClockCircleOutlined style={{ color: '#1890ff' }} />} 
+                label={t[lang].created} 
+                value={selectedTest?.createdAt 
+                  ? new Date(selectedTest.createdAt).toLocaleDateString(lang === "ru" ? 'ru-RU' : 'tj-TJ') 
+                  : '—'} 
+              />
+            </Col>
+          </Row>
         </div>
       </Modal>
     </div>

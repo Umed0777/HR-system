@@ -45,178 +45,228 @@ export const HRSystemLayout = () => {
   const token = localStorage.getItem("token");
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    <Layout style={{ minHeight: "100vh", background:
+      "linear-gradient(135deg,#4b0000 0%,#8b0000 35%,#c1121f 70%,#ff4d4f 100%)", }}>
       {/* SIDEBAR */}
       <Sider
         collapsible
         collapsed={collapsed}
         trigger={null}
-        width={260}
+        width={270}
         style={{
-          background: "#fff",
-          height: "100vh",
-          marginTop: "0",
-          marginLeft: "10px",
-          boxShadow: "0 0 10px rgba(0,0,0,0.1)",
-        }}
+    margin: 15,
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "rgba(255,255,255,.08)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    border: "1px solid rgba(255,255,255,.15)",
+    boxShadow: "0 20px 40px rgba(0,0,0,.35)",
+  }}
       >
         {/* TOP BAR (лого + кнопка) */}
         <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "space-between",
-            padding: "16px",
-          }}
-        >
-          {/* ЛОГО */}
-          <img
-            src={active}
-            alt="logo"
-            style={{
-              width: collapsed ? 40 : 80,
-              borderRadius: "50%",
-              transition: "0.3s",
-            }}
-          />
+  style={{
+    height: 90,
+    display: "flex",
+    justifyContent: collapsed ? "center" : "space-between",
+    alignItems: "center",
+    padding: "0 18px",
+    borderBottom: "1px solid rgba(255,255,255,.15)",
+  }}
+>
+  <img
+    src={active}
+    alt=""
+    style={{
+      width: collapsed ? 45 : 50,
+      height: collapsed ? 45 : 50,
+      borderRadius: "50%",
+      objectFit: "cover",
+      transition: ".4s",
+      boxShadow: "0 0 20px rgba(255,80,80,.6)",
+    }}
+  />
 
-          {/* КНОПКА */}
-          {!collapsed && (
-            <Button
-              type="text"
-              icon={<MenuFoldOutlined />}
-              onClick={() => setCollapsed(true)}
-            />
-          )}
-        </div>
+  {!collapsed && (
+    <Button
+      type="text"
+      icon={<MenuFoldOutlined style={{ color: "#fff", fontSize: 16 }} />}
+      onClick={() => setCollapsed(true)}
+    />
+  )}
+</div>
 
         {/* КНОПКА когда sidebar закрыт */}
         {collapsed && (
-          <div style={{ textAlign: "center", marginBottom: 10 }}>
-            <Button
-              type="text"
-              icon={<MenuUnfoldOutlined />}
-              onClick={() => setCollapsed(false)}
-            />
-          </div>
-        )}
-
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "center",
+      margin: "15px 0",
+    }}
+  >
+    <Button
+      type="text"
+      icon={<MenuUnfoldOutlined style={{ color: "#fff", fontSize: 16 }} />}
+      onClick={() => setCollapsed(false)}
+    />
+  </div>
+)}
         {/* MENU */}
         <Menu
+        className="custom-sidebar-menu"
           theme="light"
           mode="inline"
           selectedKeys={[location.pathname]}
           onClick={({ key }) => navigate(key)}
-          style={{ borderRight: "none" }}
-          items={[
-            {
-              key: "/announcement",
-              icon: <AppstoreOutlined />,
-              label: "Объявление",
-              // children:[
-              //   {
-              //     key: "/announcement",
-              //     label: "IT"
-              //   },
-              //   {
-              //     key: "/announcement",
-              //     label: "Business"
-              //   },
-              // ]
-            },
-            // {
-            //   key: "/reply",
-            //   icon: <MessageOutlined />,
-            //   label: "Отвечать",
-            // },
-            {
-              key: "/department",
-              icon: <ApartmentOutlined />,
-              label: "Управление",
-            },
-            {
-              key: "/position",
-              icon: <IdcardOutlined />,
-              label: "Должность",
-            },
-            {
-              key: "/subdepartment",
-              icon: <ClusterOutlined />,
-              label: "Отдел",
-            },
-            {
-              key: "/question",
-              icon: <QuestionCircleOutlined />,
-              label: "Вопросы",
-            },
-            {
-              key: "/test",
-              icon: <FormOutlined />,
-              label: "Тесты",
-            },
-            {
-              key: "/test-taking",
-              icon: <CheckSquareOutlined />,
-              label: "Сессия",
-            },
-            {
-              key: "/employee",
-              icon: <TeamOutlined />,
-              label: "Сотрудники",
-            },
-            {
-              key: "/select-employee",
-              icon: <UserOutlined />,
-              label: "Выбрать сотрудника",
-            },
-          ]}
+           style={{
+      background: "transparent",
+      borderRight: "none",
+      color: "#fff",
+      fontSize: 15,
+      padding: "10px",
+      overflowY: "auto", // Включаем скролл
+    maxHeight: "calc(100vh - 64px)", // Ограничиваем высоту
+    }}
+         items={[
+  {
+    key: "administration",
+    icon: <DashboardOutlined />,
+    label: "Администрирование",
+    children: [
+      {
+        key: "/department",
+        icon: <ApartmentOutlined />,
+        label: "Управление",
+      },
+      {
+        key: "/position",
+        icon: <IdcardOutlined />,
+        label: "Должность",
+      },
+      {
+        key: "/subdepartment",
+        icon: <ClusterOutlined />,
+        label: "Отдел",
+      },
+      {
+        key: "/employee",
+        icon: <TeamOutlined />,
+        label: "Сотрудники",
+      },
+    ],
+  },
+
+  {
+    key: "announcement",
+    icon: <FileTextOutlined />,
+    label: "База знаний",
+    children: [
+      {
+        key: "/announcement",
+      icon: <ReadOutlined />,
+      label: "Инструкции",
+      }
+    ]
+  },
+
+  {
+    key: "/question",
+    icon: <QuestionCircleOutlined />,
+    label: "Вопросы",
+  },
+
+  {
+    key: "/test",
+    icon: <FormOutlined />,
+    label: "Тесты",
+  },
+
+  {
+    key: "/test-taking",
+    icon: <CheckSquareOutlined />,
+    label: "Сессии тестирования",
+  },
+
+  // {
+  //   key: "/select-employee",
+  //   icon: <UserOutlined />,
+  //   label: "Выбрать сотрудника",
+  // },
+]}
         />
       </Sider>
 
       {/* CONTENT */}
       <Layout>
         <div
-          style={{
-            height: 60,
-            background: "#fff",
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            paddingRight: 20,
-            boxShadow: "0 2px 5px rgba(0,0,0,.1)",
-          }}
-        >
-          {token ? (
-            <Button danger icon={<UserOutlined />} onClick={handleLogout}>
-              Выйти
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              icon={<UserOutlined />}
-              onClick={() => navigate("/login")}
-            >
-              Войти
-            </Button>
-          )}
-        </div>
+  style={{
+    height: 75,
+    margin: "15px 15px 0",
+    borderRadius: 20,
+    background: "rgba(255,255,255,.12)",
+    backdropFilter: "blur(18px)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "0 30px",
+    color: "#fff",
+    boxShadow: "0 15px 35px rgba(0,0,0,.2)",
+  }}
+>
+  <h2
+    style={{
+      color: "#fff",
+      margin: 0,
+      fontWeight: 700,
+      letterSpacing: 1,
+    }}
+  >
+      HR Management System
+  </h2>
+
+  <Button
+    danger
+    size="large"
+    icon={<UserOutlined />}
+    onClick={handleLogout}
+    style={{
+      borderRadius: 30,
+      paddingInline: 25,
+      fontWeight: 600,
+    }}
+  >
+      Выйти
+  </Button>
+</div>
         <Content
-          style={{
-            margin: 18,
-            marginTop: 20,
-            padding: 24,
-            backgroundImage: `url(${img})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundAttachment: "fixed",
-            borderRadius: 12,
-            boxShadow: "0 0 8px rgba(0,0,0,0.1)",
-            maxHeight: "760px",
-            overflow: "auto",
-          }}
-        >
-          <Outlet />
-        </Content>
+  style={{
+    margin: 15,
+    marginTop: 15,
+    borderRadius: 25,
+    overflow: "hidden",
+    background: "rgba(255,255,255,.10)",
+    backdropFilter: "blur(15px)",
+    boxShadow: "0 20px 50px rgba(0,0,0,.3)",
+    border: "1px solid rgba(255,255,255,.15)",
+    minHeight: "82vh",
+  }}
+>
+  <div
+    style={{
+      // backgroundImage: `url(${img})`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      height: "100%",
+      padding: 25,
+      overflow: "auto",
+      backdropFilter: "brightness(.9)",
+    }}
+  >
+    <Outlet />
+  </div>
+</Content>
       </Layout>
     </Layout>
   );

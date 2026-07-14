@@ -146,6 +146,7 @@ export const Question = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [userRatings, setUserRatings] = useState({});
+  const [selectedQuestionId, setSelectedQuestionId] = useState(null); // Добавляем состояние для выбранного вопроса
   
   useEffect(() => {
     fetchQuestions(page, pageSize);
@@ -180,6 +181,8 @@ export const Question = () => {
       saveRating: "Сохранить оценку",
       ratingSaved: "Оценка сохранена",
       expectedRating: "Ожидаемый рейтинг",
+      showAnswer: "Показать ответ",
+      hideAnswer: "Скрыть ответ",
     },
     tj: {
       question: "Савол",
@@ -204,6 +207,8 @@ export const Question = () => {
       saveRating: "Баҳоро сабт кунед",
       ratingSaved: "Баҳо сабт шуд",
       expectedRating: "Баҳои интизоришаванда",
+      showAnswer: "Нишон додани ҷавоб",
+      hideAnswer: "Пинҳон кардани ҷавоб",
     },
   };
 
@@ -420,6 +425,15 @@ export const Question = () => {
     // saveUserRating(questionId, value);
   };
 
+  // Функция для переключения выбора вопроса
+  const toggleQuestionSelection = (questionId) => {
+    if (selectedQuestionId === questionId) {
+      setSelectedQuestionId(null); // Скрываем ответ
+    } else {
+      setSelectedQuestionId(questionId); // Показываем ответ
+    }
+  };
+
   return (
     <div style={{ padding: 24, maxWidth: 1000, margin: "0 auto" }}>
       {showConfetti && (
@@ -523,6 +537,7 @@ export const Question = () => {
             {questions.map((q, index) => {
               const isHovered = hoveredCard === q.id;
               const isNew = newQuestionId === q.id;
+              const isSelected = selectedQuestionId === q.id; // Проверяем, выбран ли вопрос
 
               return (
                 <motion.div
@@ -576,7 +591,7 @@ export const Question = () => {
                         ? "0 12px 24px rgba(0, 0, 0, 0.12)"
                         : "0 4px 12px rgba(0, 0, 0, 0.08)",
                       transition: "all 0.3s ease",
-                      border: "none",
+                      border: isSelected ? "2px solid #ff4b2b" : "none", // Добавляем рамку для выбранного вопроса
                       overflow: "hidden",
                       backgroundImage: `url(${img})`,
                       backgroundSize: "cover",
@@ -646,12 +661,12 @@ export const Question = () => {
                                 style={{
                                   marginBottom: 12,
                                   padding: "8px 12px",
-                                  background: o.isCorrect
-                                    ? "rgba(82, 196, 26, 0.1)"
+                                  background: isSelected && o.isCorrect
+                                    ? "rgba(82, 196, 26, 0.2)"
                                     : "rgba(255, 255, 255, 0.95)",
                                   borderRadius: 8,
-                                  border: o.isCorrect
-                                    ? "1px solid #52c41a"
+                                  border: isSelected && o.isCorrect
+                                    ? "2px solid #52c41a"
                                     : "1px solid rgba(0, 0, 0, 0.1)",
                                 }}
                               >
@@ -659,7 +674,7 @@ export const Question = () => {
                                   <strong>{letters[i]}.</strong>{" "}
                                   {getOptionText(o)}
                                 </Text>
-                                {o.isCorrect && (
+                                {isSelected && o.isCorrect && (
                                   <Tag color="success" style={{ marginLeft: 10 }}>
                                     <CheckCircleOutlined /> {t[lang].correct}
                                   </Tag>
@@ -669,6 +684,21 @@ export const Question = () => {
                           ) : (
                             <Text type="secondary">Нет вариантов</Text>
                           )}
+                          
+                          {/* Кнопка для показа/скрытия ответа */}
+                          <Button
+                            type={isSelected ? "primary" : "default"}
+                            onClick={() => toggleQuestionSelection(q.id)}
+                            style={{
+                              marginTop: 12,
+                              borderRadius: 8,
+                              background: isSelected ? "#ff4b2b" : undefined,
+                              borderColor: isSelected ? "#ff4b2b" : undefined,
+                              color: isSelected ? "white" : undefined,
+                            }}
+                          >
+                            {isSelected ? t[lang].hideAnswer : t[lang].showAnswer}
+                          </Button>
                         </div>
                       )}
 
@@ -682,19 +712,44 @@ export const Question = () => {
                           <div
                             style={{
                               padding: "12px 16px",
-                              background: "linear-gradient(135deg, #f0f9ff, #e6f4ff)",
+                              background: isSelected 
+                                ? "linear-gradient(135deg, #f0f9ff, #e6f4ff)"
+                                : "rgba(255, 255, 255, 0.9)",
                               borderRadius: 10,
-                              border: "1px solid #91d5ff",
+                              border: isSelected 
+                                ? "2px solid #91d5ff"
+                                : "1px solid rgba(0, 0, 0, 0.1)",
                             }}
                           >
                             <RocketOutlined style={{ color: "#1890ff", marginRight: 8 }} />
                             <Text strong style={{ color: "#1890ff" }}>
                               📖 {t[lang].correctAnswer}:
                             </Text>
-                            <Text style={{ marginLeft: 8, fontWeight: "bold", fontSize: 15 }}>
-                              {getCorrectAnswer(q)}
-                            </Text>
+                            {isSelected ? (
+                              <Text style={{ marginLeft: 8, fontWeight: "bold", fontSize: 15 }}>
+                                {getCorrectAnswer(q)}
+                              </Text>
+                            ) : (
+                              <Text style={{ marginLeft: 8, color: "#999" }}>
+                                Нажмите кнопку чтобы показать ответ
+                              </Text>
+                            )}
                           </div>
+                          
+                          {/* Кнопка для показа/скрытия ответа */}
+                          <Button
+                            type={isSelected ? "primary" : "default"}
+                            onClick={() => toggleQuestionSelection(q.id)}
+                            style={{
+                              marginTop: 12,
+                              borderRadius: 8,
+                              background: isSelected ? "#ff4b2b" : undefined,
+                              borderColor: isSelected ? "#ff4b2b" : undefined,
+                              color: isSelected ? "white" : undefined,
+                            }}
+                          >
+                            {isSelected ? t[lang].hideAnswer : t[lang].showAnswer}
+                          </Button>
                         </motion.div>
                       )}
 
@@ -740,6 +795,21 @@ export const Question = () => {
                               onChange={(value) => handleUserRating(q.id, value)}
                             />
                           </div>
+                          
+                          {/* Кнопка для показа/скрытия ответа (рейтинг всегда виден) */}
+                          <Button
+                            type={isSelected ? "primary" : "default"}
+                            onClick={() => toggleQuestionSelection(q.id)}
+                            style={{
+                              marginTop: 12,
+                              borderRadius: 8,
+                              background: isSelected ? "#ff4b2b" : undefined,
+                              borderColor: isSelected ? "#ff4b2b" : undefined,
+                              color: isSelected ? "white" : undefined,
+                            }}
+                          >
+                            {isSelected ? t[lang].hideAnswer : t[lang].showAnswer}
+                          </Button>
                         </div>
                       )}
                     </div>

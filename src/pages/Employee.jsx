@@ -23,7 +23,6 @@ export const Employee = () => {
     const { departments = [], fetchDepartments } = useDepartmentStore();
     const { subdepartments = [], fetchSubDepartments } = useSubDepartmentStore();
     const { positions = [], fetchPositions } = usePositionStore();
-
     const [editOpen, setEditOpen] = useState(false);
     const [viewOpen, setViewOpen] = useState(false);
     const [editing, setEditing] = useState(null);

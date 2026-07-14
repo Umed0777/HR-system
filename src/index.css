@@ -102,3 +102,67 @@ body{
 .ant-pagination-item:hover a {
   color: red;
 }
+.ant-menu-item{
+  color: #fff !important;
+}
+.ant-menu-item:hover{
+   background: rgba(255, 107, 107, 0.08) !important;
+}
+.ant-menu-item-selected {
+   background: rgba(255, 107, 107, 0.08) !important;
+}
+/* custom-sidebar-menu.css */
+.custom-sidebar-menu .ant-menu-submenu .ant-menu-item {
+  color: #ff6b6b !important;
+  padding-left: 48px !important; /* Отступ для дочерних элементов */
+}
+
+.custom-sidebar-menu .ant-menu-submenu .ant-menu-item:hover {
+  color: #ff8787 !important;
+  background: rgba(255, 107, 107, 0.08) !important;
+}
+
+.custom-sidebar-menu .ant-menu-submenu .ant-menu-item-selected {
+  color: #ff6b6b !important;
+  background: rgba(255, 107, 107, 0.12) !important;
+}
+
+.custom-sidebar-menu .ant-menu-submenu .ant-menu-item .anticon {
+  color: #ff6b6b !important;
+}
+
+/* Для родительских пунктов */
+.custom-sidebar-menu .ant-menu-submenu-title {
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
+.custom-sidebar-menu .ant-menu-submenu-title:hover {
+  color: #ffffff !important;
+}
+
+/* Стрелка раскрытия */
+.custom-sidebar-menu .ant-menu-submenu-arrow {
+  color: #ffffff !important;
+}
+
+.ant-btn {
+    transition: .3s;
+}
+
+.ant-btn:hover {
+    transform: translateY(-2px);
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cf1322;
+    border-radius: 20px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}

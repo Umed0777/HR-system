@@ -1,8 +1,10 @@
+// TestSession.jsx
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTestSessionStore } from "../store/useTestSession";
 import { useTestStore } from "../store/useTest";
 import { useEmployeeStore } from "../store/useEmployee";
 import { useQuestionStore } from "../store/useQuestion";
+import { useTestAssignmentStore } from "../store/useTestAssignment";
 import * as XLSX from "xlsx";
 import {
   Button,
@@ -30,21 +32,21 @@ import {
   Avatar,
   List,
 } from "antd";
-import { 
-  CheckCircleOutlined, 
+import {
+  CheckCircleOutlined,
   CloseCircleOutlined,
-  FileDoneOutlined, 
-  FileExcelOutlined, 
-  PlayCircleOutlined, 
-  SafetyOutlined, 
-  ClockCircleOutlined, 
-  TrophyOutlined, 
-  HistoryOutlined, 
-  HourglassOutlined, 
-  UserOutlined, 
-  BookOutlined, 
-  ArrowLeftOutlined, 
-  ArrowRightOutlined, 
+  FileDoneOutlined,
+  FileExcelOutlined,
+  PlayCircleOutlined,
+  SafetyOutlined,
+  ClockCircleOutlined,
+  TrophyOutlined,
+  HistoryOutlined,
+  HourglassOutlined,
+  UserOutlined,
+  BookOutlined,
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
   WarningOutlined,
   FlagOutlined,
   StopOutlined,
@@ -54,14 +56,22 @@ import {
   ReloadOutlined,
   EyeOutlined,
   InfoCircleOutlined,
-  SaveOutlined
+  SaveOutlined,
+  ApartmentOutlined,
 } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 // Компонент таймера
-const Timer = ({ minutes, onTimeEnd, isActive, onTick, startTimestamp, onRemainingChange }) => {
+const Timer = ({
+  minutes,
+  onTimeEnd,
+  isActive,
+  onTick,
+  startTimestamp,
+  onRemainingChange,
+}) => {
   const [displayTime, setDisplayTime] = useState(minutes * 60);
   const intervalRef = useRef(null);
   const initialStartTimestampRef = useRef(startTimestamp);
@@ -84,9 +94,9 @@ const Timer = ({ minutes, onTimeEnd, isActive, onTick, startTimestamp, onRemaini
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     }
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const formatElapsed = (seconds) => {
@@ -123,20 +133,23 @@ const Timer = ({ minutes, onTimeEnd, isActive, onTick, startTimestamp, onRemaini
       const now = Date.now();
       const startTs = initialStartTimestampRef.current;
       if (!startTs) return;
-      
-      const elapsedSecondsFromStart = Math.max(0, Math.floor((now - startTs) / 1000));
-      const remaining = Math.max(0, (minutes * 60) - elapsedSecondsFromStart);
-      
+
+      const elapsedSecondsFromStart = Math.max(
+        0,
+        Math.floor((now - startTs) / 1000),
+      );
+      const remaining = Math.max(0, minutes * 60 - elapsedSecondsFromStart);
+
       setDisplayTime(remaining);
-      
+
       if (onRemainingChange) {
         onRemainingChange(remaining);
       }
-      
+
       if (onTick) {
         onTick(elapsedSecondsFromStart);
       }
-      
+
       if (remaining <= 0) {
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
@@ -160,8 +173,16 @@ const Timer = ({ minutes, onTimeEnd, isActive, onTick, startTimestamp, onRemaini
     <div>
       <Row gutter={16} align="middle">
         <Col flex="auto">
-          <Progress 
-            percent={Math.round(Math.min(100, Math.max(0, ((minutes * 60) - displayTime) / (minutes * 60) * 100)))} 
+          <Progress
+            percent={Math.round(
+              Math.min(
+                100,
+                Math.max(
+                  0,
+                  ((minutes * 60 - displayTime) / (minutes * 60)) * 100,
+                ),
+              ),
+            )}
             status={displayTime <= 60 ? "exception" : "active"}
             strokeColor={getTimerColor()}
             strokeWidth={16}
@@ -183,9 +204,16 @@ const Timer = ({ minutes, onTimeEnd, isActive, onTick, startTimestamp, onRemaini
           />
         </Col>
       </Row>
-      <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between" }}>
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          justifyContent: "space-between",
+        }}
+      >
         <Text type="secondary" style={{ fontSize: 14 }}>
-          <HourglassOutlined /> Отработано: {formatElapsed((minutes * 60) - displayTime)}
+          <HourglassOutlined /> Отработано:{" "}
+          {formatElapsed(minutes * 60 - displayTime)}
         </Text>
         <Text type="secondary" style={{ fontSize: 14 }}>
           <ClockCircleOutlined /> Всего: {minutes} минут
@@ -207,7 +235,9 @@ const RatingSelector = ({ value, onChange, disabled = false }) => {
   const ratingOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: 8 }}>
+    <div
+      style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: 8 }}
+    >
       {ratingOptions.map((num) => {
         const active = value === num;
         return (
@@ -225,10 +255,14 @@ const RatingSelector = ({ value, onChange, disabled = false }) => {
               fontWeight: "bold",
               fontSize: 15,
               transition: "0.3s",
-              background: active ? "linear-gradient(135deg, #ff4d4f, #ff7875)" : "rgba(255,255,255,0.9)",
+              background: active
+                ? "linear-gradient(135deg, #ff4d4f, #ff7875)"
+                : "rgba(255,255,255,0.9)",
               color: active ? "#fff" : "#333",
               border: active ? "3px solid #ffd6d6" : "1px solid #e8e8e8",
-              boxShadow: active ? "0 8px 20px rgba(255, 77, 79, 0.35)" : "0 2px 6px rgba(0,0,0,0.08)",
+              boxShadow: active
+                ? "0 8px 20px rgba(255, 77, 79, 0.35)"
+                : "0 2px 6px rgba(0,0,0,0.08)",
             }}
           >
             {num}
@@ -240,7 +274,18 @@ const RatingSelector = ({ value, onChange, disabled = false }) => {
 };
 
 // Компонент вопроса
-const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, manualAnswer, onManualAnswerChange, ratingValue, onRatingChange, lang }) => {
+const QuestionCard = ({
+  question,
+  index,
+  total,
+  selectedOption,
+  onSelectOption,
+  manualAnswer,
+  onManualAnswerChange,
+  ratingValue,
+  onRatingChange,
+  lang,
+}) => {
   const t = {
     ru: {
       question: "Вопрос",
@@ -279,14 +324,21 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
   };
 
   return (
-    <Card className="question-card" style={{ marginBottom: 24, borderRadius: 12 }}>
+    <Card
+      className="question-card"
+      style={{ marginBottom: 24, borderRadius: 12 }}
+    >
       <div style={{ marginBottom: 16 }}>
-        <Badge 
-          count={`${t[lang].question} ${index + 1} ${t[lang].of} ${total}`} 
-          style={{ backgroundColor: "#ff4b2b", fontSize: 14, padding: "4px 12px" }}
+        <Badge
+          count={`${t[lang].question} ${index + 1} ${t[lang].of} ${total}`}
+          style={{
+            backgroundColor: "#ff4b2b",
+            fontSize: 14,
+            padding: "4px 12px",
+          }}
         />
       </div>
-      
+
       <Paragraph style={{ fontSize: 18, fontWeight: 500, marginBottom: 24 }}>
         {getQuestionText(question)}
       </Paragraph>
@@ -305,20 +357,24 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
             {question?.options?.map((option, idx) => {
               const isSelected = selectedOption === (option.id || idx);
               return (
-                <div 
+                <div
                   key={option.id || idx}
-                  style={{ 
+                  style={{
                     padding: "12px",
                     borderRadius: 8,
                     backgroundColor: isSelected ? "#e6f7ff" : "#fafafa",
-                    border: isSelected ? "2px solid #1890ff" : "1px solid #d9d9d9",
+                    border: isSelected
+                      ? "2px solid #1890ff"
+                      : "1px solid #d9d9d9",
                     cursor: "pointer",
-                    transition: "all 0.3s"
+                    transition: "all 0.3s",
                   }}
                   onClick={() => onSelectOption(option.id || idx)}
                 >
                   <Radio value={option.id || idx}>
-                    <Text style={{ fontSize: 15 }}>{getOptionText(option)}</Text>
+                    <Text style={{ fontSize: 15 }}>
+                      {getOptionText(option)}
+                    </Text>
                   </Radio>
                 </div>
               );
@@ -344,10 +400,7 @@ const QuestionCard = ({ question, index, total, selectedOption, onSelectOption, 
           <Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
             {t[lang].selectRating}
           </Text>
-          <RatingSelector 
-            value={ratingValue} 
-            onChange={onRatingChange}
-          />
+          <RatingSelector value={ratingValue} onChange={onRatingChange} />
           {ratingValue && (
             <div style={{ marginTop: 12 }}>
               <Tag color="orange" style={{ fontSize: 14, padding: "4px 12px" }}>
@@ -384,38 +437,53 @@ const EmployeeRanking = ({ sessions, employees, tests, lang }) => {
     },
   };
 
-  const employeeStats = employees.map(employee => {
-    const employeeSessions = sessions.filter(s => s.employeeId === employee.id && s.status === 2 && s.score !== null);
-    const completedTests = employeeSessions.length;
-    const avgScore = completedTests > 0 
-      ? employeeSessions.reduce((sum, s) => sum + (s.score || 0), 0) / completedTests 
-      : 0;
-    const bestScore = completedTests > 0 
-      ? Math.max(...employeeSessions.map(s => s.score || 0)) 
-      : 0;
-    
-    return {
-      ...employee,
-      completedTests,
-      avgScore: Math.round(avgScore),
-      bestScore,
-    };
-  }).filter(emp => emp.completedTests > 0).sort((a, b) => b.avgScore - a.avgScore);
+  const employeeStats = employees
+    .map((employee) => {
+      const employeeSessions = sessions.filter(
+        (s) =>
+          s.employeeId === employee.id && s.status === 2 && s.score !== null,
+      );
+      const completedTests = employeeSessions.length;
+      const avgScore =
+        completedTests > 0
+          ? employeeSessions.reduce((sum, s) => sum + (s.score || 0), 0) /
+            completedTests
+          : 0;
+      const bestScore =
+        completedTests > 0
+          ? Math.max(...employeeSessions.map((s) => s.score || 0))
+          : 0;
+
+      return {
+        ...employee,
+        completedTests,
+        avgScore: Math.round(avgScore),
+        bestScore,
+      };
+    })
+    .filter((emp) => emp.completedTests > 0)
+    .sort((a, b) => b.avgScore - a.avgScore);
 
   const getRankIcon = (index) => {
-    if (index === 0) return <CrownOutlined style={{ color: "#ffd700", fontSize: 20 }} />;
-    if (index === 1) return <TrophyOutlined style={{ color: "#c0c0c0", fontSize: 20 }} />;
-    if (index === 2) return <TrophyOutlined style={{ color: "#cd7f32", fontSize: 20 }} />;
+    if (index === 0)
+      return <CrownOutlined style={{ color: "#ffd700", fontSize: 20 }} />;
+    if (index === 1)
+      return <TrophyOutlined style={{ color: "#c0c0c0", fontSize: 20 }} />;
+    if (index === 2)
+      return <TrophyOutlined style={{ color: "#cd7f32", fontSize: 20 }} />;
     return null;
   };
 
   return (
-    <Card title={
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <StarOutlined style={{ color: "#ffd700" }} />
-        <span>{t[lang].title}</span>
-      </div>
-    } style={{ borderRadius: 12, marginTop: 24 }}>
+    <Card
+      title={
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <StarOutlined style={{ color: "#ffd700" }} />
+          <span>{t[lang].title}</span>
+        </div>
+      }
+      style={{ borderRadius: 12, marginTop: 24 }}
+    >
       {employeeStats.length === 0 ? (
         <Empty description="Нет данных для рейтинга" />
       ) : (
@@ -427,50 +495,79 @@ const EmployeeRanking = ({ sessions, employees, tests, lang }) => {
                 avatar={
                   <div style={{ minWidth: 50, textAlign: "center" }}>
                     {getRankIcon(index)}
-                    <div style={{ fontSize: 18, fontWeight: "bold", color: index < 3 ? "#ff4b2b" : "#666" }}>
+                    <div
+                      style={{
+                        fontSize: 18,
+                        fontWeight: "bold",
+                        color: index < 3 ? "#ff4b2b" : "#666",
+                      }}
+                    >
                       #{index + 1}
                     </div>
                   </div>
                 }
                 title={
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <Avatar icon={<UserOutlined />} style={{ backgroundColor: "#ff4b2b" }} />
-                    <Text strong>{emp.firstName} {emp.lastName}</Text>
-                    <Tag color="blue">{emp.department || t[lang].department}</Tag>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <Avatar
+                      icon={<UserOutlined />}
+                      style={{ backgroundColor: "#ff4b2b" }}
+                    />
+                    <Text strong>
+                      {emp.firstName} {emp.lastName}
+                    </Text>
+                    <Tag color="blue">
+                      {emp.department || t[lang].department}
+                    </Tag>
                   </div>
                 }
                 description={
                   <div style={{ marginTop: 8 }}>
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Statistic 
-                          title={t[lang].testsPassed} 
-                          value={emp.completedTests} 
+                        <Statistic
+                          title={t[lang].testsPassed}
+                          value={emp.completedTests}
                           valueStyle={{ fontSize: 16 }}
                           prefix={<CheckCircleOutlined />}
                         />
                       </Col>
                       <Col span={8}>
-                        <Statistic 
-                          title={t[lang].avgScore} 
-                          value={emp.avgScore} 
-                          suffix="%" 
-                          valueStyle={{ fontSize: 16, color: emp.avgScore >= 70 ? "#52c41a" : "#ff4d4f" }}
+                        <Statistic
+                          title={t[lang].avgScore}
+                          value={emp.avgScore}
+                          suffix="%"
+                          valueStyle={{
+                            fontSize: 16,
+                            color: emp.avgScore >= 70 ? "#52c41a" : "#ff4d4f",
+                          }}
                         />
                       </Col>
                       <Col span={8}>
-                        <Statistic 
-                          title={t[lang].bestResult} 
-                          value={emp.bestScore} 
-                          suffix="%" 
+                        <Statistic
+                          title={t[lang].bestResult}
+                          value={emp.bestScore}
+                          suffix="%"
                           valueStyle={{ fontSize: 16, color: "#faad14" }}
                         />
                       </Col>
                     </Row>
-                    <Progress 
-                      percent={emp.avgScore} 
-                      size="small" 
-                      strokeColor={emp.avgScore >= 70 ? "#52c41a" : emp.avgScore >= 50 ? "#faad14" : "#ff4d4f"}
+                    <Progress
+                      percent={emp.avgScore}
+                      size="small"
+                      strokeColor={
+                        emp.avgScore >= 70
+                          ? "#52c41a"
+                          : emp.avgScore >= 50
+                            ? "#faad14"
+                            : "#ff4d4f"
+                      }
                       showInfo={false}
                       style={{ marginTop: 8 }}
                     />
@@ -482,180 +579,6 @@ const EmployeeRanking = ({ sessions, employees, tests, lang }) => {
         />
       )}
     </Card>
-  );
-};
-
-// Модальное окно деталей сессии
-const SessionDetailsModal = ({ visible, session, onClose, tests, employees, lang }) => {
-  const [activeTab, setActiveTab] = useState("info");
-  const t = {
-    ru: {
-      details: "Детали тестирования",
-      info: "Информация",
-      answers: "Ответы",
-      close: "Закрыть"
-    },
-    tj: {
-      details: "Тафсилоти тестирование",
-      info: "Маълумот",
-      answers: "Ҷавобҳо",
-      close: "Пӯшидан"
-    },
-  };
-
-  const test = tests.find(t => t.id === session?.testId);
-  const employee = employees.find(e => e.id === session?.employeeId);
-
-  const getQuestionText = (questionId) => {
-    const question = test?.questions?.find(q => q.id === questionId);
-    if (!question) return "—";
-    return lang === "ru" ? (question.contentRu || question.content) : (question.contentTj || question.content);
-  };
-
-  const getAnswerText = (answer) => {
-    const question = test?.questions?.find(q => q.id === answer.questionId);
-    if (answer.optionId !== null && question?.type === 3) {
-      return `Рейтинг: ${answer.optionId}/10`;
-    }
-    if (answer.optionId !== null && question?.options) {
-      const option = question.options.find(o => o.id === answer.optionId);
-      return lang === "ru" ? (option?.textRu || option?.text) : (option?.textTj || option?.text);
-    }
-    if (answer.textAnswer) {
-      return answer.textAnswer;
-    }
-    return "—";
-  };
-
-  const getAnswerType = (answer, question) => {
-    if (question?.type === 3) return "Рейтинг";
-    if (answer.optionId !== null) return "Выборочный";
-    if (answer.textAnswer) return "Ручной";
-    return "—";
-  };
-
-  return (
-    <Modal
-      title={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <EyeOutlined style={{ color: "#ff4b2b" }} />
-          <span>{t[lang].details}</span>
-        </div>
-      }
-      open={visible}
-      onCancel={onClose}
-      footer={[
-        <Button key="close" onClick={onClose}>
-          {t[lang].close}
-        </Button>
-      ]}
-      width={700}
-    >
-      {session && (
-        <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <Button 
-              type={activeTab === "info" ? "primary" : "default"}
-              onClick={() => setActiveTab("info")}
-              style={activeTab === "info" ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}
-            >
-              {t[lang].info}
-            </Button>
-            <Button 
-              type={activeTab === "answers" ? "primary" : "default"}
-              onClick={() => setActiveTab("answers")}
-              style={activeTab === "answers" ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}
-            >
-              {t[lang].answers} ({session.answers?.length || 0})
-            </Button>
-          </div>
-
-          {activeTab === "info" && (
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="ID сессии">{session.id}</Descriptions.Item>
-              <Descriptions.Item label="Сотрудник">
-                {employee ? `${employee.firstName} ${employee.lastName}` : session.employeeId}
-              </Descriptions.Item>
-              <Descriptions.Item label="Тест">
-                {lang === "ru" ? (test?.titleRu || test?.title) : (test?.titleTj || test?.title)}
-              </Descriptions.Item>
-              <Descriptions.Item label="Статус">
-                {session.status === 1 ? "В процессе" : "Завершен"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Дата начала">
-                {session.startedAt ? new Date(session.startedAt).toLocaleString() : "—"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Дата окончания">
-                {session.finishedAt ? new Date(session.finishedAt).toLocaleString() : "—"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Длительность">
-                {session.durationMinutes ? `${Math.floor(session.durationMinutes)} мин ${Math.round((session.durationMinutes % 1) * 60)} сек` : "—"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Результат">
-                {session.score !== null ? (
-                  <Badge 
-                    count={`${session.score}%`} 
-                    style={{ backgroundColor: session.score >= 70 ? "#52c41a" : "#ff4d4f" }}
-                  />
-                ) : "—"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Правильные ответы">
-                {session.correctAnswersCount || 0}/{session.totalQuestionsCount || 0}
-              </Descriptions.Item>
-            </Descriptions>
-          )}
-
-          {activeTab === "answers" && (
-            <div style={{ maxHeight: 500, overflowY: "auto" }}>
-              {session.answers && session.answers.length > 0 ? (
-                session.answers.map((answer, idx) => {
-                  const question = test?.questions?.find(q => q.id === answer.questionId);
-                  return (
-                    <Card key={idx} size="small" style={{ marginBottom: 12, borderRadius: 8 }}>
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                        <Badge 
-                          count={idx + 1} 
-                          style={{ backgroundColor: question?.type === 3 ? "#faad14" : (answer.isCorrect ? "#52c41a" : "#ff4d4f") }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <Text strong>{getQuestionText(answer.questionId)}</Text>
-                          <div style={{ marginTop: 8 }}>
-                            <Text type="secondary">Тип ответа: </Text>
-                            <Tag color={question?.type === 3 ? "orange" : (answer.optionId !== null ? "blue" : "green")}>
-                              {getAnswerType(answer, question)}
-                            </Tag>
-                          </div>
-                          <div style={{ marginTop: 4 }}>
-                            <Text type="secondary">Ответ: </Text>
-                            <Text>{getAnswerText(answer)}</Text>
-                          </div>
-                          {question?.type !== 3 && (
-                            <div style={{ marginTop: 4 }}>
-                              {answer.isCorrect ? (
-                                <Tag color="success" icon={<CheckCircleOutlined />}>Правильно</Tag>
-                              ) : (
-                                <Tag color="error" icon={<CloseCircleOutlined />}>Неправильно</Tag>
-                              )}
-                            </div>
-                          )}
-                          {question?.type === 3 && (
-                            <div style={{ marginTop: 4 }}>
-                              <Tag color="orange" icon={<StarOutlined />}>Рейтинг сохранен</Tag>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })
-              ) : (
-                <Empty description="Нет ответов" />
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </Modal>
   );
 };
 
@@ -678,6 +601,12 @@ export const TestSession = () => {
   const { tests = [], fetchTests } = useTestStore();
   const { employees = [], fetchEmployee } = useEmployeeStore();
   const { questions = [], fetchQuestions } = useQuestionStore();
+  
+  const { 
+    assignments = [], 
+    fetchAssignments,
+    getAssignmentsByEmployee,
+  } = useTestAssignmentStore();
 
   const [lang, setLang] = useState(() => {
     const savedLang = localStorage.getItem("testsession_lang");
@@ -687,9 +616,11 @@ export const TestSession = () => {
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [selectedTestId, setSelectedTestId] = useState(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [selectedSubDepartmentId, setSelectedSubDepartmentId] = useState(null);
   const [selectedTestDuration, setSelectedTestDuration] = useState(5);
-  const [userManuallyChangedDuration, setUserManuallyChangedDuration] = useState(false);
-  
+  const [userManuallyChangedDuration, setUserManuallyChangedDuration] =
+    useState(false);
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [manualAnswer, setManualAnswer] = useState("");
@@ -705,14 +636,17 @@ export const TestSession = () => {
   const [currentSessionLocal, setCurrentSessionLocal] = useState(null);
   const [isTestActive, setIsTestActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [sessionStartTimestamp, setSessionStartTimestamp] = useState(Date.now());
+  const [sessionStartTimestamp, setSessionStartTimestamp] = useState(
+    Date.now(),
+  );
   const [showRanking, setShowRanking] = useState(true);
   const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
   const [sessionModalVisible, setSessionModalVisible] = useState(false);
   const [finishResultModal, setFinishResultModal] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
   const [isRestoring, setIsRestoring] = useState(false);
-  
+  const [availableSubDepartments, setAvailableSubDepartments] = useState([]);
+
   const scrollRef = useRef(null);
 
   // Группировка сотрудников по отделам
@@ -728,46 +662,83 @@ export const TestSession = () => {
   const stats = getStats();
 
   // Функция проверки - можно начать тест если меньше 2 завершенных сессий
-  const checkCanStartTest = useCallback((employeeId, testId) => {
-    const employeeSessions = sessions.filter(
-      s => s.employeeId === employeeId && s.testId === testId && s.status === 2
-    );
-    return employeeSessions.length < 2;
-  }, [sessions]);
+  const checkCanStartTest = useCallback(
+    (employeeId, testId) => {
+      const employeeSessions = sessions.filter(
+        (s) =>
+          s.employeeId === employeeId && s.testId === testId && s.status === 2,
+      );
+      return employeeSessions.length < 2;
+    },
+    [sessions],
+  );
+
+  // Загрузка назначений при выборе сотрудника
+  useEffect(() => {
+    if (selectedEmployeeId && selectedTestId) {
+      const employeeAssignments = getAssignmentsByEmployee(selectedEmployeeId);
+      const testAssignments = employeeAssignments.filter(
+        a => a.testId === selectedTestId
+      );
+      const subDeptIds = [...new Set(testAssignments.map(a => a.subDepartmentId))];
+      setAvailableSubDepartments(subDeptIds);
+      
+      if (subDeptIds.length > 0 && !subDeptIds.includes(selectedSubDepartmentId)) {
+        setSelectedSubDepartmentId(subDeptIds[0]);
+      } else if (subDeptIds.length === 0) {
+        setSelectedSubDepartmentId(null);
+      }
+    } else {
+      setAvailableSubDepartments([]);
+      setSelectedSubDepartmentId(null);
+    }
+  }, [selectedEmployeeId, selectedTestId, assignments, getAssignmentsByEmployee]);
 
   // Функция загрузки сохраненного ответа для вопроса
-  const loadSavedAnswerForQuestion = useCallback((questionIndex) => {
-    const question = sessionQuestions[questionIndex];
-    if (!question) return;
-    
-    setSelectedOptionId(null);
-    setManualAnswer("");
-    setRatingValue(null);
-    
-    const savedAnswer = currentSessionLocal?.answers?.find(
-      a => a.questionId === question.id
-    );
-    
-    if (savedAnswer) {
-      if (question.type === 3) {
-        // Для рейтинга optionId содержит значение рейтинга
-        setRatingValue(savedAnswer.optionId);
-      } else if (savedAnswer.optionId !== null && savedAnswer.optionId !== undefined) {
-        setSelectedOptionId(savedAnswer.optionId);
-      } else if (savedAnswer.textAnswer) {
-        setManualAnswer(savedAnswer.textAnswer);
+  const loadSavedAnswerForQuestion = useCallback(
+    (questionIndex) => {
+      const question = sessionQuestions[questionIndex];
+      if (!question) return;
+
+      setSelectedOptionId(null);
+      setManualAnswer("");
+      setRatingValue(null);
+
+      const savedAnswer = currentSessionLocal?.answers?.find(
+        (a) => a.questionId === question.id,
+      );
+
+      if (savedAnswer) {
+        if (question.type === 3) {
+          setRatingValue(savedAnswer.optionId);
+        } else if (
+          savedAnswer.optionId !== null &&
+          savedAnswer.optionId !== undefined
+        ) {
+          setSelectedOptionId(savedAnswer.optionId);
+        } else if (savedAnswer.textAnswer) {
+          setManualAnswer(savedAnswer.textAnswer);
+        }
       }
-    }
-  }, [sessionQuestions, currentSessionLocal]);
+    },
+    [sessionQuestions, currentSessionLocal],
+  );
 
   // Функция сохранения состояния теста в localStorage
   const saveTestState = useCallback(() => {
-    if (!isTestActive || !currentSessionLocal || !sessionQuestions.length || sessionComplete) return;
-    
+    if (
+      !isTestActive ||
+      !currentSessionLocal ||
+      !sessionQuestions.length ||
+      sessionComplete
+    )
+      return;
+
     const testState = {
       sessionId: currentSessionLocal.id,
       testId: currentSessionLocal.testId,
       employeeId: currentSessionLocal.employeeId,
+      subDepartmentId: currentSessionLocal.subDepartmentId,
       currentQuestionIndex,
       selectedOptionId,
       manualAnswer,
@@ -777,48 +748,64 @@ export const TestSession = () => {
       remainingSeconds,
       sessionStartTimestamp,
       duration: selectedTestDuration,
-      answeredCount: answersHistory.filter(a => a).length,
-      savedAt: Date.now()
+      answeredCount: answersHistory.filter((a) => a).length,
+      savedAt: Date.now(),
     };
-    
+
     localStorage.setItem("active_test_state", JSON.stringify(testState));
-    localStorage.setItem("active_test_session", JSON.stringify(currentSessionLocal));
+    localStorage.setItem(
+      "active_test_session",
+      JSON.stringify(currentSessionLocal),
+    );
     setLastSaved(new Date());
-  }, [isTestActive, currentSessionLocal, sessionQuestions.length, sessionComplete, currentQuestionIndex, selectedOptionId, manualAnswer, ratingValue, answersHistory, elapsedSeconds, remainingSeconds, sessionStartTimestamp, selectedTestDuration]);
+  }, [
+    isTestActive,
+    currentSessionLocal,
+    sessionQuestions.length,
+    sessionComplete,
+    currentQuestionIndex,
+    selectedOptionId,
+    manualAnswer,
+    ratingValue,
+    answersHistory,
+    elapsedSeconds,
+    remainingSeconds,
+    sessionStartTimestamp,
+    selectedTestDuration,
+  ]);
 
   // Функция восстановления состояния теста
   const restoreTestState = useCallback(async () => {
     const savedStateStr = localStorage.getItem("active_test_state");
     const savedSessionStr = localStorage.getItem("active_test_session");
-    
+
     if (!savedStateStr || !savedSessionStr) return false;
-    
+
     try {
       const savedState = JSON.parse(savedStateStr);
       const savedSession = JSON.parse(savedSessionStr);
-      
-      // Проверяем, не устарело ли состояние (больше 24 часов)
+
       const timeSinceSave = Date.now() - savedState.savedAt;
       if (timeSinceSave > 24 * 60 * 60 * 1000) {
         localStorage.removeItem("active_test_state");
         localStorage.removeItem("active_test_session");
         return false;
       }
-      
-      // Проверяем, существует ли еще сессия в бэкенде
-      const sessionExists = sessions.find(s => s.id === savedState.sessionId && s.status === 1);
+
+      const sessionExists = sessions.find(
+        (s) => s.id === savedState.sessionId && s.status === 1,
+      );
       if (!sessionExists) {
         localStorage.removeItem("active_test_state");
         localStorage.removeItem("active_test_session");
         return false;
       }
-      
-      // Восстанавливаем состояние
-      const test = tests.find(t => t.id === savedState.testId);
+
+      const test = tests.find((t) => t.id === savedState.testId);
       if (test && test.questions) {
         setSessionQuestions(test.questions);
       }
-      
+
       setCurrentSessionLocal(savedSession);
       setCurrentQuestionIndex(savedState.currentQuestionIndex);
       setSelectedOptionId(savedState.selectedOptionId);
@@ -831,13 +818,14 @@ export const TestSession = () => {
       setSelectedTestDuration(savedState.duration);
       setIsTestActive(true);
       setSessionComplete(false);
-      
-      // Загружаем сохраненный ответ для текущего вопроса
+
       setTimeout(() => {
         loadSavedAnswerForQuestion(savedState.currentQuestionIndex);
       }, 100);
-      
-      message.success(`Тест восстановлен! Вопрос ${savedState.currentQuestionIndex + 1} из ${savedState.answersHistory.length}`);
+
+      message.success(
+        `Тест восстановлен! Вопрос ${savedState.currentQuestionIndex + 1} из ${savedState.answersHistory.length}`,
+      );
       return true;
     } catch (error) {
       console.error("Ошибка восстановления состояния:", error);
@@ -870,13 +858,14 @@ export const TestSession = () => {
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (isTestActive && currentSessionLocal && !sessionComplete) {
-        saveTestState(); // Сохраняем перед закрытием
+        saveTestState();
         e.preventDefault();
-        e.returnValue = "Вы проходите тестирование. Прогресс будет сохранен. Вы уверены?";
+        e.returnValue =
+          "Вы проходите тестирование. Прогресс будет сохранен. Вы уверены?";
         return e.returnValue;
       }
     };
-    
+
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -889,29 +878,42 @@ export const TestSession = () => {
     fetchTests();
     fetchEmployee();
     fetchQuestions();
+    fetchAssignments();
   }, []);
 
   // Восстановление состояния после загрузки данных
   useEffect(() => {
     const restore = async () => {
-      if (!isRestoring && !isTestActive && !sessionComplete && sessions.length > 0 && tests.length > 0) {
+      if (
+        !isRestoring &&
+        !isTestActive &&
+        !sessionComplete &&
+        sessions.length > 0 &&
+        tests.length > 0
+      ) {
         setIsRestoring(true);
         await restoreTestState();
         setIsRestoring(false);
       }
     };
-    
+
     restore();
-  }, [sessions.length, tests.length, isTestActive, sessionComplete, restoreTestState]);
+  }, [
+    sessions.length,
+    tests.length,
+    isTestActive,
+    sessionComplete,
+    restoreTestState,
+  ]);
 
   // Периодическое сохранение состояния (каждые 5 секунд)
   useEffect(() => {
     if (!isTestActive || !currentSessionLocal || sessionComplete) return;
-    
+
     const saveInterval = setInterval(() => {
       saveTestState();
     }, 5000);
-    
+
     return () => clearInterval(saveInterval);
   }, [isTestActive, currentSessionLocal, sessionComplete, saveTestState]);
 
@@ -920,7 +922,15 @@ export const TestSession = () => {
     if (isTestActive && currentSessionLocal && !sessionComplete) {
       saveTestState();
     }
-  }, [currentQuestionIndex, answersHistory, selectedOptionId, manualAnswer, ratingValue, elapsedSeconds, remainingSeconds]);
+  }, [
+    currentQuestionIndex,
+    answersHistory,
+    selectedOptionId,
+    manualAnswer,
+    ratingValue,
+    elapsedSeconds,
+    remainingSeconds,
+  ]);
 
   // Обработка storeCurrentSession
   useEffect(() => {
@@ -928,22 +938,32 @@ export const TestSession = () => {
       setCurrentSessionLocal(storeCurrentSession);
       setIsTestActive(true);
       const elapsedTime = storeCurrentSession.elapsedSeconds || 0;
-      setSessionStartTimestamp(Date.now() - (elapsedTime * 1000));
-      const duration = storeCurrentSession.durationMinutes || selectedTestDuration || 5;
+      setSessionStartTimestamp(Date.now() - elapsedTime * 1000);
+      const duration =
+        storeCurrentSession.durationMinutes || selectedTestDuration || 5;
       setSelectedTestDuration(duration);
-      setRemainingSeconds((duration * 60) - elapsedTime);
+      setRemainingSeconds(duration * 60 - elapsedTime);
       saveTestState();
     }
-  }, [storeCurrentSession, sessionComplete, isTestActive, selectedTestDuration, saveTestState]);
+  }, [
+    storeCurrentSession,
+    sessionComplete,
+    isTestActive,
+    selectedTestDuration,
+    saveTestState,
+  ]);
 
   // Проверка возможности начала теста
   useEffect(() => {
     if (selectedEmployeeId && selectedTestId) {
       const canStart = checkCanStartTest(selectedEmployeeId, selectedTestId);
       setCanStartTest(canStart);
-      
+
       const unfinished = sessions.find(
-        s => s.employeeId === selectedEmployeeId && s.testId === selectedTestId && s.status === 1
+        (s) =>
+          s.employeeId === selectedEmployeeId &&
+          s.testId === selectedTestId &&
+          s.status === 1,
       );
       setExistingSession(unfinished);
     }
@@ -956,86 +976,121 @@ export const TestSession = () => {
 
   const exportAllToExcel = () => {
     try {
-      const exportData = sessions.map(session => {
-        const test = tests.find(t => t.id === session.testId);
-        const employee = employees.find(e => e.id === session.employeeId);
-        
+      const exportData = sessions.map((session) => {
+        const test = tests.find((t) => t.id === session.testId);
+        const employee = employees.find((e) => e.id === session.employeeId);
+
         let selectiveAnswers = [];
         let manualAnswers = [];
         let ratingAnswers = [];
-        
+
         if (session.answers && session.answers.length > 0 && test?.questions) {
           session.answers.forEach((answer, idx) => {
-            const question = test.questions.find(q => q.id === answer.questionId);
-            const questionText = lang === "ru" 
-              ? (question?.contentRu || question?.content || "")
-              : (question?.contentTj || question?.content || "");
-            
+            const question = test.questions.find(
+              (q) => q.id === answer.questionId,
+            );
+            const questionText =
+              lang === "ru"
+                ? question?.contentRu || question?.content || ""
+                : question?.contentTj || question?.content || "";
+
             let answerText = "";
             let answerType = "";
-            
+
             if (question?.type === 3) {
               answerText = `Рейтинг: ${answer.optionId}/10`;
               answerType = "Рейтинг";
-              ratingAnswers.push(`${idx + 1}. ${questionText} -> ${answerText}`);
+              ratingAnswers.push(
+                `${idx + 1}. ${questionText} -> ${answerText}`,
+              );
             } else if (answer.optionId !== null && question?.options) {
-              const option = question.options.find(o => o.id === answer.optionId);
-              answerText = lang === "ru" 
-                ? (option?.textRu || option?.text || "")
-                : (option?.textTj || option?.text || "");
+              const option = question.options.find(
+                (o) => o.id === answer.optionId,
+              );
+              answerText =
+                lang === "ru"
+                  ? option?.textRu || option?.text || ""
+                  : option?.textTj || option?.text || "";
               answerType = "Выборочный";
-              selectiveAnswers.push(`${idx + 1}. ${questionText} -> ${answerText}${answer.isCorrect ? " ✓" : " ✗"}`);
+              selectiveAnswers.push(
+                `${idx + 1}. ${questionText} -> ${answerText}${answer.isCorrect ? " ✓" : " ✗"}`,
+              );
             } else if (answer.textAnswer) {
               answerText = answer.textAnswer;
               answerType = "Ручной";
-              manualAnswers.push(`${idx + 1}. ${questionText} -> ${answerText}${answer.isCorrect ? " ✓" : " ✗"}`);
+              manualAnswers.push(
+                `${idx + 1}. ${questionText} -> ${answerText}${answer.isCorrect ? " ✓" : " ✗"}`,
+              );
             }
           });
         }
-        
+
         return {
-          "ID": session.id,
+          ID: session.id,
           "Тест (RU)": test?.titleRu || test?.title || "",
           "Тест (TJ)": test?.titleTj || test?.title || "",
-          "Сотрудник": employee ? `${employee.firstName} ${employee.lastName}` : "",
-          "Email": employee?.email || "",
-          "Отдел": employee?.department || "",
-          "Статус": session.status === 1 ? "В процессе" : "Завершен",
-          "Дата начала": session.startedAt ? new Date(session.startedAt).toLocaleString() : "",
-          "Дата завершения": session.finishedAt ? new Date(session.finishedAt).toLocaleString() : "",
+          Сотрудник: employee
+            ? `${employee.firstName} ${employee.lastName}`
+            : "",
+          Email: employee?.email || "",
+          Отдел: employee?.department || "",
+          Статус: session.status === 1 ? "В процессе" : "Завершен",
+          "Дата начала": session.startedAt
+            ? new Date(session.startedAt).toLocaleString()
+            : "",
+          "Дата завершения": session.finishedAt
+            ? new Date(session.finishedAt).toLocaleString()
+            : "",
           "Длительность (мин)": session.durationMinutes || "",
-          "Результат (%)": session.score !== null && session.score !== undefined ? `${session.score}%` : "",
+          "Результат (%)":
+            session.score !== null && session.score !== undefined
+              ? `${session.score}%`
+              : "",
           "Правильные ответы": session.correctAnswersCount || 0,
           "Всего вопросов": session.totalQuestionsCount || 0,
           "Выборочные ответы": selectiveAnswers.join("\n"),
           "Ручные ответы": manualAnswers.join("\n"),
-          "Рейтинги": ratingAnswers.join("\n"),
+          Рейтинги: ratingAnswers.join("\n"),
         };
       });
 
       const ws = XLSX.utils.json_to_sheet(exportData);
-      
+
       const colWidths = [
-        { wch: 10 }, { wch: 50 }, { wch: 40 }, { wch: 55 }, 
-        { wch: 35 }, { wch: 35 }, { wch: 45 }, { wch: 40 }, 
-        { wch: 40 }, { wch: 25 }, { wch: 35 }, { wch: 45 },
-        { wch: 60 }, { wch: 60 }, { wch: 60 }
+        { wch: 10 },
+        { wch: 50 },
+        { wch: 40 },
+        { wch: 55 },
+        { wch: 35 },
+        { wch: 35 },
+        { wch: 45 },
+        { wch: 40 },
+        { wch: 40 },
+        { wch: 25 },
+        { wch: 35 },
+        { wch: 45 },
+        { wch: 60 },
+        { wch: 60 },
+        { wch: 60 },
       ];
-      ws['!cols'] = colWidths;
-      
+      ws["!cols"] = colWidths;
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Тестирования");
-      
+
       const statsData = [
-        { "Показатель": "Всего сессий", "Значение": stats.total },
-        { "Показатель": "Завершенных сессий", "Значение": stats.completed },
-        { "Показатель": "В процессе", "Значение": stats.inProgress },
-        { "Показатель": "Средний балл", "Значение": `${stats.averageScore}%` },
+        { Показатель: "Всего сессий", Значение: stats.total },
+        { Показатель: "Завершенных сессий", Значение: stats.completed },
+        { Показатель: "В процессе", Значение: stats.inProgress },
+        { Показатель: "Средний балл", Значение: `${stats.averageScore}%` },
       ];
       const wsStats = XLSX.utils.json_to_sheet(statsData);
       XLSX.utils.book_append_sheet(wb, wsStats, "Статистика");
-      
-      XLSX.writeFile(wb, `test_sessions_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      XLSX.writeFile(
+        wb,
+        `test_sessions_${new Date().toISOString().split("T")[0]}.xlsx`,
+      );
       message.success("Excel файл успешно создан");
     } catch (error) {
       console.error("Export error:", error);
@@ -1045,94 +1100,116 @@ export const TestSession = () => {
 
   const exportSingleSessionToExcel = async (session) => {
     try {
-      const test = tests.find(t => t.id === session.testId);
-      const employee = employees.find(e => e.id === session.employeeId);
-      
-      const mainData = [{
-        "Параметр": "ID сессии",
-        "Значение": session.id
-      }, {
-        "Параметр": "Сотрудник",
-        "Значение": employee ? `${employee.firstName} ${employee.lastName}` : ""
-      }, {
-        "Параметр": "Тест",
-        "Значение": test?.titleRu || test?.title || ""
-      }, {
-        "Параметр": "Статус",
-        "Значение": session.status === 1 ? "В процессе" : "Завершен"
-      }, {
-        "Параметр": "Дата начала",
-        "Значение": session.startedAt ? new Date(session.startedAt).toLocaleString() : ""
-      }, {
-        "Параметр": "Дата завершения",
-        "Значение": session.finishedAt ? new Date(session.finishedAt).toLocaleString() : ""
-      }, {
-        "Параметр": "Длительность",
-        "Значение": session.durationMinutes ? `${Math.floor(session.durationMinutes)} мин ${Math.round((session.durationMinutes % 1) * 60)} сек` : ""
-      }, {
-        "Параметр": "Результат",
-        "Значение": session.score !== null ? `${session.score}%` : ""
-      }, {
-        "Параметр": "Правильные ответы",
-        "Значение": `${session.correctAnswersCount || 0}/${session.totalQuestionsCount || 0}`
-      }];
-      
+      const test = tests.find((t) => t.id === session.testId);
+      const employee = employees.find((e) => e.id === session.employeeId);
+
+      const mainData = [
+        {
+          Параметр: "ID сессии",
+          Значение: session.id,
+        },
+        {
+          Параметр: "Сотрудник",
+          Значение: employee
+            ? `${employee.firstName} ${employee.lastName}`
+            : "",
+        },
+        {
+          Параметр: "Тест",
+          Значение: test?.titleRu || test?.title || "",
+        },
+        {
+          Параметр: "Статус",
+          Значение: session.status === 1 ? "В процессе" : "Завершен",
+        },
+        {
+          Параметр: "Дата начала",
+          Значение: session.startedAt
+            ? new Date(session.startedAt).toLocaleString()
+            : "",
+        },
+        {
+          Параметр: "Дата завершения",
+          Значение: session.finishedAt
+            ? new Date(session.finishedAt).toLocaleString()
+            : "",
+        },
+        {
+          Параметр: "Длительность",
+          Значение: session.durationMinutes
+            ? `${Math.floor(session.durationMinutes)} мин ${Math.round((session.durationMinutes % 1) * 60)} сек`
+            : "",
+        },
+        {
+          Параметр: "Результат",
+          Значение: session.score !== null ? `${session.score}%` : "",
+        },
+        {
+          Параметр: "Правильные ответы",
+          Значение: `${session.correctAnswersCount || 0}/${session.totalQuestionsCount || 0}`,
+        },
+      ];
+
       const wsMain = XLSX.utils.json_to_sheet(mainData);
-      
+
       let selectiveAnswersData = [];
       let manualAnswersData = [];
       let ratingAnswersData = [];
-      
+
       if (session.answers && session.answers.length > 0 && test?.questions) {
         session.answers.forEach((answer, idx) => {
-          const question = test.questions.find(q => q.id === answer.questionId);
+          const question = test.questions.find(
+            (q) => q.id === answer.questionId,
+          );
           const isCorrect = answer.isCorrect || false;
-          
+
           let answerText = "";
           let answerType = "";
-          
+
           if (question?.type === 3) {
             answerText = `Рейтинг: ${answer.optionId}/10`;
             answerType = "Рейтинг";
             ratingAnswersData.push({
               "№": idx + 1,
-              "Вопрос": question?.contentRu || question?.content || "",
-              "Ответ": answerText,
+              Вопрос: question?.contentRu || question?.content || "",
+              Ответ: answerText,
               "Тип ответа": answerType,
             });
           } else if (answer.optionId !== null && question?.options) {
-            const option = question.options.find(o => o.id === answer.optionId);
+            const option = question.options.find(
+              (o) => o.id === answer.optionId,
+            );
             answerText = option?.textRu || option?.text || "";
             answerType = "Выборочный";
             selectiveAnswersData.push({
               "№": idx + 1,
-              "Вопрос": question?.contentRu || question?.content || "",
-              "Ответ": answerText,
+              Вопрос: question?.contentRu || question?.content || "",
+              Ответ: answerText,
               "Тип ответа": answerType,
-              "Правильность": isCorrect ? "Правильно" : "Неправильно"
+              Правильность: isCorrect ? "Правильно" : "Неправильно",
             });
           } else if (answer.textAnswer) {
             answerText = answer.textAnswer;
             answerType = "Ручной";
             manualAnswersData.push({
               "№": idx + 1,
-              "Вопрос": question?.contentRu || question?.content || "",
-              "Ответ": answerText,
+              Вопрос: question?.contentRu || question?.content || "",
+              Ответ: answerText,
               "Тип ответа": answerType,
-              "Правильность": isCorrect ? "Правильно" : "Неправильно"
+              Правильность: isCorrect ? "Правильно" : "Неправильно",
             });
           }
         });
       }
-      
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, wsMain, "Информация");
-      
+
       if (selectiveAnswersData.length > 0) {
         const wsSelective = XLSX.utils.json_to_sheet(selectiveAnswersData);
         XLSX.utils.book_append_sheet(wb, wsSelective, "Выборочные ответы");
       }
-      
+
       if (manualAnswersData.length > 0) {
         const wsManual = XLSX.utils.json_to_sheet(manualAnswersData);
         XLSX.utils.book_append_sheet(wb, wsManual, "Ручные ответы");
@@ -1142,8 +1219,11 @@ export const TestSession = () => {
         const wsRating = XLSX.utils.json_to_sheet(ratingAnswersData);
         XLSX.utils.book_append_sheet(wb, wsRating, "Рейтинги");
       }
-      
-      XLSX.writeFile(wb, `session_${session.id}_${employee?.firstName || ''}_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      XLSX.writeFile(
+        wb,
+        `session_${session.id}_${employee?.firstName || ""}_${new Date().toISOString().split("T")[0]}.xlsx`,
+      );
       message.success("Excel файл успешно создан");
     } catch (error) {
       console.error("Export error:", error);
@@ -1155,27 +1235,39 @@ export const TestSession = () => {
   const handleRetakeTest = async (testId, employeeId) => {
     try {
       resetTestState();
-      
+
       const fullDuration = 10;
-      
+
       const completedSessionsCount = sessions.filter(
-        s => s.employeeId === employeeId && s.testId === testId && s.status === 2
+        (s) =>
+          s.employeeId === employeeId && s.testId === testId && s.status === 2,
       ).length;
-      
+
       if (completedSessionsCount >= 2) {
         message.error("Доступно только 2 попытки сдачи теста");
         return;
       }
-      
-      const session = await startSession(testId, employeeId, fullDuration);
-      const test = tests.find(t => t.id === testId);
-      
+
+      const existingSessionForRetake = sessions.find(
+        (s) => s.employeeId === employeeId && s.testId === testId,
+      );
+      const subDepartmentIdForRetake =
+        existingSessionForRetake?.subDepartmentId || selectedSubDepartmentId;
+
+      const session = await startSession(
+        testId,
+        employeeId,
+        fullDuration,
+        subDepartmentIdForRetake,
+      );
+      const test = tests.find((t) => t.id === testId);
+
       if (test && test.questions) {
         setSessionQuestions(test.questions);
         const newHistory = new Array(test.questions.length).fill(false);
         setAnswersHistory(newHistory);
       }
-      
+
       setCurrentQuestionIndex(0);
       setSelectedOptionId(null);
       setManualAnswer("");
@@ -1187,12 +1279,14 @@ export const TestSession = () => {
       setElapsedSeconds(0);
       setRemainingSeconds(fullDuration * 60);
       setSelectedTestDuration(fullDuration);
-      
+
       saveTestState();
-      
-      message.success(`Тест начат заново! Время: ${fullDuration} минут. Удачи!`);
+
+      message.success(
+        `Тест начат заново! Время: ${fullDuration} минут. Удачи!`,
+      );
       await fetchSessions();
-      
+
       if (scrollRef.current) {
         scrollRef.current.scrollIntoView({ behavior: "smooth" });
       }
@@ -1205,6 +1299,11 @@ export const TestSession = () => {
   const handleStartSession = async () => {
     if (!selectedTestId || !selectedEmployeeId) {
       message.warning("Выберите тест и сотрудника");
+      return;
+    }
+
+    if (!selectedSubDepartmentId) {
+      message.warning("Выберите отделение");
       return;
     }
 
@@ -1229,20 +1328,26 @@ export const TestSession = () => {
 
     try {
       const duration = selectedTestDuration || 5;
-      
+
       console.log("Начинаем тест с длительностью:", duration, "минут");
-      
+      console.log("Отделение (SubDepartment):", selectedSubDepartmentId);
+
       resetTestState();
-      
-      const session = await startSession(selectedTestId, selectedEmployeeId, duration);
-      const test = tests.find(t => t.id === selectedTestId);
-      
+
+      const session = await startSession(
+        selectedTestId,
+        selectedEmployeeId,
+        duration,
+        selectedSubDepartmentId,
+      );
+      const test = tests.find((t) => t.id === selectedTestId);
+
       if (test && test.questions) {
         setSessionQuestions(test.questions);
         const newHistory = new Array(test.questions.length).fill(false);
         setAnswersHistory(newHistory);
       }
-      
+
       setTestModalOpen(false);
       setSelectedOptionId(null);
       setManualAnswer("");
@@ -1253,18 +1358,20 @@ export const TestSession = () => {
       setSessionStartTimestamp(Date.now());
       setElapsedSeconds(0);
       setRemainingSeconds(duration * 60);
-      
+
       saveTestState();
-      
+
       message.success(`Тест начат! Время: ${duration} минут. Желаем успеха!`);
       await fetchSessions();
-      
+
       if (scrollRef.current) {
         scrollRef.current.scrollIntoView({ behavior: "smooth" });
       }
     } catch (error) {
       console.error("Start session error:", error);
-      message.error(error.response?.data?.message || "Ошибка при начале сессии");
+      message.error(
+        error.response?.data?.message || "Ошибка при начале сессии",
+      );
     }
   };
 
@@ -1275,7 +1382,7 @@ export const TestSession = () => {
     }
 
     if (submitting) return;
-    
+
     const currentQ = sessionQuestions[currentQuestionIndex];
     if (!currentQ) {
       message.error("Вопрос не найден");
@@ -1299,7 +1406,6 @@ export const TestSession = () => {
       }
       textAnswer = trimmedAnswer;
     } else if (currentQ.type === 3) {
-      // Рейтинг - сохраняем в optionId
       if (ratingValue === null || ratingValue === undefined) {
         message.warning("Выберите рейтинг");
         return;
@@ -1312,38 +1418,43 @@ export const TestSession = () => {
     }
 
     setSubmitting(true);
-    
+
     try {
-      await submitAnswer(currentSessionLocal.id, currentQ.id, optionId, textAnswer);
-      
+      await submitAnswer(
+        currentSessionLocal.id,
+        currentQ.id,
+        optionId,
+        textAnswer,
+      );
+
       const newHistory = [...answersHistory];
       newHistory[currentQuestionIndex] = true;
       setAnswersHistory(newHistory);
-      
+
       const updatedSession = { ...currentSessionLocal };
       if (!updatedSession.answers) updatedSession.answers = [];
-      
+
       const existingAnswerIndex = updatedSession.answers.findIndex(
-        a => a.questionId === currentQ.id
+        (a) => a.questionId === currentQ.id,
       );
-      
+
       const newAnswer = {
         questionId: currentQ.id,
         optionId: optionId,
         textAnswer: textAnswer,
-        answeredAt: new Date().toISOString()
+        answeredAt: new Date().toISOString(),
       };
-      
+
       if (existingAnswerIndex !== -1) {
         updatedSession.answers[existingAnswerIndex] = newAnswer;
       } else {
         updatedSession.answers.push(newAnswer);
       }
-      
+
       setCurrentSessionLocal(updatedSession);
-      
+
       saveTestState();
-      
+
       if (currentQuestionIndex + 1 >= sessionQuestions.length) {
         setShowConfirmFinish(true);
       } else {
@@ -1354,12 +1465,14 @@ export const TestSession = () => {
         setRatingValue(null);
         setTimeout(() => loadSavedAnswerForQuestion(nextIndex), 50);
       }
-      
+
       await fetchSessions();
       message.success("Ответ сохранен");
     } catch (error) {
       console.error("Submit answer error:", error);
-      message.error(error.response?.data?.message || "Ошибка при отправке ответа");
+      message.error(
+        error.response?.data?.message || "Ошибка при отправке ответа",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1369,41 +1482,50 @@ export const TestSession = () => {
     if (!currentSessionLocal) return;
 
     setSubmitting(true);
-    
+
     try {
-      const finished = await finishSession(currentSessionLocal.id, currentSessionLocal.employeeId);
+      const finished = await finishSession(
+        currentSessionLocal.id,
+        currentSessionLocal.employeeId,
+      );
       setSessionComplete(true);
       setShowConfirmFinish(false);
       setIsTestActive(false);
-      
+
       resetTestState();
-      
+
       const minutes = Math.floor(elapsedSeconds / 60);
       const seconds = elapsedSeconds % 60;
-      
+
       const passed = (finished.score || 0) >= 70;
-      
+
       setFinishResultModal({
         score: finished.score || 0,
         correctAnswers: finished.correctAnswersCount || 0,
         totalQuestions: finished.totalQuestionsCount || sessionQuestions.length,
         minutes,
         seconds,
-        passed
+        passed,
       });
-      
+
       if (passed) {
-        message.success(`Поздравляем! Тест пройден с результатом ${finished.score}%`);
+        message.success(
+          `Поздравляем! Тест пройден с результатом ${finished.score}%`,
+        );
       } else {
-        message.warning(`Тест не пройден. Результат: ${finished.score}%. Попробуйте снова!`);
+        message.warning(
+          `Тест не пройден. Результат: ${finished.score}%. Попробуйте снова!`,
+        );
       }
-      
+
       await fetchSessions();
       clearCurrentSession();
       setCurrentSessionLocal(null);
     } catch (error) {
       console.error("Finish session error:", error);
-      message.error(error.response?.data?.message || "Ошибка при завершении сессии");
+      message.error(
+        error.response?.data?.message || "Ошибка при завершении сессии",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1412,14 +1534,16 @@ export const TestSession = () => {
   const handleContinueSession = (session) => {
     setCurrentSession(session);
     setCurrentSessionLocal(session);
-    const test = tests.find(t => t.id === session.testId);
+    const test = tests.find((t) => t.id === session.testId);
     if (test && test.questions) {
       setSessionQuestions(test.questions);
       const answeredCount = session.answers?.length || 0;
       setCurrentQuestionIndex(answeredCount);
       const newHistory = new Array(test.questions.length).fill(false);
-      session.answers?.forEach(answer => {
-        const qIndex = test.questions.findIndex(q => q.id === answer.questionId);
+      session.answers?.forEach((answer) => {
+        const qIndex = test.questions.findIndex(
+          (q) => q.id === answer.questionId,
+        );
         if (qIndex !== -1) {
           newHistory[qIndex] = true;
         }
@@ -1432,20 +1556,22 @@ export const TestSession = () => {
       setIsTestActive(true);
       const duration = session.durationMinutes || selectedTestDuration || 5;
       setSelectedTestDuration(duration);
-      
+
       const elapsedSecondsSaved = session.elapsedSeconds || 0;
-      const remaining = (duration * 60) - elapsedSecondsSaved;
+      const remaining = duration * 60 - elapsedSecondsSaved;
       setRemainingSeconds(remaining > 0 ? remaining : 0);
-      setSessionStartTimestamp(Date.now() - (elapsedSecondsSaved * 1000));
+      setSessionStartTimestamp(Date.now() - elapsedSecondsSaved * 1000);
       setElapsedSeconds(elapsedSecondsSaved);
-      
+
       if (answeredCount < test.questions.length) {
         setTimeout(() => loadSavedAnswerForQuestion(answeredCount), 100);
       }
-      
+
       saveTestState();
-      
-      message.info(`Продолжение теста. Осталось примерно ${Math.ceil(remaining / 60)} минут`);
+
+      message.info(
+        `Продолжение теста. Осталось примерно ${Math.ceil(remaining / 60)} минут`,
+      );
     }
   };
 
@@ -1467,14 +1593,16 @@ export const TestSession = () => {
     setRemainingSeconds(remaining);
   };
 
-  const answeredCount = answersHistory.filter(a => a).length;
-  const progress = sessionQuestions.length > 0 
-    ? (answeredCount / sessionQuestions.length) * 100 
-    : 0;
+  const answeredCount = answersHistory.filter((a) => a).length;
+  const progress =
+    sessionQuestions.length > 0
+      ? (answeredCount / sessionQuestions.length) * 100
+      : 0;
 
   const canShowRetakeButton = (employeeId, testId) => {
     const completedSessionsCount = sessions.filter(
-      s => s.employeeId === employeeId && s.testId === testId && s.status === 2
+      (s) =>
+        s.employeeId === employeeId && s.testId === testId && s.status === 2,
     ).length;
     return completedSessionsCount === 1;
   };
@@ -1484,11 +1612,264 @@ export const TestSession = () => {
     if (!isNaN(numValue) && numValue > 0 && numValue <= 480) {
       setSelectedTestDuration(numValue);
       setUserManuallyChangedDuration(true);
-    } else if (value === '') {
+    } else if (value === "") {
       setSelectedTestDuration(5);
       setUserManuallyChangedDuration(true);
     }
   };
+
+  // ============ КОМПОНЕНТ SessionDetailsModal ВНУТРИ ============
+  const SessionDetailsModal = ({
+    visible,
+    session,
+    onClose,
+    tests: testsProp,
+    employees: employeesProp,
+    lang: langProp,
+  }) => {
+    const [activeTab, setActiveTab] = useState("info");
+    const tModal = {
+      ru: {
+        details: "Детали тестирования",
+        info: "Информация",
+        answers: "Ответы",
+        close: "Закрыть",
+      },
+      tj: {
+        details: "Тафсилоти тестирование",
+        info: "Маълумот",
+        answers: "Ҷавобҳо",
+        close: "Пӯшидан",
+      },
+    };
+
+    const test = testsProp.find((t) => t.id === session?.testId);
+    const employee = employeesProp.find((e) => e.id === session?.employeeId);
+
+    const getQuestionText = (questionId) => {
+      const question = test?.questions?.find((q) => q.id === questionId);
+      if (!question) return "—";
+      return langProp === "ru"
+        ? question.contentRu || question.content
+        : question.contentTj || question.content;
+    };
+
+    const getAnswerText = (answer) => {
+      const question = test?.questions?.find((q) => q.id === answer.questionId);
+      if (answer.optionId !== null && question?.type === 3) {
+        return `Рейтинг: ${answer.optionId}/10`;
+      }
+      if (answer.optionId !== null && question?.options) {
+        const option = question.options.find((o) => o.id === answer.optionId);
+        return langProp === "ru"
+          ? option?.textRu || option?.text
+          : option?.textTj || option?.text;
+      }
+      if (answer.textAnswer) {
+        return answer.textAnswer;
+      }
+      return "—";
+    };
+
+    const getAnswerType = (answer, question) => {
+      if (question?.type === 3) return "Рейтинг";
+      if (answer.optionId !== null) return "Выборочный";
+      if (answer.textAnswer) return "Ручной";
+      return "—";
+    };
+
+    return (
+      <Modal
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <EyeOutlined style={{ color: "#ff4b2b" }} />
+            <span>{tModal[langProp].details}</span>
+          </div>
+        }
+        open={visible}
+        onCancel={onClose}
+        footer={[
+          <Button key="close" onClick={onClose}>
+            {tModal[langProp].close}
+          </Button>,
+        ]}
+        width={700}
+      >
+        {session && (
+          <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <Button
+                type={activeTab === "info" ? "primary" : "default"}
+                onClick={() => setActiveTab("info")}
+                style={
+                  activeTab === "info"
+                    ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
+                    : {}
+                }
+              >
+                {tModal[langProp].info}
+              </Button>
+              <Button
+                type={activeTab === "answers" ? "primary" : "default"}
+                onClick={() => setActiveTab("answers")}
+                style={
+                  activeTab === "answers"
+                    ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
+                    : {}
+                }
+              >
+                {tModal[langProp].answers} ({session.answers?.length || 0})
+              </Button>
+            </div>
+
+            {activeTab === "info" && (
+              <Descriptions bordered column={1} size="small">
+                <Descriptions.Item label="ID сессии">
+                  {session.id}
+                </Descriptions.Item>
+                <Descriptions.Item label="Сотрудник">
+                  {employee
+                    ? `${employee.firstName} ${employee.lastName}`
+                    : session.employeeId}
+                </Descriptions.Item>
+                <Descriptions.Item label="Тест">
+                  {langProp === "ru"
+                    ? test?.titleRu || test?.title
+                    : test?.titleTj || test?.title}
+                </Descriptions.Item>
+                <Descriptions.Item label="Статус">
+                  {session.status === 1 ? "В процессе" : "Завершен"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Дата начала">
+                  {session.startedAt
+                    ? new Date(session.startedAt).toLocaleString()
+                    : "—"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Дата окончания">
+                  {session.finishedAt
+                    ? new Date(session.finishedAt).toLocaleString()
+                    : "—"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Длительность">
+                  {session.durationMinutes
+                    ? `${Math.floor(session.durationMinutes)} мин ${Math.round((session.durationMinutes % 1) * 60)} сек`
+                    : "—"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Результат">
+                  {session.score !== null ? (
+                    <Badge
+                      count={`${session.score}%`}
+                      style={{
+                        backgroundColor:
+                          session.score >= 70 ? "#52c41a" : "#ff4d4f",
+                      }}
+                    />
+                  ) : (
+                    "—"
+                  )}
+                </Descriptions.Item>
+                <Descriptions.Item label="Правильные ответы">
+                  {session.correctAnswersCount || 0}/
+                  {session.totalQuestionsCount || 0}
+                </Descriptions.Item>
+              </Descriptions>
+            )}
+
+            {activeTab === "answers" && (
+              <div style={{ maxHeight: 500, overflowY: "auto" }}>
+                {session.answers && session.answers.length > 0 ? (
+                  session.answers.map((answer, idx) => {
+                    const question = test?.questions?.find(
+                      (q) => q.id === answer.questionId,
+                    );
+                    return (
+                      <Card
+                        key={idx}
+                        size="small"
+                        style={{ marginBottom: 12, borderRadius: 8 }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 12,
+                          }}
+                        >
+                          <Badge
+                            count={idx + 1}
+                            style={{
+                              backgroundColor:
+                                question?.type === 3
+                                  ? "#faad14"
+                                  : answer.isCorrect
+                                    ? "#52c41a"
+                                    : "#ff4d4f",
+                            }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <Text strong>
+                              {getQuestionText(answer.questionId)}
+                            </Text>
+                            <div style={{ marginTop: 8 }}>
+                              <Text type="secondary">Тип ответа: </Text>
+                              <Tag
+                                color={
+                                  question?.type === 3
+                                    ? "orange"
+                                    : answer.optionId !== null
+                                      ? "blue"
+                                      : "green"
+                                }
+                              >
+                                {getAnswerType(answer, question)}
+                              </Tag>
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <Text type="secondary">Ответ: </Text>
+                              <Text>{getAnswerText(answer)}</Text>
+                            </div>
+                            {question?.type !== 3 && (
+                              <div style={{ marginTop: 4 }}>
+                                {answer.isCorrect ? (
+                                  <Tag
+                                    color="success"
+                                    icon={<CheckCircleOutlined />}
+                                  >
+                                    Правильно
+                                  </Tag>
+                                ) : (
+                                  <Tag
+                                    color="error"
+                                    icon={<CloseCircleOutlined />}
+                                  >
+                                    Неправильно
+                                  </Tag>
+                                )}
+                              </div>
+                            )}
+                            {question?.type === 3 && (
+                              <div style={{ marginTop: 4 }}>
+                                <Tag color="orange" icon={<StarOutlined />}>
+                                  Рейтинг сохранен
+                                </Tag>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Empty description="Нет ответов" />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    );
+  };
+  // ============ КОНЕЦ SessionDetailsModal ============
 
   const t = {
     ru: {
@@ -1573,6 +1954,10 @@ export const TestSession = () => {
       retakeWarning: "Внимание! При повторной сдаче будет выделено 10 минут",
       presetTimes: "Быстрый выбор:",
       autoSave: "Автосохранение",
+      subDepartment: "Отделение",
+      selectSubDepartment: "Выберите отделение",
+      noSubDepartments: "Нет доступных отделений",
+      assignmentInfo: "Доступные отделения по назначению",
     },
     tj: {
       title: "Тестировании кормандон",
@@ -1653,9 +2038,14 @@ export const TestSession = () => {
       activeTest: "Тести фаъол",
       attemptsLeft: "Кӯшишҳои боқимонда",
       of2: "аз",
-      retakeWarning: "Диққат! Ҳангоми аз нав супоридан 10 дақиқа ҷудо карда мешавад",
+      retakeWarning:
+        "Диққат! Ҳангоми аз нав супоридан 10 дақиқа ҷудо карда мешавад",
       presetTimes: "Интихоби зуд:",
       autoSave: "Автоҳифз",
+      subDepartment: "Шуъба",
+      selectSubDepartment: "Шуъбаро интихоб кунед",
+      noSubDepartments: "Шуъбаҳо мавҷуд нестанд",
+      assignmentInfo: "Шуъбаҳои дастрас аз рӯи таъин",
     },
   };
 
@@ -1669,7 +2059,7 @@ export const TestSession = () => {
       title: t[lang].test,
       key: "test",
       render: (_, record) => {
-        const test = tests.find(t => t.id === record.testId);
+        const test = tests.find((t) => t.id === record.testId);
         if (lang === "ru") {
           return test?.titleRu || test?.title || `Тест ${record.testId}`;
         }
@@ -1680,8 +2070,10 @@ export const TestSession = () => {
       title: t[lang].employee,
       key: "employee",
       render: (_, record) => {
-        const emp = employees.find(e => e.id === record.employeeId);
-        return emp ? `${emp.firstName} ${emp.lastName}` : `ID: ${record.employeeId}`;
+        const emp = employees.find((e) => e.id === record.employeeId);
+        return emp
+          ? `${emp.firstName} ${emp.lastName}`
+          : `ID: ${record.employeeId}`;
       },
     },
     {
@@ -1689,9 +2081,20 @@ export const TestSession = () => {
       dataIndex: "status",
       render: (status) => {
         switch (status) {
-          case 1: return <Tag color="processing" icon={<ClockCircleOutlined />}>{t[lang].testingInProgress}</Tag>;
-          case 2: return <Tag color="success" icon={<CheckCircleOutlined />}>{t[lang].testingCompleted}</Tag>;
-          default: return <Tag>Неизвестно</Tag>;
+          case 1:
+            return (
+              <Tag color="processing" icon={<ClockCircleOutlined />}>
+                {t[lang].testingInProgress}
+              </Tag>
+            );
+          case 2:
+            return (
+              <Tag color="success" icon={<CheckCircleOutlined />}>
+                {t[lang].testingCompleted}
+              </Tag>
+            );
+          default:
+            return <Tag>Неизвестно</Tag>;
         }
       },
     },
@@ -1708,12 +2111,12 @@ export const TestSession = () => {
     {
       title: t[lang].startedAt,
       dataIndex: "startedAt",
-      render: (date) => date ? new Date(date).toLocaleString() : "—",
+      render: (date) => (date ? new Date(date).toLocaleString() : "—"),
     },
     {
       title: t[lang].finishedAt,
       dataIndex: "finishedAt",
-      render: (date) => date ? new Date(date).toLocaleString() : "—",
+      render: (date) => (date ? new Date(date).toLocaleString() : "—"),
     },
     {
       title: t[lang].score,
@@ -1721,9 +2124,11 @@ export const TestSession = () => {
       render: (_, record) => {
         if (record.score !== null && record.score !== undefined) {
           return (
-            <Badge 
-              count={`${record.score}%`} 
-              style={{ backgroundColor: record.score >= 70 ? "#52c41a" : "#ff4d4f" }}
+            <Badge
+              count={`${record.score}%`}
+              style={{
+                backgroundColor: record.score >= 70 ? "#52c41a" : "#ff4d4f",
+              }}
             />
           );
         }
@@ -1735,15 +2140,18 @@ export const TestSession = () => {
       key: "actions",
       render: (_, record) => {
         const completedCount = sessions.filter(
-          s => s.employeeId === record.employeeId && s.testId === record.testId && s.status === 2
+          (s) =>
+            s.employeeId === record.employeeId &&
+            s.testId === record.testId &&
+            s.status === 2,
         ).length;
-        
+
         return (
           <Space>
             {record.status === 1 && (
-              <Button 
-                size="small" 
-                type="primary" 
+              <Button
+                size="small"
+                type="primary"
                 onClick={() => handleContinueSession(record)}
                 style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
               >
@@ -1751,11 +2159,15 @@ export const TestSession = () => {
               </Button>
             )}
             {record.status === 2 && completedCount === 1 && (
-              <Tooltip title={`${t[lang].retakeWarning}. ${t[lang].attemptsLeft}: ${2 - completedCount} ${t[lang].of2} 2`}>
-                <Button 
-                  size="small" 
+              <Tooltip
+                title={`${t[lang].retakeWarning}. ${t[lang].attemptsLeft}: ${2 - completedCount} ${t[lang].of2} 2`}
+              >
+                <Button
+                  size="small"
                   icon={<ReloadOutlined />}
-                  onClick={() => handleRetakeTest(record.testId, record.employeeId)}
+                  onClick={() =>
+                    handleRetakeTest(record.testId, record.employeeId)
+                  }
                   danger
                 >
                   {t[lang].retake}
@@ -1769,8 +2181,8 @@ export const TestSession = () => {
                 </Button>
               </Tooltip>
             )}
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               icon={<FileExcelOutlined />}
               onClick={() => exportSingleSessionToExcel(record)}
             >
@@ -1784,16 +2196,35 @@ export const TestSession = () => {
 
   if (loading && sessions.length === 0) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 50, alignItems: "center", height: "60vh" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          padding: 50,
+          alignItems: "center",
+          height: "60vh",
+        }}
+      >
         <Spin size="small" tip={t[lang].loading} />
       </div>
     );
   }
 
   return (
-    <div ref={scrollRef} style={{ padding: 30, background: "#f0f2f5", minHeight: "100vh" }}>
+    <div
+      ref={scrollRef}
+      style={{ padding: 30, background: "#f0f2f5", minHeight: "100vh" }}
+    >
       <Card style={{ marginBottom: 24, borderRadius: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
           <div>
             <Title level={2} style={{ margin: 0, color: "#ff4b2b" }}>
               <SafetyOutlined /> {t[lang].title}
@@ -1803,14 +2234,22 @@ export const TestSession = () => {
             <Button
               type={lang === "ru" ? "primary" : "default"}
               onClick={() => handleSetLang("ru")}
-              style={lang === "ru" ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}
+              style={
+                lang === "ru"
+                  ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
+                  : {}
+              }
             >
               RU
             </Button>
             <Button
               type={lang === "tj" ? "primary" : "default"}
               onClick={() => handleSetLang("tj")}
-              style={lang === "tj" ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}
+              style={
+                lang === "tj"
+                  ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
+                  : {}
+              }
             >
               TJ
             </Button>
@@ -1822,10 +2261,7 @@ export const TestSession = () => {
             </Button>
             {!isTestActive && (
               <>
-                <Button
-                  icon={<FileExcelOutlined />}
-                  onClick={exportAllToExcel}
-                >
+                <Button icon={<FileExcelOutlined />} onClick={exportAllToExcel}>
                   {t[lang].exportAll}
                 </Button>
                 <Button
@@ -1846,7 +2282,14 @@ export const TestSession = () => {
         </div>
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
         <Card style={{ borderRadius: 12 }}>
           <Statistic
             title={t[lang].totalSessions}
@@ -1882,235 +2325,384 @@ export const TestSession = () => {
         </Card>
       </div>
 
-      {isTestActive && currentSessionLocal && !sessionComplete && sessionQuestions.length > 0 && (
-        <>
-          <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000 }}>
-            <Tooltip title={lastSaved ? `Последнее автосохранение: ${lastSaved.toLocaleTimeString()}` : t[lang].autoSave}>
-              <Badge 
-                status="processing" 
-                text={
-                  <div style={{ 
-                    background: "rgba(0,0,0,0.75)", 
-                    padding: "6px 12px", 
-                    borderRadius: 20,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6
-                  }}>
-                    <SaveOutlined style={{ color: "#52c41a" }} />
-                    <Text style={{ fontSize: 12, color: "#fff" }}>{t[lang].autoSave}</Text>
-                  </div>
+      {isTestActive &&
+        currentSessionLocal &&
+        !sessionComplete &&
+        sessionQuestions.length > 0 && (
+          <>
+            <div
+              style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000 }}
+            >
+              <Tooltip
+                title={
+                  lastSaved
+                    ? `Последнее автосохранение: ${lastSaved.toLocaleTimeString()}`
+                    : t[lang].autoSave
                 }
-              />
-            </Tooltip>
-          </div>
-
-          <Card style={{ marginBottom: 16, borderRadius: 12, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}>
-            <Row gutter={16} align="middle">
-              <Col>
-                <Avatar icon={<SafetyOutlined />} style={{ backgroundColor: "#fff", color: "#667eea" }} />
-              </Col>
-              <Col flex="auto">
-                <div>
-                  <Text strong style={{ color: "#fff", fontSize: 16 }}>
-                    {lang === "ru" 
-                      ? (tests.find(t => t.id === currentSessionLocal.testId)?.titleRu || "Тест")
-                      : (tests.find(t => t.id === currentSessionLocal.testId)?.titleTj || "Тест")}
-                  </Text>
-                  <br />
-                  <Text style={{ color: "#fff", opacity: 0.9 }}>
-                    {employees.find(e => e.id === currentSessionLocal.employeeId)?.firstName || ''} {employees.find(e => e.id === currentSessionLocal.employeeId)?.lastName || ''}
-                  </Text>
-                </div>
-              </Col>
-              <Col>
-                <div style={{ textAlign: "center" }}>
-                  <Text style={{ color: "#fff", fontSize: 28, fontWeight: "bold" }}>
-                    {answeredCount}/{sessionQuestions.length}
-                  </Text>
-                  <br />
-                  <Text style={{ color: "#fff", fontSize: 12 }}>{t[lang].questionsAnswered}</Text>
-                </div>
-              </Col>
-              <Col>
-                <div style={{ textAlign: "center" }}>
-                  <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
-                    {Math.floor(remainingSeconds / 60)}:{Math.floor(remainingSeconds % 60).toString().padStart(2, '0')}
-                  </Text>
-                  <br />
-                  <Text style={{ color: "#fff", fontSize: 12 }}>осталось</Text>
-                </div>
-              </Col>
-            </Row>
-            <Progress 
-              percent={Math.round((answeredCount / sessionQuestions.length) * 100)} 
-              strokeColor="#fff"
-              trailColor="rgba(255,255,255,0.3)"
-              showInfo={false}
-              style={{ marginTop: 12 }}
-            />
-          </Card>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
-            <div>
-              <Card style={{ borderRadius: 12 }}>
-                <Timer 
-                  minutes={selectedTestDuration}
-                  onTimeEnd={handleFinishSession}
-                  isActive={true}
-                  onTick={setElapsedSeconds}
-                  onRemainingChange={handleRemainingChange}
-                  startTimestamp={sessionStartTimestamp}
-                />
-                <Divider />
-                <QuestionCard
-                  question={sessionQuestions[currentQuestionIndex]}
-                  index={currentQuestionIndex}
-                  total={sessionQuestions.length}
-                  selectedOption={selectedOptionId}
-                  onSelectOption={setSelectedOptionId}
-                  manualAnswer={manualAnswer}
-                  onManualAnswerChange={setManualAnswer}
-                  ratingValue={ratingValue}
-                  onRatingChange={setRatingValue}
-                  lang={lang}
-                />
-                <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
-                  <Button
-                    size="large"
-                    icon={<ArrowLeftOutlined />}
-                    onClick={() => {
-                      if (currentQuestionIndex > 0) {
-                        const newIndex = currentQuestionIndex - 1;
-                        setCurrentQuestionIndex(newIndex);
-                        setSelectedOptionId(null);
-                        setManualAnswer("");
-                        setRatingValue(null);
-                        loadSavedAnswerForQuestion(newIndex);
-                      }
-                    }}
-                    disabled={currentQuestionIndex === 0 || submitting}
-                    style={{ flex: 1 }}
-                  >
-                    {t[lang].previous}
-                  </Button>
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={currentQuestionIndex + 1 === sessionQuestions.length ? <FlagOutlined /> : <ArrowRightOutlined />}
-                    onClick={handleSubmitAnswer}
-                    style={{ flex: 1, background: "#ff4b2b", borderColor: "#ff4b2b" }}
-                    loading={submitting}
-                  >
-                    {currentQuestionIndex + 1 === sessionQuestions.length ? t[lang].finish : t[lang].next}
-                  </Button>
-                </div>
-              </Card>
-            </div>
-
-            <div>
-              <Card title={t[lang].yourProgress} style={{ borderRadius: 12 }}>
-                <Progress 
-                  percent={Math.round((answeredCount / sessionQuestions.length) * 100)} 
-                  status="active"
-                  strokeColor="#ff4b2b"
-                  strokeWidth={12}
-                />
-                <Text type="secondary" style={{ display: "block", textAlign: "center", marginTop: 8 }}>
-                  {answeredCount} {t[lang].of} {sessionQuestions.length} {t[lang].questionsAnswered}
-                </Text>
-              </Card>
-
-              <Card title={t[lang].questionNavigation} style={{ marginTop: 16, borderRadius: 12 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
-                  {sessionQuestions.map((_, idx) => (
-                    <Tooltip 
-                      key={idx} 
-                      title={`${t[lang].questionNumber} ${idx + 1} - ${answersHistory[idx] ? t[lang].answered : t[lang].unanswered}`}
+              >
+                <Badge
+                  status="processing"
+                  text={
+                    <div
+                      style={{
+                        background: "rgba(0,0,0,0.75)",
+                        padding: "6px 12px",
+                        borderRadius: 20,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
                     >
-                      <Button
-                        size="small"
-                        type={currentQuestionIndex === idx ? "primary" : "default"}
-                        style={{
-                          backgroundColor: answersHistory[idx] ? "#52c41a" : undefined,
-                          borderColor: currentQuestionIndex === idx ? "#ff4b2b" : undefined,
-                          color: answersHistory[idx] && currentQuestionIndex !== idx ? "white" : undefined,
-                        }}
-                        onClick={() => handleQuestionNavigate(idx)}
-                        disabled={submitting}
-                      >
-                        {idx + 1}
-                        {answersHistory[idx] && (
-                          <CheckCircleOutlined style={{ fontSize: 10, marginLeft: 2 }} />
-                        )}
-                      </Button>
-                    </Tooltip>
-                  ))}
-                </div>
-                <Divider />
-                <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
-                  <div><Badge color="#52c41a" text={t[lang].answered} /></div>
-                  <div><Badge color="#d9d9d9" text={t[lang].unanswered} /></div>
-                  <div><Badge color="#ff4b2b" text={t[lang].current} /></div>
-                </div>
-              </Card>
-
-              <Card title={t[lang].testInfo} style={{ marginTop: 16, borderRadius: 12 }}>
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label={t[lang].questionsCount}>
-                    {sessionQuestions.length}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t[lang].estimatedTime}>
-                    {selectedTestDuration} {t[lang].minutes}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Попытка">
-                    {sessions.filter(s => s.employeeId === currentSessionLocal.employeeId && s.testId === currentSessionLocal.testId && s.status === 2).length + 1} из 2
-                  </Descriptions.Item>
-                </Descriptions>
-              </Card>
+                      <SaveOutlined style={{ color: "#52c41a" }} />
+                      <Text style={{ fontSize: 12, color: "#fff" }}>
+                        {t[lang].autoSave}
+                      </Text>
+                    </div>
+                  }
+                />
+              </Tooltip>
             </div>
-          </div>
-        </>
-      )}
+
+            <Card
+              style={{
+                marginBottom: 16,
+                borderRadius: 12,
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              }}
+            >
+              <Row gutter={16} align="middle">
+                <Col>
+                  <Avatar
+                    icon={<SafetyOutlined />}
+                    style={{ backgroundColor: "#fff", color: "#667eea" }}
+                  />
+                </Col>
+                <Col flex="auto">
+                  <div>
+                    <Text strong style={{ color: "#fff", fontSize: 16 }}>
+                      {lang === "ru"
+                        ? tests.find((t) => t.id === currentSessionLocal.testId)
+                            ?.titleRu || "Тест"
+                        : tests.find((t) => t.id === currentSessionLocal.testId)
+                            ?.titleTj || "Тест"}
+                    </Text>
+                    <br />
+                    <Text style={{ color: "#fff", opacity: 0.9 }}>
+                      {employees.find(
+                        (e) => e.id === currentSessionLocal.employeeId,
+                      )?.firstName || ""}{" "}
+                      {employees.find(
+                        (e) => e.id === currentSessionLocal.employeeId,
+                      )?.lastName || ""}
+                    </Text>
+                  </div>
+                </Col>
+                <Col>
+                  <div style={{ textAlign: "center" }}>
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontSize: 28,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {answeredCount}/{sessionQuestions.length}
+                    </Text>
+                    <br />
+                    <Text style={{ color: "#fff", fontSize: 12 }}>
+                      {t[lang].questionsAnswered}
+                    </Text>
+                  </div>
+                </Col>
+                <Col>
+                  <div style={{ textAlign: "center" }}>
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontSize: 20,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {Math.floor(remainingSeconds / 60)}:
+                      {Math.floor(remainingSeconds % 60)
+                        .toString()
+                        .padStart(2, "0")}
+                    </Text>
+                    <br />
+                    <Text style={{ color: "#fff", fontSize: 12 }}>
+                      осталось
+                    </Text>
+                  </div>
+                </Col>
+              </Row>
+              <Progress
+                percent={Math.round(
+                  (answeredCount / sessionQuestions.length) * 100,
+                )}
+                strokeColor="#fff"
+                trailColor="rgba(255,255,255,0.3)"
+                showInfo={false}
+                style={{ marginTop: 12 }}
+              />
+            </Card>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 320px",
+                gap: 24,
+              }}
+            >
+              <div>
+                <Card style={{ borderRadius: 12 }}>
+                  <Timer
+                    minutes={selectedTestDuration}
+                    onTimeEnd={handleFinishSession}
+                    isActive={true}
+                    onTick={setElapsedSeconds}
+                    onRemainingChange={handleRemainingChange}
+                    startTimestamp={sessionStartTimestamp}
+                  />
+                  <Divider />
+                  <QuestionCard
+                    question={sessionQuestions[currentQuestionIndex]}
+                    index={currentQuestionIndex}
+                    total={sessionQuestions.length}
+                    selectedOption={selectedOptionId}
+                    onSelectOption={setSelectedOptionId}
+                    manualAnswer={manualAnswer}
+                    onManualAnswerChange={setManualAnswer}
+                    ratingValue={ratingValue}
+                    onRatingChange={setRatingValue}
+                    lang={lang}
+                  />
+                  <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
+                    <Button
+                      size="large"
+                      icon={<ArrowLeftOutlined />}
+                      onClick={() => {
+                        if (currentQuestionIndex > 0) {
+                          const newIndex = currentQuestionIndex - 1;
+                          setCurrentQuestionIndex(newIndex);
+                          setSelectedOptionId(null);
+                          setManualAnswer("");
+                          setRatingValue(null);
+                          loadSavedAnswerForQuestion(newIndex);
+                        }
+                      }}
+                      disabled={currentQuestionIndex === 0 || submitting}
+                      style={{ flex: 1 }}
+                    >
+                      {t[lang].previous}
+                    </Button>
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={
+                        currentQuestionIndex + 1 === sessionQuestions.length ? (
+                          <FlagOutlined />
+                        ) : (
+                          <ArrowRightOutlined />
+                        )
+                      }
+                      onClick={handleSubmitAnswer}
+                      style={{
+                        flex: 1,
+                        background: "#ff4b2b",
+                        borderColor: "#ff4b2b",
+                      }}
+                      loading={submitting}
+                    >
+                      {currentQuestionIndex + 1 === sessionQuestions.length
+                        ? t[lang].finish
+                        : t[lang].next}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+
+              <div>
+                <Card title={t[lang].yourProgress} style={{ borderRadius: 12 }}>
+                  <Progress
+                    percent={Math.round(
+                      (answeredCount / sessionQuestions.length) * 100,
+                    )}
+                    status="active"
+                    strokeColor="#ff4b2b"
+                    strokeWidth={12}
+                  />
+                  <Text
+                    type="secondary"
+                    style={{
+                      display: "block",
+                      textAlign: "center",
+                      marginTop: 8,
+                    }}
+                  >
+                    {answeredCount} {t[lang].of} {sessionQuestions.length}{" "}
+                    {t[lang].questionsAnswered}
+                  </Text>
+                </Card>
+
+                <Card
+                  title={t[lang].questionNavigation}
+                  style={{ marginTop: 16, borderRadius: 12 }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(5, 1fr)",
+                      gap: 8,
+                    }}
+                  >
+                    {sessionQuestions.map((_, idx) => (
+                      <Tooltip
+                        key={idx}
+                        title={`${t[lang].questionNumber} ${idx + 1} - ${answersHistory[idx] ? t[lang].answered : t[lang].unanswered}`}
+                      >
+                        <Button
+                          size="small"
+                          type={
+                            currentQuestionIndex === idx ? "primary" : "default"
+                          }
+                          style={{
+                            backgroundColor: answersHistory[idx]
+                              ? "#52c41a"
+                              : undefined,
+                            borderColor:
+                              currentQuestionIndex === idx
+                                ? "#ff4b2b"
+                                : undefined,
+                            color:
+                              answersHistory[idx] &&
+                              currentQuestionIndex !== idx
+                                ? "white"
+                                : undefined,
+                          }}
+                          onClick={() => handleQuestionNavigate(idx)}
+                          disabled={submitting}
+                        >
+                          {idx + 1}
+                          {answersHistory[idx] && (
+                            <CheckCircleOutlined
+                              style={{ fontSize: 10, marginLeft: 2 }}
+                            />
+                          )}
+                        </Button>
+                      </Tooltip>
+                    ))}
+                  </div>
+                  <Divider />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 16,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <div>
+                      <Badge color="#52c41a" text={t[lang].answered} />
+                    </div>
+                    <div>
+                      <Badge color="#d9d9d9" text={t[lang].unanswered} />
+                    </div>
+                    <div>
+                      <Badge color="#ff4b2b" text={t[lang].current} />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card
+                  title={t[lang].testInfo}
+                  style={{ marginTop: 16, borderRadius: 12 }}
+                >
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label={t[lang].questionsCount}>
+                      {sessionQuestions.length}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t[lang].estimatedTime}>
+                      {selectedTestDuration} {t[lang].minutes}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Попытка">
+                      {sessions.filter(
+                        (s) =>
+                          s.employeeId === currentSessionLocal.employeeId &&
+                          s.testId === currentSessionLocal.testId &&
+                          s.status === 2,
+                      ).length + 1}{" "}
+                      из 2
+                    </Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              </div>
+            </div>
+          </>
+        )}
 
       <Modal
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {finishResultModal?.passed ? <TrophyOutlined style={{ color: "#ffd700" }} /> : <WarningOutlined style={{ color: "#ff4d4f" }} />}
-            <span>{finishResultModal?.passed ? t[lang].congratulations : t[lang].details}</span>
+            {finishResultModal?.passed ? (
+              <TrophyOutlined style={{ color: "#ffd700" }} />
+            ) : (
+              <WarningOutlined style={{ color: "#ff4d4f" }} />
+            )}
+            <span>
+              {finishResultModal?.passed
+                ? t[lang].congratulations
+                : t[lang].details}
+            </span>
           </div>
         }
         open={finishResultModal !== null}
         onCancel={() => setFinishResultModal(null)}
         footer={[
-          <Button key="close" type="primary" onClick={() => setFinishResultModal(null)} style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}>
+          <Button
+            key="close"
+            type="primary"
+            onClick={() => setFinishResultModal(null)}
+            style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
+          >
             {t[lang].close}
-          </Button>
+          </Button>,
         ]}
         width={500}
       >
         {finishResultModal && (
           <div>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <Progress 
-                type="circle" 
-                percent={finishResultModal.score} 
+              <Progress
+                type="circle"
+                percent={finishResultModal.score}
                 format={(percent) => `${percent}%`}
                 strokeColor={finishResultModal.passed ? "#52c41a" : "#ff4d4f"}
                 width={120}
               />
-              <Title level={4} style={{ marginTop: 16, color: finishResultModal.passed ? "#52c41a" : "#ff4d4f" }}>
+              <Title
+                level={4}
+                style={{
+                  marginTop: 16,
+                  color: finishResultModal.passed ? "#52c41a" : "#ff4d4f",
+                }}
+              >
                 {finishResultModal.passed ? t[lang].passed : t[lang].failed}
               </Title>
             </div>
             <Descriptions column={1} bordered size="small">
               <Descriptions.Item label={t[lang].result}>
-                <Text strong style={{ color: finishResultModal.passed ? "#52c41a" : "#ff4d4f", fontSize: 18 }}>
+                <Text
+                  strong
+                  style={{
+                    color: finishResultModal.passed ? "#52c41a" : "#ff4d4f",
+                    fontSize: 18,
+                  }}
+                >
                   {finishResultModal.score}%
                 </Text>
               </Descriptions.Item>
               <Descriptions.Item label={t[lang].correctAnswers}>
-                {finishResultModal.correctAnswers}/{finishResultModal.totalQuestions}
+                {finishResultModal.correctAnswers}/
+                {finishResultModal.totalQuestions}
               </Descriptions.Item>
               <Descriptions.Item label={t[lang].timeSpent}>
                 {finishResultModal.minutes} мин {finishResultModal.seconds} сек
@@ -2130,16 +2722,16 @@ export const TestSession = () => {
       </Modal>
 
       {showRanking && !isTestActive && (
-        <EmployeeRanking 
-          sessions={sessions} 
-          employees={employees} 
+        <EmployeeRanking
+          sessions={sessions}
+          employees={employees}
           tests={tests}
           lang={lang}
         />
       )}
 
       {(!isTestActive || sessionComplete) && (
-        <Card 
+        <Card
           title={
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <HistoryOutlined />
@@ -2157,7 +2749,7 @@ export const TestSession = () => {
               rowKey="id"
               onRow={(record) => ({
                 onClick: () => handleRowClick(record),
-                style: { cursor: "pointer" }
+                style: { cursor: "pointer" },
               })}
               pagination={{
                 current: pagination.pageNumber,
@@ -2172,6 +2764,7 @@ export const TestSession = () => {
         </Card>
       )}
 
+      {/* ИСПОЛЬЗУЕМ SessionDetailsModal */}
       <SessionDetailsModal
         visible={sessionModalVisible}
         session={selectedSessionForModal}
@@ -2184,6 +2777,7 @@ export const TestSession = () => {
         lang={lang}
       />
 
+      {/* Модальное окно начала теста */}
       <Modal
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2202,12 +2796,12 @@ export const TestSession = () => {
             type="primary"
             onClick={handleStartSession}
             style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
-            disabled={!canStartTest}
+            disabled={!canStartTest || !selectedSubDepartmentId}
           >
             {t[lang].startTest} ({selectedTestDuration} мин)
           </Button>,
         ]}
-        width={600}
+        width={650}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <div>
@@ -2224,18 +2818,31 @@ export const TestSession = () => {
             >
               {tests.map((test) => (
                 <Select.Option key={test.id} value={test.id}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
                       <BookOutlined />
-                      {lang === "ru" ? (test.titleRu || test.title) : (test.titleTj || test.title)}
+                      {lang === "ru"
+                        ? test.titleRu || test.title
+                        : test.titleTj || test.title}
                     </div>
-                    <Tag color="blue">по умолч. {test.durationMinutes || 30} мин</Tag>
+                    <Tag color="blue">
+                      по умолч. {test.durationMinutes || 30} мин
+                    </Tag>
                   </div>
                 </Select.Option>
               ))}
             </Select>
           </div>
-          
+
           <div>
             <Text strong>{t[lang].selectTestDuration}:</Text>
             <div style={{ marginTop: 8 }}>
@@ -2253,9 +2860,19 @@ export const TestSession = () => {
                 style={{ width: "100%" }}
               />
             </div>
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>{t[lang].presetTimes}</Text>
-              {[5, 10, 15, 20, 30, 45, 60].map(min => (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {t[lang].presetTimes}
+              </Text>
+              {[5, 10, 15, 20, 30, 45, 60].map((min) => (
                 <Button
                   key={min}
                   size="small"
@@ -2264,14 +2881,18 @@ export const TestSession = () => {
                     setSelectedTestDuration(min);
                     setUserManuallyChangedDuration(true);
                   }}
-                  style={selectedTestDuration === min ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}
+                  style={
+                    selectedTestDuration === min
+                      ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
+                      : {}
+                  }
                 >
                   {min} мин
                 </Button>
               ))}
             </div>
           </div>
-          
+
           <Alert
             message="Информация"
             description={`На прохождение теста дается ${selectedTestDuration} минут. Вы можете изменить время выше.`}
@@ -2279,7 +2900,7 @@ export const TestSession = () => {
             showIcon
             icon={<HourglassOutlined />}
           />
-          
+
           <div>
             <Text strong>{t[lang].employee}:</Text>
             <Select
@@ -2292,27 +2913,99 @@ export const TestSession = () => {
               optionFilterProp="children"
               filterOption={(input, option) => {
                 const children = option?.props?.children;
-                if (typeof children === 'object') {
-                  const text = children.props.children[1]?.props?.children || '';
+                if (typeof children === "object") {
+                  const text =
+                    children.props.children[1]?.props?.children || "";
                   return text.toLowerCase().includes(input.toLowerCase());
                 }
                 return false;
               }}
             >
-              {Object.entries(groupedEmployees).map(([department, deptEmployees]) => (
-                <Select.OptGroup key={department} label={`${t[lang].department}: ${department}`}>
-                  {deptEmployees.map((emp) => (
-                    <Select.Option key={emp.id} value={emp.id}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <UserOutlined />
-                        {emp.firstName} {emp.lastName}
-                        <Text type="secondary" style={{ fontSize: 12 }}>{emp.email}</Text>
+              {Object.entries(groupedEmployees).map(
+                ([department, deptEmployees]) => (
+                  <Select.OptGroup
+                    key={department}
+                    label={`${t[lang].department}: ${department}`}
+                  >
+                    {deptEmployees.map((emp) => (
+                      <Select.Option key={emp.id} value={emp.id}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <UserOutlined />
+                          {emp.firstName} {emp.lastName}
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {emp.email}
+                          </Text>
+                        </div>
+                      </Select.Option>
+                    ))}
+                  </Select.OptGroup>
+                ),
+              )}
+            </Select>
+          </div>
+
+          <div>
+            <Text strong>{t[lang].subDepartment}:</Text>
+            {selectedEmployeeId && selectedTestId ? (
+              <Select
+                placeholder={t[lang].selectSubDepartment}
+                value={selectedSubDepartmentId}
+                onChange={setSelectedSubDepartmentId}
+                style={{ width: "100%", marginTop: 8 }}
+                showSearch
+                size="large"
+                disabled={availableSubDepartments.length === 0}
+                notFoundContent={t[lang].noSubDepartments}
+              >
+                {availableSubDepartments.map((subDeptId) => {
+                  const assignment = assignments.find(
+                    a => a.subDepartmentId === subDeptId && 
+                    a.employeeId === selectedEmployeeId && 
+                    a.testId === selectedTestId
+                  );
+                  
+                  const subDeptName = assignment?.subDepartmentName || `Отделение ${subDeptId}`;
+                  
+                  return (
+                    <Select.Option key={subDeptId} value={subDeptId}>
+                      <div
+                        style={{ display: "flex", alignItems: "center", gap: 8 }}
+                      >
+                        <ApartmentOutlined />
+                        {subDeptName}
                       </div>
                     </Select.Option>
-                  ))}
-                </Select.OptGroup>
-              ))}
-            </Select>
+                  );
+                })}
+              </Select>
+            ) : (
+              <div style={{ marginTop: 8 }}>
+                <Select
+                  placeholder={t[lang].selectSubDepartment}
+                  disabled
+                  style={{ width: "100%" }}
+                >
+                  <Select.Option value="">
+                    {t[lang].selectEmployee} и {t[lang].test}
+                  </Select.Option>
+                </Select>
+              </div>
+            )}
+            {selectedEmployeeId && selectedTestId && availableSubDepartments.length === 0 && (
+              <Alert
+                message={t[lang].assignmentInfo}
+                description="Нет назначений для выбранного сотрудника и теста"
+                type="warning"
+                showIcon
+                style={{ marginTop: 8 }}
+              />
+            )}
           </div>
 
           {selectedEmployeeId && selectedTestId && !canStartTest && (
@@ -2332,10 +3025,14 @@ export const TestSession = () => {
               type="warning"
               showIcon
               action={
-                <Button size="small" type="primary" onClick={() => {
-                  handleContinueSession(existingSession);
-                  setTestModalOpen(false);
-                }}>
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => {
+                    handleContinueSession(existingSession);
+                    setTestModalOpen(false);
+                  }}
+                >
                   {t[lang].continue}
                 </Button>
               }
@@ -2353,11 +3050,7 @@ export const TestSession = () => {
         cancelText={t[lang].no}
         okButtonProps={{ danger: true }}
       >
-        <Alert
-          message={t[lang].confirmFinishText}
-          type="warning"
-          showIcon
-        />
+        <Alert message={t[lang].confirmFinishText} type="warning" showIcon />
       </Modal>
     </div>
   );
