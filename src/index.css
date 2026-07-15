@@ -130,7 +130,32 @@ body{
 .custom-sidebar-menu .ant-menu-submenu .ant-menu-item .anticon {
   color: #ff6b6b !important;
 }
+.custom-sidebar-menu .ant-menu-item-selected {
+    background: #c1121f !important;
+    color: white !important;
+}
+.ant-menu-dark .ant-menu-item-selected {
+  background: #fff !important;
+  color: #8b0000 !important;
+}
 
+.ant-menu-dark,
+.ant-menu-dark .ant-menu-sub {
+  background: #8b1010 !important;
+}
+
+.ant-menu-dark .ant-menu-item,
+.ant-menu-dark .ant-menu-submenu-title {
+  color: white !important;
+}
+
+.ant-menu-dark .ant-menu-item-selected {
+  background: #d71920 !important;
+}
+
+.ant-menu-dark .ant-menu-item-selected .anticon {
+  color: #8b0000 !important;
+}
 /* Для родительских пунктов */
 .custom-sidebar-menu .ant-menu-submenu-title {
   color: #ffffff !important;

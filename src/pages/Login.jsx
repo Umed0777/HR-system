@@ -25,7 +25,8 @@ const Login = () => {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-       background: "linear-gradient(135deg, #fff1f0, #ffccc7)"
+       background:
+      "linear-gradient(135deg,#4b0000 0%,#8b0000 35%,#c1121f 70%,#ff4d4f 100%)"
       }}
     >
       <Card

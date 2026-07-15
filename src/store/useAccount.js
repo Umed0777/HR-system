@@ -6,112 +6,247 @@ import {
   registerAdmin,
 } from "../services/api.service.account";
 
+
 export const useAccountStore = create((set) => ({
-  user: null,
+
+  user: JSON.parse(localStorage.getItem("user")) || null,
+
   token: localStorage.getItem("token") || null,
+
+  roles: JSON.parse(localStorage.getItem("roles")) || [],
+
   loading: false,
+
   error: null,
+
 
   // ================= LOGIN =================
 
-loginUser: async (data) => {
-  set({ loading: true, error: null });
-
-  try {
-    const res = await login(data);
-
-    console.log("FULL RESPONSE:", res);
-
-    const token = res?.data?.jwToken;
-
-    console.log("TOKEN FROM BACKEND:", token);
-
-    if (!token) {
-      throw new Error("TOKEN NOT FOUND");
-    }
-    console.log("STORED TOKEN:", localStorage.getItem("token"));
-    const oneDay = 24 * 60 * 60 * 1000;
-
-localStorage.setItem("token", token);
-localStorage.setItem("tokenExpire", Date.now() + oneDay);
-    set({
-      user: res.data,
-      token,
-      loading: false,
-    });
-
-    return res;
-  } catch (err) {
-    console.log("LOGIN ERROR:", err);
+  loginUser: async (data) => {
 
     set({
-      loading: false,
-      error: err.message,
+      loading:true,
+      error:null
     });
 
-    throw err;
-  }
-},
-  // ================= REGISTER =================
-
-  registerUser: async (data) => {
-    set({
-      loading: true,
-      error: null,
-    });
 
     try {
+
+      const res = await login(data);
+
+
+      console.log("LOGIN RESPONSE:", res);
+
+
+
+      const userData = res.data;
+
+
+      const token = userData.jwToken;
+
+
+      const roles = userData.roles || [];
+
+
+
+      // сохраняем токен
+
+      localStorage.setItem(
+        "token",
+        token
+      );
+
+
+
+      // сохраняем пользователя
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(userData)
+      );
+
+
+
+      // сохраняем роли
+
+      localStorage.setItem(
+        "roles",
+        JSON.stringify(roles)
+      );
+
+
+
+      set({
+
+        user:userData,
+
+        token,
+
+        roles,
+
+        loading:false
+
+      });
+
+
+
+      return userData;
+
+
+
+    } catch(error){
+
+
+      console.log(
+        "LOGIN ERROR",
+        error
+      );
+
+
+      set({
+
+        loading:false,
+
+        error:error.message
+
+      });
+
+
+      throw error;
+
+    }
+
+  },
+
+
+
+
+  // ================= REGISTER =================
+
+
+  registerUser: async(data)=>{
+
+
+    set({
+      loading:true,
+      error:null
+    });
+
+
+    try{
+
+
       const res = await register(data);
 
+
       set({
-        loading: false,
+        loading:false
       });
+
 
       return res;
-    } catch (err) {
+
+
+    }catch(error){
+
+
       set({
-        loading: false,
-        error: err.response?.data || err.message,
+
+        loading:false,
+
+        error:error.response?.data || error.message
+
       });
 
-      throw err;
+
+      throw error;
+
     }
+
   },
+
+
+
 
   // ================= REGISTER ADMIN =================
 
-  registerAdminUser: async (data) => {
+
+  registerAdminUser: async(data)=>{
+
+
     set({
-      loading: true,
-      error: null,
+
+      loading:true,
+
+      error:null
+
     });
 
-    try {
+
+    try{
+
+
       const res = await registerAdmin(data);
 
+
       set({
-        loading: false,
+
+        loading:false
+
       });
+
 
       return res;
-    } catch (err) {
+
+
+
+    }catch(error){
+
+
       set({
-        loading: false,
-        error: err.response?.data || err.message,
+
+        loading:false,
+
+        error:error.response?.data || error.message
+
       });
 
-      throw err;
+
+      throw error;
+
     }
+
   },
+
+
+
 
   // ================= LOGOUT =================
 
-  logout: () => {
+
+  logout:()=>{
+
+
     localStorage.removeItem("token");
 
+    localStorage.removeItem("user");
+
+    localStorage.removeItem("roles");
+
+
+
     set({
-      user: null,
-      token: null,
+
+      user:null,
+
+      token:null,
+
+      roles:[]
+
     });
-  },
+
+
+  }
+
+
 }));

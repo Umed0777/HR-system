@@ -1,10 +1,11 @@
-// TestSession.jsx
+// TestSession.jsx - ПОЛНАЯ РАБОЧАЯ ВЕРСИЯ
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTestSessionStore } from "../store/useTestSession";
 import { useTestStore } from "../store/useTest";
 import { useEmployeeStore } from "../store/useEmployee";
 import { useQuestionStore } from "../store/useQuestion";
 import { useTestAssignmentStore } from "../store/useTestAssignment";
+import { useSubDepartmentStore } from "../store/useSubdepartment";
 import * as XLSX from "xlsx";
 import {
   Button,
@@ -55,7 +56,6 @@ import {
   CrownOutlined,
   ReloadOutlined,
   EyeOutlined,
-  InfoCircleOutlined,
   SaveOutlined,
   ApartmentOutlined,
 } from "@ant-design/icons";
@@ -63,7 +63,7 @@ import {
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
-// Компонент таймера
+// ==================== ТАЙМЕР ====================
 const Timer = ({
   minutes,
   onTimeEnd,
@@ -230,7 +230,7 @@ const Timer = ({
   );
 };
 
-// Компонент выбора рейтинга
+// ==================== ВЫБОР РЕЙТИНГА ====================
 const RatingSelector = ({ value, onChange, disabled = false }) => {
   const ratingOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -273,7 +273,7 @@ const RatingSelector = ({ value, onChange, disabled = false }) => {
   );
 };
 
-// Компонент вопроса
+// ==================== КАРТОЧКА ВОПРОСА ====================
 const QuestionCard = ({
   question,
   index,
@@ -414,7 +414,7 @@ const QuestionCard = ({
   );
 };
 
-// Компонент рейтинга сотрудников
+// ==================== РЕЙТИНГ СОТРУДНИКОВ ====================
 const EmployeeRanking = ({ sessions, employees, tests, lang }) => {
   const t = {
     ru: {
@@ -582,7 +582,7 @@ const EmployeeRanking = ({ sessions, employees, tests, lang }) => {
   );
 };
 
-// Основной компонент
+// ==================== ОСНОВНОЙ КОМПОНЕНТ ====================
 export const TestSession = () => {
   const {
     sessions = [],
@@ -603,10 +603,14 @@ export const TestSession = () => {
   const { questions = [], fetchQuestions } = useQuestionStore();
   
   const { 
-    assignments = [], 
-    fetchAssignments,
-    getAssignmentsByEmployee,
+    testAssignments = [], 
+    fetchTestAssignments,
   } = useTestAssignmentStore();
+
+  const { 
+    subdepartments = [], 
+    fetchSubDepartments 
+  } = useSubDepartmentStore();
 
   const [lang, setLang] = useState(() => {
     const savedLang = localStorage.getItem("testsession_lang");
@@ -645,9 +649,13 @@ export const TestSession = () => {
   const [finishResultModal, setFinishResultModal] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [availableSubDepartments, setAvailableSubDepartments] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
 
   const scrollRef = useRef(null);
+  
+  // ============ ПРАВИЛЬНЫЙ URL БЕКЕНДА ============
+  const API_BASE = "http://10.65.10.22:8525/api";
 
   // Группировка сотрудников по отделам
   const groupedEmployees = employees.reduce((groups, employee) => {
@@ -673,26 +681,123 @@ export const TestSession = () => {
     [sessions],
   );
 
-  // Загрузка назначений при выборе сотрудника
-  useEffect(() => {
-    if (selectedEmployeeId && selectedTestId) {
-      const employeeAssignments = getAssignmentsByEmployee(selectedEmployeeId);
-      const testAssignments = employeeAssignments.filter(
-        a => a.testId === selectedTestId
-      );
-      const subDeptIds = [...new Set(testAssignments.map(a => a.subDepartmentId))];
-      setAvailableSubDepartments(subDeptIds);
+  // ============ ФУНКЦИЯ ПОЛУЧЕНИЯ ОТДЕЛЕНИЯ ============
+  // Сначала проверяем у сотрудника, если нет - ищем в назначениях
+  const getEmployeeSubDepartment = useCallback((employeeId) => {
+    // 1. Ищем сотрудника
+    const employee = employees.find(e => e.id === employeeId);
+    if (employee?.subDepartmentId) {
+      return employee.subDepartmentId;
+    }
+    
+    // 2. Если у сотрудника нет - ищем в назначениях
+    const assignment = testAssignments.find(a => a.employeeId === employeeId);
+    if (assignment?.subDepartmentId) {
+      return assignment.subDepartmentId;
+    }
+    
+    return null;
+  }, [employees, testAssignments]);
+
+  // Функция получения названия отделения
+  const getSubDepartmentName = useCallback((id) => {
+    if (!id) return "—";
+    const sub = subdepartments.find(s => Number(s.id) === Number(id));
+    return sub?.name || `Отделение ${id}`;
+  }, [subdepartments]);
+
+  // ============ СОЗДАНИЕ НАЗНАЧЕНИЯ (БЕЗ subDepartmentId) ============
+  const createAssignmentViaAPI = useCallback(async (testId, employeeId) => {
+    try {
+      console.log("📤 СОЗДАНИЕ НАЗНАЧЕНИЯ...");
+      console.log("  Test ID:", testId);
+      console.log("  Employee ID:", employeeId);
       
-      if (subDeptIds.length > 0 && !subDeptIds.includes(selectedSubDepartmentId)) {
-        setSelectedSubDepartmentId(subDeptIds[0]);
-      } else if (subDeptIds.length === 0) {
+      const url = `${API_BASE}/TestAssignment`;
+      
+      // ВАЖНО: НЕ ПЕРЕДАЕМ subDepartmentId!
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          testId: Number(testId),
+          employeeId: Number(employeeId)
+        })
+      });
+      
+      console.log("  Status:", response.status);
+      
+      const text = await response.text();
+      console.log("📥 Ответ:", text);
+      
+      if (response.ok || response.status === 200) {
+        console.log("✅ Назначение создано!");
+        await fetchTestAssignments(1, 1000);
+        return true;
+      }
+      
+      if (response.status === 409) {
+        console.log("ℹ️ Назначение уже существует");
+        await fetchTestAssignments(1, 1000);
+        return true;
+      }
+      
+      console.error("❌ Ошибка:", text);
+      return false;
+      
+    } catch (error) {
+      console.error("❌ Ошибка создания:", error);
+      return false;
+    }
+  }, [API_BASE, fetchTestAssignments]);
+
+  // ЗАГРУЗКА ВСЕХ ДАННЫХ
+  useEffect(() => {
+    const loadAllData = async () => {
+      try {
+        await Promise.all([
+          fetchSessions(),
+          fetchTests(),
+          fetchEmployee(),
+          fetchQuestions(),
+          fetchSubDepartments(),
+          fetchTestAssignments(1, 1000),
+        ]);
+        setDataLoaded(true);
+        console.log("✅ Все данные загружены");
+        console.log("📋 Сотрудников:", employees.length);
+        console.log("📋 Тестов:", tests.length);
+        console.log("📋 Отделений:", subdepartments.length);
+        console.log("📋 Назначений:", testAssignments.length);
+      } catch (error) {
+        console.error("Ошибка загрузки данных:", error);
+        message.error("Ошибка загрузки данных");
+      }
+    };
+    
+    loadAllData();
+  }, []);
+
+  // ============ ПОЛУЧЕНИЕ ОТДЕЛЕНИЯ ПРИ ВЫБОРЕ СОТРУДНИКА ============
+  useEffect(() => {
+    if (!dataLoaded) return;
+    
+    if (selectedEmployeeId) {
+      const subDeptId = getEmployeeSubDepartment(selectedEmployeeId);
+      
+      if (subDeptId) {
+        setSelectedSubDepartmentId(subDeptId);
+        console.log("✅ Отделение найдено:", subDeptId);
+      } else {
         setSelectedSubDepartmentId(null);
+        console.log("⚠️ У сотрудника нет отделения");
       }
     } else {
-      setAvailableSubDepartments([]);
       setSelectedSubDepartmentId(null);
     }
-  }, [selectedEmployeeId, selectedTestId, assignments, getAssignmentsByEmployee]);
+  }, [selectedEmployeeId, dataLoaded, getEmployeeSubDepartment]);
 
   // Функция загрузки сохраненного ответа для вопроса
   const loadSavedAnswerForQuestion = useCallback(
@@ -872,15 +977,6 @@ export const TestSession = () => {
     };
   }, [isTestActive, currentSessionLocal, sessionComplete, saveTestState]);
 
-  // Загрузка начальных данных
-  useEffect(() => {
-    fetchSessions();
-    fetchTests();
-    fetchEmployee();
-    fetchQuestions();
-    fetchAssignments();
-  }, []);
-
   // Восстановление состояния после загрузки данных
   useEffect(() => {
     const restore = async () => {
@@ -889,7 +985,8 @@ export const TestSession = () => {
         !isTestActive &&
         !sessionComplete &&
         sessions.length > 0 &&
-        tests.length > 0
+        tests.length > 0 &&
+        dataLoaded
       ) {
         setIsRestoring(true);
         await restoreTestState();
@@ -904,9 +1001,10 @@ export const TestSession = () => {
     isTestActive,
     sessionComplete,
     restoreTestState,
+    dataLoaded,
   ]);
 
-  // Периодическое сохранение состояния (каждые 5 секунд)
+  // Периодическое сохранение состояния
   useEffect(() => {
     if (!isTestActive || !currentSessionLocal || sessionComplete) return;
 
@@ -1231,7 +1329,7 @@ export const TestSession = () => {
     }
   };
 
-  // ПРИ ПОВТОРНОЙ СДАЧЕ - ПОЛНАЯ ОЧИСТКА И НОВЫЙ ТЕСТ
+  // ПРИ ПОВТОРНОЙ СДАЧЕ
   const handleRetakeTest = async (testId, employeeId) => {
     try {
       resetTestState();
@@ -1296,16 +1394,23 @@ export const TestSession = () => {
     }
   };
 
+  // ==================== НАЧАЛО ТЕСТА ====================
   const handleStartSession = async () => {
     if (!selectedTestId || !selectedEmployeeId) {
       message.warning("Выберите тест и сотрудника");
       return;
     }
 
-    if (!selectedSubDepartmentId) {
-      message.warning("Выберите отделение");
+    // Получаем отделение (сначала из сотрудника, потом из назначений)
+    const subDeptId = getEmployeeSubDepartment(selectedEmployeeId);
+    
+    if (!subDeptId) {
+      message.warning("У сотрудника не указано отделение");
       return;
     }
+
+    // Устанавливаем отделение
+    setSelectedSubDepartmentId(subDeptId);
 
     if (!canStartTest) {
       message.error("У сотрудника уже использованы все попытки (максимум 2)");
@@ -1326,11 +1431,91 @@ export const TestSession = () => {
       return;
     }
 
+    // ========================================
+    // ПРОВЕРКА И СОЗДАНИЕ НАЗНАЧЕНИЯ
+    // ========================================
+    
+    // 1. Проверяем, есть ли назначение в store
+    let hasAssignment = testAssignments.some(
+      a => a.employeeId === selectedEmployeeId && a.testId === selectedTestId
+    );
+
+    // 2. Если нет - создаем через API (БЕЗ subDepartmentId!)
+    if (!hasAssignment) {
+      setIsCreatingAssignment(true);
+      message.loading({ content: "Создание назначения...", key: "creating", duration: 0 });
+      
+      try {
+        const url = `${API_BASE}/TestAssignment`;
+        console.log("📤 СОЗДАЮ НАЗНАЧЕНИЕ (БЕЗ SubDepartmentId)...");
+        console.log("  URL:", url);
+        console.log("  Test ID:", selectedTestId);
+        console.log("  Employee ID:", selectedEmployeeId);
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            testId: Number(selectedTestId),
+            employeeId: Number(selectedEmployeeId)
+          })
+        });
+        
+        console.log("  Status:", response.status);
+        
+        const text = await response.text();
+        console.log("📥 Ответ:", text);
+        
+        message.destroy("creating");
+        
+        if (response.ok || response.status === 200) {
+          message.success("✅ Назначение создано!");
+          await fetchTestAssignments(1, 1000);
+          hasAssignment = true;
+        } else if (response.status === 409) {
+          message.info("ℹ️ Назначение уже существует");
+          await fetchTestAssignments(1, 1000);
+          hasAssignment = true;
+        } else {
+          message.error("❌ Ошибка: " + (text || "Неизвестная ошибка"));
+          setIsCreatingAssignment(false);
+          return;
+        }
+        
+        setIsCreatingAssignment(false);
+        
+      } catch (error) {
+        console.error("❌ Ошибка создания назначения:", error);
+        message.destroy("creating");
+        message.error("Ошибка при создании назначения: " + error.message);
+        setIsCreatingAssignment(false);
+        return;
+      }
+    }
+
+    // 3. Проверяем финально
+    const finalCheck = testAssignments.some(
+      a => a.employeeId === selectedEmployeeId && a.testId === selectedTestId
+    );
+
+    if (!finalCheck && !hasAssignment) {
+      message.error("Назначение не создано. Попробуйте еще раз.");
+      return;
+    }
+
+    // ========================================
+    // НАЧИНАЕМ ТЕСТ
+    // ========================================
+    
     try {
       const duration = selectedTestDuration || 5;
 
-      console.log("Начинаем тест с длительностью:", duration, "минут");
-      console.log("Отделение (SubDepartment):", selectedSubDepartmentId);
+      console.log("🚀 НАЧИНАЕМ ТЕСТ...");
+      console.log("  Сотрудник:", selectedEmployeeId);
+      console.log("  Тест:", selectedTestId);
+      console.log("  Отделение:", subDeptId);
 
       resetTestState();
 
@@ -1338,8 +1523,9 @@ export const TestSession = () => {
         selectedTestId,
         selectedEmployeeId,
         duration,
-        selectedSubDepartmentId,
+        subDeptId,
       );
+      
       const test = tests.find((t) => t.id === selectedTestId);
 
       if (test && test.questions) {
@@ -1368,10 +1554,42 @@ export const TestSession = () => {
         scrollRef.current.scrollIntoView({ behavior: "smooth" });
       }
     } catch (error) {
-      console.error("Start session error:", error);
-      message.error(
-        error.response?.data?.message || "Ошибка при начале сессии",
-      );
+      console.error("❌ ОШИБКА НАЧАЛА ТЕСТА:", error);
+      
+      const errorMsg = error?.response?.data?.message || error?.message || "";
+      
+      if (errorMsg.includes("не назначен") || errorMsg.includes("not assigned")) {
+        message.warning("Назначение не найдено. Создаю повторно...");
+        
+        try {
+          const url = `${API_BASE}/TestAssignment`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              testId: Number(selectedTestId),
+              employeeId: Number(selectedEmployeeId)
+            })
+          });
+          
+          if (response.ok || response.status === 200) {
+            message.success("✅ Назначение создано! Нажмите 'Начать тест' еще раз.");
+            await fetchTestAssignments(1, 1000);
+          } else {
+            const text = await response.text();
+            message.error("Не удалось создать назначение: " + text);
+          }
+        } catch (err) {
+          console.error("Ошибка:", err);
+          message.error("Ошибка при создании назначения");
+        }
+      } else {
+        message.error(
+          error?.response?.data?.message || "Ошибка при начале сессии"
+        );
+      }
     }
   };
 
@@ -1594,18 +1812,6 @@ export const TestSession = () => {
   };
 
   const answeredCount = answersHistory.filter((a) => a).length;
-  const progress =
-    sessionQuestions.length > 0
-      ? (answeredCount / sessionQuestions.length) * 100
-      : 0;
-
-  const canShowRetakeButton = (employeeId, testId) => {
-    const completedSessionsCount = sessions.filter(
-      (s) =>
-        s.employeeId === employeeId && s.testId === testId && s.status === 2,
-    ).length;
-    return completedSessionsCount === 1;
-  };
 
   const handleDurationChange = (value) => {
     const numValue = parseInt(value);
@@ -1618,7 +1824,7 @@ export const TestSession = () => {
     }
   };
 
-  // ============ КОМПОНЕНТ SessionDetailsModal ВНУТРИ ============
+  // ==================== SESSION DETAILS MODAL ====================
   const SessionDetailsModal = ({
     visible,
     session,
@@ -1869,8 +2075,8 @@ export const TestSession = () => {
       </Modal>
     );
   };
-  // ============ КОНЕЦ SessionDetailsModal ============
 
+  // ==================== ТЕКСТЫ ====================
   const t = {
     ru: {
       title: "Тестирование сотрудников",
@@ -1955,9 +2161,10 @@ export const TestSession = () => {
       presetTimes: "Быстрый выбор:",
       autoSave: "Автосохранение",
       subDepartment: "Отделение",
-      selectSubDepartment: "Выберите отделение",
-      noSubDepartments: "Нет доступных отделений",
-      assignmentInfo: "Доступные отделения по назначению",
+      selectSubDepartment: "Отделение сотрудника",
+      noSubDepartments: "У сотрудника не указано отделение",
+      assignmentInfo: "Отделение из данных сотрудника",
+      creatingAssignment: "Создание назначения...",
     },
     tj: {
       title: "Тестировании кормандон",
@@ -2043,12 +2250,14 @@ export const TestSession = () => {
       presetTimes: "Интихоби зуд:",
       autoSave: "Автоҳифз",
       subDepartment: "Шуъба",
-      selectSubDepartment: "Шуъбаро интихоб кунед",
-      noSubDepartments: "Шуъбаҳо мавҷуд нестанд",
-      assignmentInfo: "Шуъбаҳои дастрас аз рӯи таъин",
+      selectSubDepartment: "Шуъбаи корманд",
+      noSubDepartments: "Шуъбаи корманд муайян нашудааст",
+      assignmentInfo: "Шуъба аз маълумоти корманд",
+      creatingAssignment: "Эҷоди таъинот...",
     },
   };
 
+  // ==================== КОЛОНКИ ТАБЛИЦЫ ====================
   const columns = [
     {
       title: "ID",
@@ -2194,6 +2403,7 @@ export const TestSession = () => {
     },
   ];
 
+  // ==================== РЕНДЕР ====================
   if (loading && sessions.length === 0) {
     return (
       <div
@@ -2215,6 +2425,7 @@ export const TestSession = () => {
       ref={scrollRef}
       style={{ padding: 30, background: "#f0f2f5", minHeight: "100vh" }}
     >
+      {/* Верхняя карточка */}
       <Card style={{ marginBottom: 24, borderRadius: 12 }}>
         <div
           style={{
@@ -2282,6 +2493,7 @@ export const TestSession = () => {
         </div>
       </Card>
 
+      {/* Статистика */}
       <div
         style={{
           display: "grid",
@@ -2325,6 +2537,7 @@ export const TestSession = () => {
         </Card>
       </div>
 
+      {/* Активный тест */}
       {isTestActive &&
         currentSessionLocal &&
         !sessionComplete &&
@@ -2639,6 +2852,7 @@ export const TestSession = () => {
           </>
         )}
 
+      {/* Модалка результата */}
       <Modal
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2721,6 +2935,7 @@ export const TestSession = () => {
         )}
       </Modal>
 
+      {/* Рейтинг */}
       {showRanking && !isTestActive && (
         <EmployeeRanking
           sessions={sessions}
@@ -2730,6 +2945,7 @@ export const TestSession = () => {
         />
       )}
 
+      {/* История тестирований */}
       {(!isTestActive || sessionComplete) && (
         <Card
           title={
@@ -2764,7 +2980,7 @@ export const TestSession = () => {
         </Card>
       )}
 
-      {/* ИСПОЛЬЗУЕМ SessionDetailsModal */}
+      {/* Модалка деталей сессии */}
       <SessionDetailsModal
         visible={sessionModalVisible}
         session={selectedSessionForModal}
@@ -2777,7 +2993,7 @@ export const TestSession = () => {
         lang={lang}
       />
 
-      {/* Модальное окно начала теста */}
+      {/* МОДАЛЬНОЕ ОКНО НАЧАЛА ТЕСТА */}
       <Modal
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2796,14 +3012,18 @@ export const TestSession = () => {
             type="primary"
             onClick={handleStartSession}
             style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
-            disabled={!canStartTest || !selectedSubDepartmentId}
+            disabled={!canStartTest || !selectedSubDepartmentId || isCreatingAssignment}
+            loading={isCreatingAssignment}
           >
-            {t[lang].startTest} ({selectedTestDuration} мин)
+            {isCreatingAssignment 
+              ? t[lang].creatingAssignment 
+              : `${t[lang].startTest} (${selectedTestDuration} мин)`}
           </Button>,
         ]}
         width={650}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Выбор теста */}
           <div>
             <Text strong>{t[lang].test}:</Text>
             <Select
@@ -2843,6 +3063,7 @@ export const TestSession = () => {
             </Select>
           </div>
 
+          {/* Длительность */}
           <div>
             <Text strong>{t[lang].selectTestDuration}:</Text>
             <div style={{ marginTop: 8 }}>
@@ -2901,12 +3122,16 @@ export const TestSession = () => {
             icon={<HourglassOutlined />}
           />
 
+          {/* Выбор сотрудника */}
           <div>
             <Text strong>{t[lang].employee}:</Text>
             <Select
               placeholder={t[lang].selectEmployee}
               value={selectedEmployeeId}
-              onChange={setSelectedEmployeeId}
+              onChange={(value) => {
+                setSelectedEmployeeId(value);
+                setSelectedSubDepartmentId(null);
+              }}
               style={{ width: "100%", marginTop: 8 }}
               showSearch
               size="large"
@@ -2934,6 +3159,7 @@ export const TestSession = () => {
                             display: "flex",
                             alignItems: "center",
                             gap: 8,
+                            flexWrap: "wrap",
                           }}
                         >
                           <UserOutlined />
@@ -2941,6 +3167,11 @@ export const TestSession = () => {
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {emp.email}
                           </Text>
+                          {emp.subDepartmentId && (
+                            <Tag color="green" style={{ marginLeft: 4 }}>
+                              <ApartmentOutlined /> {getSubDepartmentName(emp.subDepartmentId)}
+                            </Tag>
+                          )}
                         </div>
                       </Select.Option>
                     ))}
@@ -2950,40 +3181,68 @@ export const TestSession = () => {
             </Select>
           </div>
 
+          {/* ВЫБОР ОТДЕЛЕНИЯ - из данных сотрудника */}
           <div>
             <Text strong>{t[lang].subDepartment}:</Text>
-            {selectedEmployeeId && selectedTestId ? (
-              <Select
-                placeholder={t[lang].selectSubDepartment}
-                value={selectedSubDepartmentId}
-                onChange={setSelectedSubDepartmentId}
-                style={{ width: "100%", marginTop: 8 }}
-                showSearch
-                size="large"
-                disabled={availableSubDepartments.length === 0}
-                notFoundContent={t[lang].noSubDepartments}
-              >
-                {availableSubDepartments.map((subDeptId) => {
-                  const assignment = assignments.find(
-                    a => a.subDepartmentId === subDeptId && 
-                    a.employeeId === selectedEmployeeId && 
-                    a.testId === selectedTestId
-                  );
-                  
-                  const subDeptName = assignment?.subDepartmentName || `Отделение ${subDeptId}`;
-                  
-                  return (
-                    <Select.Option key={subDeptId} value={subDeptId}>
-                      <div
-                        style={{ display: "flex", alignItems: "center", gap: 8 }}
-                      >
-                        <ApartmentOutlined />
-                        {subDeptName}
+            {selectedEmployeeId ? (
+              <>
+                {selectedSubDepartmentId ? (
+                  <Card 
+                    size="small" 
+                    style={{ 
+                      marginTop: 8, 
+                      background: "#f6ffed", 
+                      borderColor: "#b7eb8f",
+                      borderRadius: 8
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <ApartmentOutlined style={{ color: "#52c41a", fontSize: 20 }} />
+                      <div>
+                        <Text strong style={{ fontSize: 16 }}>
+                          {getSubDepartmentName(selectedSubDepartmentId)}
+                        </Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {(() => {
+                            const employee = employees.find(e => e.id === selectedEmployeeId);
+                            if (employee?.subDepartmentId) {
+                              return "Отделение из данных сотрудника";
+                            }
+                            const assignment = testAssignments.find(a => a.employeeId === selectedEmployeeId);
+                            if (assignment?.subDepartmentId) {
+                              return "Отделение из назначения";
+                            }
+                            return "Отделение";
+                          })()}
+                        </Text>
                       </div>
-                    </Select.Option>
-                  );
-                })}
-              </Select>
+                      <Tag color="green" style={{ marginLeft: "auto" }}>
+                        <CheckCircleOutlined /> 
+                        {(() => {
+                          const employee = employees.find(e => e.id === selectedEmployeeId);
+                          if (employee?.subDepartmentId) {
+                            return "Из сотрудника";
+                          }
+                          const assignment = testAssignments.find(a => a.employeeId === selectedEmployeeId);
+                          if (assignment?.subDepartmentId) {
+                            return "Из назначения";
+                          }
+                          return "Нет";
+                        })()}
+                      </Tag>
+                    </div>
+                  </Card>
+                ) : (
+                  <Alert
+                    message="У сотрудника не указано отделение"
+                    description="Пожалуйста, укажите отделение в карточке сотрудника или создайте назначение"
+                    type="warning"
+                    showIcon
+                    style={{ marginTop: 8 }}
+                  />
+                )}
+              </>
             ) : (
               <div style={{ marginTop: 8 }}>
                 <Select
@@ -2992,19 +3251,10 @@ export const TestSession = () => {
                   style={{ width: "100%" }}
                 >
                   <Select.Option value="">
-                    {t[lang].selectEmployee} и {t[lang].test}
+                    {t[lang].selectEmployee}
                   </Select.Option>
                 </Select>
               </div>
-            )}
-            {selectedEmployeeId && selectedTestId && availableSubDepartments.length === 0 && (
-              <Alert
-                message={t[lang].assignmentInfo}
-                description="Нет назначений для выбранного сотрудника и теста"
-                type="warning"
-                showIcon
-                style={{ marginTop: 8 }}
-              />
             )}
           </div>
 
@@ -3041,6 +3291,7 @@ export const TestSession = () => {
         </div>
       </Modal>
 
+      {/* Модалка подтверждения завершения */}
       <Modal
         title={t[lang].confirmFinish}
         open={showConfirmFinish}
