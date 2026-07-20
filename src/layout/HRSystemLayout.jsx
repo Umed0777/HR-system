@@ -25,12 +25,10 @@ const { Sider, Content } = Layout;
 
 export const HRSystemLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
-
-  const location = useLocation();
+  const [openKeys, setOpenKeys] = useState([]); // <-- Добавляем состояние для openKeys
 
   const navigate = useNavigate();
-
-  // Проверка авторизации
+  const location = useLocation();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -38,127 +36,103 @@ export const HRSystemLayout = () => {
     if (!token) {
       navigate("/login");
     }
-  }, [navigate]);
+  }, []);
 
-  // Выход
+  // Определяем, какие ключи должны быть открыты на основе текущего пути
+  useEffect(() => {
+    const keys = [];
+    
+    if (
+      ["/department", "/position", "/subdepartment", "/employee"].includes(
+        location.pathname,
+      )
+    ) {
+      keys.push("administration");
+    }
+
+    if (location.pathname === "/announcement") {
+      keys.push("announcement");
+    }
+    
+    setOpenKeys(keys);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-
     localStorage.removeItem("roles");
-
     localStorage.removeItem("user");
 
-    navigate("/login", {
-      replace: true,
-    });
+    navigate("/login", { replace: true });
   };
 
-  // ============================
-  // Получаем роли пользователя
-  // ============================
-
-  const roles = JSON.parse(localStorage.getItem("roles") || "[]");
-
-  console.log("USER ROLES:", roles);
+  const roles = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("roles") || "[]");
+    } catch {
+      return [];
+    }
+  })();
 
   const menuItems = [];
-
-  // =====================================
-  // ADMIN + SUPERADMIN
-  // =====================================
 
   if (roles.includes("Admin") || roles.includes("SuperAdmin")) {
     menuItems.push(
       {
         key: "administration",
-
         icon: <DashboardOutlined />,
-
         label: "Администрирование",
-
         children: [
           {
             key: "/department",
-
             icon: <ApartmentOutlined />,
-
             label: "Управление",
           },
-
           {
             key: "/position",
-
             icon: <IdcardOutlined />,
-
             label: "Должность",
           },
-
           {
             key: "/subdepartment",
-
             icon: <ClusterOutlined />,
-
             label: "Отдел",
           },
-
           {
             key: "/employee",
-
             icon: <TeamOutlined />,
-
             label: "Сотрудники",
           },
         ],
       },
-
       {
         key: "announcement",
-
         icon: <FileTextOutlined />,
-
         label: "База знаний",
-
         children: [
           {
             key: "/announcement",
-
             icon: <ReadOutlined />,
-
             label: "Инструкции",
           },
         ],
       },
-
       {
         key: "/question",
-
         icon: <QuestionCircleOutlined />,
-
         label: "Вопросы",
       },
-
       {
         key: "/test",
-
         icon: <FormOutlined />,
-
         label: "Тесты",
       },
-
       {
         key: "/test-taking",
-
         icon: <CheckSquareOutlined />,
-
         label: "Сессии тестирования",
       },
     );
   }
-
-  // =====================================
-  // BASIC только свои страницы
-  // =====================================
 
   if (
     roles.includes("Basic") &&
@@ -168,57 +142,44 @@ export const HRSystemLayout = () => {
     menuItems.push(
       {
         key: "announcement",
-
         icon: <FileTextOutlined />,
-
         label: "База знаний",
-
         children: [
           {
             key: "/announcement",
-
             icon: <ReadOutlined />,
-
             label: "Инструкции",
           },
         ],
       },
-
       {
         key: "/question",
-
         icon: <QuestionCircleOutlined />,
-
         label: "Вопросы",
       },
-
       {
         key: "/test",
-
         icon: <FormOutlined />,
-
         label: "Тесты",
       },
-
       {
         key: "/test-taking",
-
         icon: <CheckSquareOutlined />,
-
         label: "Сессии тестирования",
       },
     );
   }
 
-  console.log("MENU:", menuItems);
+  // Обработчик изменения открытых ключей
+  const handleOpenChange = (keys) => {
+    setOpenKeys(keys);
+  };
 
   return (
     <Layout
       style={{
         minHeight: "100vh",
-
-        background:
-          "linear-gradient(135deg,#4b0000 0%,#8b0000 35%,#c1121f 70%,#ff4d4f 100%)",
+        background: "linear-gradient(135deg,#4b0000,#8b0000,#c1121f)",
       }}
     >
       <Sider
@@ -227,41 +188,27 @@ export const HRSystemLayout = () => {
         width={270}
         style={{
           margin: 15,
-
+          height: "calc(100vh - 30px)",
           borderRadius: 20,
-
           overflow: "hidden",
-
-          background: "rgba(255,255,255,.08)",
-
-          backdropFilter: "blur(20px)",
-
-          border: "1px solid rgba(255,255,255,.15)",
-
+          background: "#8b0000",
           boxShadow: "0 20px 40px rgba(0,0,0,.35)",
         }}
       >
         <div
           style={{
             height: 90,
-
             display: "flex",
-
             alignItems: "center",
-
             justifyContent: collapsed ? "center" : "space-between",
-
             padding: "0 18px",
           }}
         >
           <img
             src={active}
-            alt="logo"
             style={{
               width: 45,
-
               height: 45,
-
               borderRadius: "50%",
             }}
           />
@@ -269,13 +216,7 @@ export const HRSystemLayout = () => {
           {!collapsed && (
             <Button
               type="text"
-              icon={
-                <MenuFoldOutlined
-                  style={{
-                    color: "#fff",
-                  }}
-                />
-              }
+              icon={<MenuFoldOutlined style={{ color: "#fff" }} />}
               onClick={() => setCollapsed(true)}
             />
           )}
@@ -284,14 +225,7 @@ export const HRSystemLayout = () => {
         {collapsed && (
           <Button
             type="text"
-            icon={
-              <MenuUnfoldOutlined
-                style={{
-                  color: "#fff",
-                  marginLeft: 15
-                }}
-              />
-            }
+            icon={<MenuUnfoldOutlined style={{ color: "#fff" }} />}
             onClick={() => setCollapsed(false)}
             style={{
               margin: 15,
@@ -300,53 +234,42 @@ export const HRSystemLayout = () => {
         )}
 
         <Menu
-          className="custom-sidebar-menu"
           theme="dark"
           mode="inline"
-          selectedKeys={[location.pathname]}
           items={menuItems}
-          onClick={({ key }) => navigate(key)}
+          selectedKeys={[location.pathname]}
+          openKeys={openKeys} // <-- Используем состояние openKeys
+          onOpenChange={handleOpenChange} // <-- Добавляем обработчик
+          onClick={({ key }) => {
+            if (key.startsWith("/")) {
+              navigate(key);
+            }
+          }}
           style={{
             background: "transparent",
-
-            borderRight: "none",
+            border: "none",
           }}
         />
       </Sider>
 
       <Layout
         style={{
-          height: "100vh",
-
-          overflow: "hidden",
+          minHeight: "100vh",
         }}
       >
         <div
           style={{
             height: 75,
-
             margin: 15,
-
             borderRadius: 20,
-
             background: "rgba(255,255,255,.12)",
-
             display: "flex",
-
             alignItems: "center",
-
             justifyContent: "space-between",
-
             padding: "0 20px",
           }}
         >
-          <h2
-            style={{
-              color: "#fff",
-            }}
-          >
-            HR Management System
-          </h2>
+          <h2 style={{ color: "#fff" }}>HR Management System</h2>
 
           <Button danger icon={<UserOutlined />} onClick={handleLogout}>
             Выйти
@@ -356,13 +279,9 @@ export const HRSystemLayout = () => {
         <Content
           style={{
             margin: "0 15px 15px",
-
             borderRadius: 25,
-
             padding: 25,
-
-            background: "rgba(255,255,255,.10)",
-
+            background: "#fff",
             overflow: "auto",
           }}
         >

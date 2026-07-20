@@ -11,8 +11,7 @@ export const useFolderStore = create((set, get) => ({
   folders: [],
   loading: false,
   selectedFolder: null,
-
-  fetchFolders: async () => {
+fetchFolders: async () => {
     set({ loading: true });
     try {
       const res = await getFolders();
@@ -33,8 +32,7 @@ export const useFolderStore = create((set, get) => ({
       const res = await getFolderById(id);
       set({
         selectedFolder: res.data,
-        loading: false,
-      });
+        loading: false, });
       return res.data;
     } catch (error) {
       console.error("Ошибка получения папки:", error);
