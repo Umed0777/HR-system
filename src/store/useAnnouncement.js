@@ -13,15 +13,19 @@ export const useAnnouncementStore = create((set) => ({
   loading: false,
   error: null,
 
-  fetchAnnouncements: async () => {
+  fetchAnnouncements: async (type = null) => {
     set({ loading: true, error: null });
 
     try {
       const res = await getAnnouncement();
 
-      const result = Array.isArray(res.data)
-        ? res.data
-        : [res.data];
+      let result = Array.isArray(res.data) ? res.data : [res.data];
+
+      // ✅ ФИЛЬТРУЕМ ПО ТИПУ ЕСЛИ ПЕРЕДАН
+      if (type) {
+        result = result.filter(item => item.type === type);
+        console.log(`📊 fetchAnnouncements(${type}) - Загружено ${result.length}`);
+      }
 
       set({ announcements: result, loading: false });
 
@@ -42,30 +46,34 @@ export const useAnnouncementStore = create((set) => ({
   },
 
   addAnnouncement: async (newData) => {
-  try {
-    const res = await createAnnouncement(newData);
+    try {
+      const res = await createAnnouncement(newData);
 
-    set((state) => ({
-      announcements: [...state.announcements, res],
-    }));
-  } catch (err) {
-    console.log(err);
-  }
-},
+      set((state) => ({
+        announcements: [...state.announcements, res],
+      }));
+      return res;
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
+  },
 
   editAnnouncement: async (id, updatedData) => {
-  try {
-    const res = await updateAnnouncement(id, updatedData);
+    try {
+      const res = await updateAnnouncement(id, updatedData);
 
-    set((state) => ({
-      announcements: state.announcements.map((item) =>
-        item.id === id ? res : item
-      ),
-    }));
-  } catch (err) {
-    console.log(err);
-  }
-},
+      set((state) => ({
+        announcements: state.announcements.map((item) =>
+          item.id === id ? res : item
+        ),
+      }));
+      return res;
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
+  },
 
   removeAnnouncement: async (id) => {
     try {
@@ -78,6 +86,7 @@ export const useAnnouncementStore = create((set) => ({
       }));
     } catch (err) {
       console.log(err);
+      throw err;
     }
   },
 }));

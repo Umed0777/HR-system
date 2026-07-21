@@ -1,5 +1,4 @@
 import { Button, Layout, Menu } from "antd";
-
 import {
   ApartmentOutlined,
   CheckSquareOutlined,
@@ -14,166 +13,200 @@ import {
   UserOutlined,
   DashboardOutlined,
   FileTextOutlined,
+  VideoCameraOutlined,
+  FilePdfOutlined,
 } from "@ant-design/icons";
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-
 import active from "../assets/active.png";
 
 const { Sider, Content } = Layout;
 
 export const HRSystemLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const [openKeys, setOpenKeys] = useState([]); // <-- Добавляем состояние для openKeys
+  const [openKeys, setOpenKeys] = useState([]);
+  const [initialized, setInitialized] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Проверка авторизации
   useEffect(() => {
     const token = localStorage.getItem("token");
-
     if (!token) {
       navigate("/login");
+    } else {
+      setInitialized(true);
     }
-  }, []);
+  }, [navigate]);
 
-  // Определяем, какие ключи должны быть открыты на основе текущего пути
+  // Определяем openKeys на основе текущего пути
   useEffect(() => {
-    const keys = [];
+    if (!initialized) return;
     
-    if (
-      ["/department", "/position", "/subdepartment", "/employee"].includes(
-        location.pathname,
-      )
-    ) {
-      keys.push("administration");
+    const path = location.pathname;
+    const newOpenKeys = [];
+
+    if (["/department", "/position", "/subdepartment", "/employee"].includes(path)) {
+      newOpenKeys.push("administration");
     }
 
-    if (location.pathname === "/announcement") {
-      keys.push("announcement");
+    if (["/announcement", "/video-lessons", "/documentation"].includes(path)) {
+      newOpenKeys.push("announcement");
     }
-    
-    setOpenKeys(keys);
-  }, [location.pathname]);
+
+    setOpenKeys(newOpenKeys);
+  }, [location.pathname, initialized]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("user");
-
     navigate("/login", { replace: true });
   };
 
-  const roles = (() => {
+  const roles = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("roles") || "[]");
     } catch {
       return [];
     }
-  })();
+  }, []);
 
-  const menuItems = [];
+  // Формируем пункты меню
+  const menuItems = useMemo(() => {
+    const items = [];
 
-  if (roles.includes("Admin") || roles.includes("SuperAdmin")) {
-    menuItems.push(
-      {
-        key: "administration",
-        icon: <DashboardOutlined />,
-        label: "Администрирование",
-        children: [
-          {
-            key: "/department",
-            icon: <ApartmentOutlined />,
-            label: "Управление",
-          },
-          {
-            key: "/position",
-            icon: <IdcardOutlined />,
-            label: "Должность",
-          },
-          {
-            key: "/subdepartment",
-            icon: <ClusterOutlined />,
-            label: "Отдел",
-          },
-          {
-            key: "/employee",
-            icon: <TeamOutlined />,
-            label: "Сотрудники",
-          },
-        ],
-      },
-      {
-        key: "announcement",
-        icon: <FileTextOutlined />,
-        label: "База знаний",
-        children: [
-          {
-            key: "/announcement",
-            icon: <ReadOutlined />,
-            label: "Инструкции",
-          },
-        ],
-      },
-      {
-        key: "/question",
-        icon: <QuestionCircleOutlined />,
-        label: "Вопросы",
-      },
-      {
-        key: "/test",
-        icon: <FormOutlined />,
-        label: "Тесты",
-      },
-      {
-        key: "/test-taking",
-        icon: <CheckSquareOutlined />,
-        label: "Сессии тестирования",
-      },
-    );
-  }
+    if (roles.includes("Admin") || roles.includes("SuperAdmin")) {
+      items.push(
+        {
+          key: "administration",
+          icon: <DashboardOutlined />,
+          label: "Администрирование",
+          children: [
+            {
+              key: "/department",
+              icon: <ApartmentOutlined />,
+              label: "Управление",
+            },
+            {
+              key: "/position",
+              icon: <IdcardOutlined />,
+              label: "Должность",
+            },
+            {
+              key: "/subdepartment",
+              icon: <ClusterOutlined />,
+              label: "Отдел",
+            },
+            {
+              key: "/employee",
+              icon: <TeamOutlined />,
+              label: "Сотрудники",
+            },
+          ],
+        },
+        {
+          key: "announcement",
+          icon: <FileTextOutlined />,
+          label: "База знаний",
+          children: [
+            {
+              key: "/video-lessons",
+              icon: <VideoCameraOutlined />,
+              label: "ВидеоУрок",
+            },
+            {
+              key: "/documentation",
+              icon: <FilePdfOutlined />,
+              label: "Документация",
+            },
+          ],
+        },
+        // {
+        //   key: "/question",
+        //   icon: <QuestionCircleOutlined />,
+        //   label: "Вопросы",
+        // },
+        {
+          key: "/test",
+          icon: <FormOutlined />,
+          label: "Тесты",
+        },
+        {
+          key: "/test-taking",
+          icon: <CheckSquareOutlined />,
+          label: "Сессии тестирования",
+        },
+      );
+    }
 
-  if (
-    roles.includes("Basic") &&
-    !roles.includes("Admin") &&
-    !roles.includes("SuperAdmin")
-  ) {
-    menuItems.push(
-      {
-        key: "announcement",
-        icon: <FileTextOutlined />,
-        label: "База знаний",
-        children: [
-          {
-            key: "/announcement",
-            icon: <ReadOutlined />,
-            label: "Инструкции",
-          },
-        ],
-      },
-      {
-        key: "/question",
-        icon: <QuestionCircleOutlined />,
-        label: "Вопросы",
-      },
-      {
-        key: "/test",
-        icon: <FormOutlined />,
-        label: "Тесты",
-      },
-      {
-        key: "/test-taking",
-        icon: <CheckSquareOutlined />,
-        label: "Сессии тестирования",
-      },
-    );
-  }
+    if (roles.includes("Basic") && !roles.includes("Admin") && !roles.includes("SuperAdmin")) {
+      items.push(
+        {
+          key: "announcement",
+          icon: <FileTextOutlined />,
+          label: "База знаний",
+          children: [
+            {
+              key: "/announcement",
+              icon: <ReadOutlined />,
+              label: "Инструкции",
+            },
+             {
+              key: "/video-lessons",
+              icon: <VideoCameraOutlined />,
+              label: "ВидеоУрок",
+            },
+            {
+              key: "/documentation",
+              icon: <FilePdfOutlined />,
+              label: "Документация",
+            },
+          ],
+        },
+        // {
+        //   key: "/question",
+        //   icon: <QuestionCircleOutlined />,
+        //   label: "Вопросы",
+        // },
+        {
+          key: "/test",
+          icon: <FormOutlined />,
+          label: "Тесты",
+        },
+        {
+          key: "/test-taking",
+          icon: <CheckSquareOutlined />,
+          label: "Сессии тестирования",
+        },
+      );
+    }
+
+    return items;
+  }, [roles]);
 
   // Обработчик изменения открытых ключей
   const handleOpenChange = (keys) => {
     setOpenKeys(keys);
   };
+
+  // Обработчик клика по пункту меню
+  const handleMenuClick = ({ key }) => {
+    if (key.startsWith("/")) {
+      navigate(key);
+    }
+  };
+
+  if (!initialized) {
+    return (
+      <Layout style={{ minHeight: "100vh", background: "#4b0000" }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+          <h2 style={{ color: "#fff" }}>Загрузка...</h2>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout
@@ -188,68 +221,95 @@ export const HRSystemLayout = () => {
         width={270}
         style={{
           margin: 15,
-          height: "calc(100vh - 30px)",
+          height: "calc(100vh - 30px)", // Фиксированная высота
           borderRadius: 20,
-          overflow: "hidden",
+          overflow: "hidden", // Скрываем переполнение
           background: "#8b0000",
           boxShadow: "0 20px 40px rgba(0,0,0,.35)",
+          position: "sticky", // Делаем сайдбар sticky
+          top: 15, // Отступ сверху
+          alignSelf: "flex-start", // Выравнивание по верхнему краю
         }}
       >
+        {/* Контейнер для содержимого сайдбара */}
         <div
           style={{
-            height: 90,
+            height: "100%",
             display: "flex",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "space-between",
-            padding: "0 18px",
+            flexDirection: "column",
+            overflow: "hidden", // Скрываем переполнение
           }}
         >
-          <img
-            src={active}
+          {/* Верхняя часть с логотипом - фиксированная */}
+          <div
             style={{
-              width: 45,
-              height: 45,
-              borderRadius: "50%",
+              height: 90,
+              flexShrink: 0, // Не сжимается
+              display: "flex",
+              alignItems: "center",
+              justifyContent: collapsed ? "center" : "space-between",
+              padding: "0 18px",
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
             }}
-          />
+          >
+            <img
+              src={active}
+              style={{
+                width: 45,
+                height: 45,
+                borderRadius: "50%",
+              }}
+              alt="Logo"
+            />
 
-          {!collapsed && (
+            {!collapsed && (
+              <Button
+                type="text"
+                icon={<MenuFoldOutlined style={{ color: "#fff" }} />}
+                onClick={() => setCollapsed(true)}
+              />
+            )}
+          </div>
+
+          {collapsed && (
             <Button
               type="text"
-              icon={<MenuFoldOutlined style={{ color: "#fff" }} />}
-              onClick={() => setCollapsed(true)}
+              icon={<MenuUnfoldOutlined style={{ color: "#fff" }} />}
+              onClick={() => setCollapsed(false)}
+              style={{
+                margin: 10,
+                position: 'relative',
+                left: 15,
+                flexShrink: 0,
+              }}
             />
           )}
-        </div>
 
-        {collapsed && (
-          <Button
-            type="text"
-            icon={<MenuUnfoldOutlined style={{ color: "#fff" }} />}
-            onClick={() => setCollapsed(false)}
+          {/* Меню - скроллится внутри */}
+          <div
             style={{
-              margin: 15,
+              flex: 1,
+              overflowY: "auto", // Только меню скроллится
+              overflowX: "hidden",
+              paddingBottom: 20,
             }}
-          />
-        )}
-
-        <Menu
-          theme="dark"
-          mode="inline"
-          items={menuItems}
-          selectedKeys={[location.pathname]}
-          openKeys={openKeys} // <-- Используем состояние openKeys
-          onOpenChange={handleOpenChange} // <-- Добавляем обработчик
-          onClick={({ key }) => {
-            if (key.startsWith("/")) {
-              navigate(key);
-            }
-          }}
-          style={{
-            background: "transparent",
-            border: "none",
-          }}
-        />
+          >
+            <Menu
+              theme="dark"
+              mode="inline"
+              items={menuItems}
+              selectedKeys={[location.pathname]}
+              openKeys={openKeys}
+              onOpenChange={handleOpenChange}
+              onClick={handleMenuClick}
+              style={{
+                background: "transparent",
+                border: "none",
+                height: "100%",
+              }}
+            />
+          </div>
+        </div>
       </Sider>
 
       <Layout
@@ -283,6 +343,7 @@ export const HRSystemLayout = () => {
             padding: 25,
             background: "#fff",
             overflow: "auto",
+            minHeight: "calc(100vh - 120px)", // Минимальная высота
           }}
         >
           <Outlet />

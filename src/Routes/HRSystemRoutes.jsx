@@ -13,7 +13,8 @@ import { Answer } from "../pages/Answer";
 import { TestSession } from "../pages/TestSession";
 import { EmployeeDashboard } from "../pages/EmployeeDashboard";
 import { EmployeeSelector } from "../pages/EmployeeSelector";
-
+import { VideoLesson } from "../pages/VideoLesson";
+import { Documentation } from "../pages/Documentation";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 
@@ -52,6 +53,10 @@ export const HRSystemRoutes = () => {
         <Route path="test" element={<TestManager />} />
         <Route path="test-taking" element={<TestSession />} />
         <Route path="subdepartment" element={<Subdepartment />} />
+
+             {/* 👇 НОВЫЕ МАРШРУТЫ */}
+        <Route path="video-lessons" element={<VideoLesson />} />
+        <Route path="documentation" element={<Documentation />} />
       </Route>
 
       {/* PUBLIC EXTRA */}
