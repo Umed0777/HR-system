@@ -1,6 +1,7 @@
-// HRSystemRoutes.jsx
+// Routes/HRSystemRoutes.jsx
 import { Route, Routes, Navigate } from "react-router-dom";
 import { HRSystemLayout } from "../layout/HRSystemLayout";
+import { useState } from "react";
 
 import { Announcement } from "../pages/Announcement";
 import { Departament } from "../pages/Departament";
@@ -25,6 +26,25 @@ const PrivateRoute = ({ children }) => {
 };
 
 export const HRSystemRoutes = () => {
+  // ===== СОСТОЯНИЕ ДЛЯ ТЕСТА =====
+  const [testData, setTestData] = useState(null);
+  const [showTestSession, setShowTestSession] = useState(false);
+
+  const handleStartTest = (data) => {
+    setTestData(data);
+    setShowTestSession(true);
+  };
+
+  const handleCloseTestSession = () => {
+    setShowTestSession(false);
+    setTestData(null);
+  };
+
+  // ===== ЕСЛИ ТЕСТ АКТИВЕН - ПОКАЗЫВАЕМ ЕГО ПОВЕРХ ВСЕГО =====
+  if (showTestSession) {
+    return <TestSession testData={testData} onClose={handleCloseTestSession} />;
+  }
+
   return (
     <Routes>
       {/* PUBLIC */}
@@ -40,21 +60,21 @@ export const HRSystemRoutes = () => {
           </PrivateRoute>
         }
       >
-        {/* DEFAULT PAGE */}
-        <Route index element={<Announcement />} />
-
-        {/* CHILD ROUTES (БЕЗ "/") */}
         <Route path="announcement" element={<Announcement />} />
         <Route path="reply" element={<Answer />} />
         <Route path="department" element={<Departament />} />
         <Route path="position" element={<Position />} />
         <Route path="employee" element={<Employee />} />
         <Route path="question" element={<Question />} />
-        <Route path="test" element={<TestManager />} />
+        
+        {/* ===== ПЕРЕДАЕМ onStartTest В TestManager ===== */}
+        <Route 
+          path="test" 
+          element={<TestManager onStartTest={handleStartTest} />} 
+        />
+        
         <Route path="test-taking" element={<TestSession />} />
         <Route path="subdepartment" element={<Subdepartment />} />
-
-             {/* 👇 НОВЫЕ МАРШРУТЫ */}
         <Route path="video-lessons" element={<VideoLesson />} />
         <Route path="documentation" element={<Documentation />} />
       </Route>

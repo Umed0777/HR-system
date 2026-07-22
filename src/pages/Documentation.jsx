@@ -96,20 +96,6 @@ export const Documentation = () => {
     loadData();
   }, []);
 
-  // В VideoLesson.jsx и Documentation.jsx добавьте логирование
-useEffect(() => {
-  const loadData = async () => {
-    console.log("🔄 Загрузка данных...");
-    await fetchSubDepartments();
-    await fetchEmployee();
-    console.log("✅ Данные загружены");
-  };
-  loadData();
-}, []);
-
-// И после загрузки проверьте store
-console.log("📦 documents:", documents);
-
   const getFileType = (filePath) => {
     if (!filePath || typeof filePath !== "string") return "document";
     if (/\.(pdf)$/i.test(filePath)) return "pdf";
@@ -234,12 +220,11 @@ console.log("📦 documents:", documents);
     document.body.removeChild(link);
   };
 
-  // Открытие модалки
   const openModal = (item = null) => {
     console.log("📝 Documentation - openModal:", item ? "Редактирование" : "Создание");
-    
+
     setEditingItem(item);
-    
+
     if (item) {
       form.setFieldsValue({
         title: item.title,
@@ -272,34 +257,41 @@ console.log("📦 documents:", documents);
     setFileList([]);
   };
 
-  // Сохранение
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
       console.log("📝 Documentation - handleSave, values:", values);
 
+      // ✅ Исправлено: формируем payload без folderId
+      // Store сам добавит folderId
       const payload = {
         title: values.title || "",
         content: values.content || "",
         subDepartmentId: values.subDepartmentId ?? null,
         employeeId: values.employeeId ?? null,
-        files: fileList.filter((f) => f.originFileObj).map((f) => f.originFileObj),
+        // folderId НЕ УКАЗЫВАЕМ - Store сам найдет папку "Документация"
+        files: fileList
+          .filter((f) => f.originFileObj)
+          .map((f) => f.originFileObj),
       };
 
       console.log("📤 Documentation - Отправляем данные:", payload);
 
       setPublishing(true);
+      
+      let response;
       if (editingItem) {
-        await editDocument(editingItem.id, payload);
+        response = await editDocument(editingItem.id, payload);
         message.success("Документ обновлен!");
       } else {
-        const response = await addDocument(payload);
+        response = await addDocument(payload);
         if (response?.id) {
           setShowConfetti(true);
           setTimeout(() => setShowConfetti(false), 3000);
           message.success("Документ опубликован!");
         }
       }
+      
       await fetchDocuments();
       closeModal();
     } catch (err) {
@@ -340,7 +332,7 @@ console.log("📦 documents:", documents);
 
   if (loading) {
     return (
-      <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto", height: 'auto' }}>
+      <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto", height: "auto" }}>
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} active avatar paragraph={{ rows: 3 }} style={{ marginBottom: 20 }} />
         ))}
@@ -457,13 +449,13 @@ console.log("📦 documents:", documents);
                           {item.title}
                         </Title>
                         <Flex gap={8} style={{ marginTop: 8, flexWrap: "wrap" }}>
+                          <Tag color="orange">{getSubDepartmentName(item.subDepartmentId)}</Tag>
                           <Tag icon={<UserOutlined />} color="blue">
                             {getEmployeeName(item.employeeId)}
                           </Tag>
                           <Tag icon={<CalendarOutlined />} color="green">
                             {formatDate(item.createdAt)}
                           </Tag>
-                          <Tag color="orange">{getSubDepartmentName(item.subDepartmentId)}</Tag>
                         </Flex>
                       </div>
 

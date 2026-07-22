@@ -1,5 +1,6 @@
 // src/store/useFolder.js
 import { create } from "zustand";
+
 import {
   getFolders,
   getFolderById,
@@ -9,108 +10,234 @@ import {
 } from "../services/api.service.folder";
 
 export const useFolderStore = create((set, get) => ({
+  // =========================
+  // STATE
+  // =========================
+
   folders: [],
   loading: false,
+  error: null,
   selectedFolder: null,
 
+  // =========================
+  // GET ALL FOLDERS
+  // =========================
+
   fetchFolders: async () => {
-    set({ loading: true });
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      const res = await getFolders();
+      const response = await getFolders();
+
+      console.log("📁 Полный ответ Folder API:", response);
+
+      // Backend:
+      // {
+      //   statusCode: 0,
+      //   data: [...]
+      // }
+
+      const folders = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response)
+        ? response
+        : [];
+
+      console.log("📁 Полученные папки:", folders);
+
       set({
-        folders: res.data || [],
+        folders,
         loading: false,
       });
-      return res.data || [];
+
+      return folders;
     } catch (error) {
-      console.error("Ошибка загрузки папок:", error);
-      set({ loading: false });
+      console.error("❌ Ошибка загрузки папок:", error);
+
+      set({
+        loading: false,
+        error: error.message || "Ошибка загрузки папок",
+      });
+
       throw error;
     }
   },
 
+  // =========================
+  // GET FOLDER BY ID
+  // =========================
+
   getFolderById: async (id) => {
-    set({ loading: true });
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      const res = await getFolderById(id);
+      const response = await getFolderById(id);
+
+      console.log(`📁 Папка ${id}:`, response);
+
+      const folder = response?.data || response;
+
       set({
-        selectedFolder: res.data,
+        selectedFolder: folder,
         loading: false,
       });
-      return res.data;
+
+      return folder;
     } catch (error) {
-      console.error("Ошибка получения папки:", error);
-      set({ loading: false });
+      console.error("❌ Ошибка получения папки:", error);
+
+      set({
+        loading: false,
+        error: error.message || "Ошибка получения папки",
+      });
+
       throw error;
     }
   },
+
+  // =========================
+  // CREATE FOLDER
+  // =========================
 
   addFolder: async (data) => {
     try {
-      console.log("📁 addFolder - Создание папки:", data);
-      const res = await createFolder(data);
-      console.log("✅ addFolder - Папка создана:", res.data);
+      console.log("📁 Создание папки:", data);
+
+      const response = await createFolder(data);
+
+      console.log("✅ Ответ создания папки:", response);
+
+      const newFolder = response?.data || response;
+
       set((state) => ({
-        folders: [...state.folders, res.data],
+        folders: [...state.folders, newFolder],
       }));
-      return res.data;
+
+      return newFolder;
     } catch (error) {
       console.error("❌ Ошибка создания папки:", error);
       throw error;
     }
   },
 
+  // =========================
+  // UPDATE FOLDER
+  // =========================
+
   updateFolder: async (id, data) => {
     try {
-      console.log("✏️ updateFolder - Обновление папки:", id, data);
-      const res = await updateFolder(id, data);
-      console.log("✅ updateFolder - Папка обновлена:", res.data);
+      console.log("✏️ Обновление папки:", id, data);
+
+      const response = await updateFolder(id, data);
+
+      console.log("✅ Ответ обновления:", response);
+
+      const updatedFolder = response?.data || response;
+
       set((state) => ({
-        folders: state.folders.map((f) =>
-          f.id === id ? res.data : f
+        folders: state.folders.map((folder) =>
+          Number(folder.id) === Number(id)
+            ? updatedFolder
+            : folder
         ),
       }));
-      return res.data;
+
+      return updatedFolder;
     } catch (error) {
       console.error("❌ Ошибка обновления папки:", error);
       throw error;
     }
   },
 
+  // =========================
+  // DELETE FOLDER
+  // =========================
+
   deleteFolder: async (id) => {
     try {
-      console.log("🗑️ deleteFolder - Удаление папки:", id);
+      console.log("🗑️ Удаление папки:", id);
+
       await deleteFolder(id);
-      console.log("✅ deleteFolder - Папка удалена");
+
       set((state) => ({
-        folders: state.folders.filter((f) => f.id !== id),
+        folders: state.folders.filter(
+          (folder) => Number(folder.id) !== Number(id)
+        ),
       }));
+
+      console.log("✅ Папка удалена");
     } catch (error) {
       console.error("❌ Ошибка удаления папки:", error);
       throw error;
     }
   },
 
+  // =========================
+  // GET FOLDER FROM STORE
+  // =========================
+
   getFolderFromStore: (id) => {
     const state = get();
-    return state.folders.find(f => f.id === id) || null;
+
+    return (
+      state.folders.find(
+        (folder) => Number(folder.id) === Number(id)
+      ) || null
+    );
   },
 
-  // Получаем папки для видеоуроков
-  getVideoFolders: () => {
+  // =========================
+  // GET VIDEO FOLDER
+  // =========================
+
+  getVideoFolder: () => {
     const state = get();
-    return state.folders.filter(f => f.type === "video" || f.name === "ВидеоУрок");
+
+    return (
+      state.folders.find(
+        (folder) =>
+          folder.name?.toLowerCase() === "видеоурок" ||
+          folder.name?.toLowerCase() === "видеоуроки"
+      ) || null
+    );
   },
 
-  // Получаем папки для документации
-  getDocFolders: () => {
+  // =========================
+  // GET DOCUMENT FOLDER
+  // =========================
+
+  getDocumentFolder: () => {
     const state = get();
-    return state.folders.filter(f => f.type === "document" || f.name === "документация");
+
+    return (
+      state.folders.find(
+        (folder) =>
+          folder.name?.toLowerCase() === "документация" ||
+          folder.name?.toLowerCase() === "документы"
+      ) || null
+    );
   },
 
-  // Получаем все папки с типом
-  getFoldersByType: (type) => {
+  // =========================
+  // GET FOLDER BY NAME
+  // =========================
+
+  getFolderByName: (name) => {
     const state = get();
-    return state.folders.filter(f => f.type === type);
+
+    if (!name) return null;
+
+    return (
+      state.folders.find(
+        (folder) =>
+          folder.name?.toLowerCase() === name.toLowerCase()
+      ) || null
+    );
   },
 }));

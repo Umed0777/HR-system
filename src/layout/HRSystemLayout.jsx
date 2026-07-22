@@ -136,7 +136,7 @@ export const HRSystemLayout = () => {
         {
           key: "/test-taking",
           icon: <CheckSquareOutlined />,
-          label: "Сессии тестирования",
+          label: "Резултаты",
         },
       );
     }
@@ -178,7 +178,7 @@ export const HRSystemLayout = () => {
         {
           key: "/test-taking",
           icon: <CheckSquareOutlined />,
-          label: "Сессии тестирования",
+          label: "Резултаты",
         },
       );
     }
