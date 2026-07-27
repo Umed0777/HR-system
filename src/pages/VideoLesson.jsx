@@ -1,4 +1,5 @@
 // src/pages/VideoLesson.jsx
+
 import { useEffect, useState } from "react";
 import { useVideoLessonStore } from "../store/useVideoLesson";
 import { useSubDepartmentStore } from "../store/useSubdepartment";
@@ -20,6 +21,8 @@ import {
   Skeleton,
   Typography,
   Select,
+  Badge,
+  Popconfirm,
 } from "antd";
 import {
   PlusOutlined,
@@ -28,10 +31,13 @@ import {
   HeartOutlined,
   HeartFilled,
   CalendarOutlined,
-  VideoCameraOutlined,
   UserOutlined,
   DownloadOutlined,
   FileOutlined,
+  FilePptOutlined,
+  FolderOutlined,
+  ReloadOutlined,
+  PlayCircleOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { motion, AnimatePresence } from "framer-motion";
@@ -39,6 +45,9 @@ import Confetti from "react-confetti";
 
 const { Title, Text } = Typography;
 const BASE_URL = import.meta.env.VITE_API;
+
+// Папка "ВидеоУрок" - скрываем её из списка, так как это системная папка
+const EXCLUDED_FOLDERS = ["ВидеоУрок", "видеоурок", "Видеоурок"];
 
 const buildFullUrl = (path) => {
   if (!path) return "";
@@ -49,10 +58,16 @@ const buildFullUrl = (path) => {
 export const VideoLesson = () => {
   const {
     videoLessons,
+    allFolders,
     fetchVideoLessons,
+    fetchAllFolders,
     addVideoLesson,
     editVideoLesson,
     removeVideoLesson,
+    createNewFolder,
+    updateFolder,
+    deleteFolder,
+    moveVideoToFolder,
     loading,
     error,
   } = useVideoLessonStore();
@@ -74,30 +89,79 @@ export const VideoLesson = () => {
   const [preview, setPreview] = useState({
     open: false,
     url: "",
-    type: "video",
   });
   const [fileList, setFileList] = useState([]);
   const [likedItems, setLikedItems] = useState({});
   const [showConfetti, setShowConfetti] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [editingFolder, setEditingFolder] = useState(null);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+
   // Загрузка данных
   useEffect(() => {
     const loadData = async () => {
       console.log("🔄 VideoLesson - Загрузка данных...");
-      await fetchSubDepartments();
-      await fetchEmployee();
-      await fetchVideoLessons();
-      console.log("✅ VideoLesson - Данные загружены");
+      setLoadingFolders(true);
+      try {
+        await fetchSubDepartments();
+        await fetchEmployee();
+        await fetchAllFolders();
+        await fetchVideoLessons();
+        console.log("✅ VideoLesson - Данные загружены");
+      } catch (error) {
+        console.error("❌ Ошибка загрузки:", error);
+        message.error("Ошибка загрузки данных");
+      } finally {
+        setLoadingFolders(false);
+      }
     };
     loadData();
   }, []);
 
-  const getFileType = (filePath) => {
-    if (!filePath || typeof filePath !== "string") return "video";
-    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|wmv)$/i.test(filePath)) return "video";
-    if (/\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i.test(filePath)) return "image";
-    return "video";
+  // Безопасная проверка на undefined
+  const allVideos = Array.isArray(videoLessons) ? videoLessons : [];
+  const allFoldersList = Array.isArray(allFolders) ? allFolders : [];
+
+  // ФИЛЬТРУЕМ папки - исключаем "ВидеоУрок"
+  const filteredFolders = allFoldersList.filter(folder => {
+    const isExcluded = EXCLUDED_FOLDERS.some(excluded => 
+      folder.name?.toLowerCase() === excluded.toLowerCase()
+    );
+    return !isExcluded;
+  });
+
+  // Фильтруем видео - исключаем видео из папки "ВидеоУрок"
+  const filteredVideos = allVideos.filter(video => {
+    if (!video.folderId) return true;
+    const folder = allFoldersList.find(f => Number(f.id) === Number(video.folderId));
+    if (!folder) return true;
+    const isExcluded = EXCLUDED_FOLDERS.some(excluded => 
+      folder.name?.toLowerCase() === excluded.toLowerCase()
+    );
+    return !isExcluded;
+  });
+
+  const getFilteredVideosByFolder = () => {
+    if (!selectedFolderId) {
+      return filteredVideos;
+    }
+    return filteredVideos.filter(video => Number(video.folderId) === Number(selectedFolderId));
+  };
+
+  const displayedVideos = getFilteredVideosByFolder();
+
+  const getFolderName = (id) => {
+    if (!id) return "Без папки";
+    const folder = filteredFolders.find(f => Number(f.id) === Number(id));
+    return folder ? folder.name : "Неизвестная папка";
+  };
+
+  const getFolderCount = (folderId) => {
+    return filteredVideos.filter(video => Number(video.folderId) === Number(folderId)).length;
   };
 
   const extractPath = (file) => {
@@ -110,7 +174,7 @@ export const VideoLesson = () => {
     return "";
   };
 
-  const getFiles = (item) => {
+  const getVideoFiles = (item) => {
     if (!item) return [];
     const result = [];
     if (item.profileImagePath) result.push(item.profileImagePath);
@@ -124,7 +188,7 @@ export const VideoLesson = () => {
   };
 
   const getFileName = (filePath) => {
-    if (!filePath || typeof filePath !== "string") return "видео";
+    if (!filePath || typeof filePath !== "string") return "файл";
     const parts = filePath.split("/");
     let name = parts[parts.length - 1];
     try {
@@ -137,16 +201,70 @@ export const VideoLesson = () => {
     return name;
   };
 
-  const getFileIcon = (type) => {
-    const iconStyle = { fontSize: 48 };
-    if (type === "video") {
-      return <VideoCameraOutlined style={{ ...iconStyle, color: "#1890ff" }} />;
-    }
-    return <FileOutlined style={{ ...iconStyle, color: "#faad14" }} />;
+  // Определение типа файла
+  const getFileType = (filePath) => {
+    if (!filePath || typeof filePath !== "string") return "document";
+    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|wmv)$/i.test(filePath)) return "video";
+    if (/\.(ppt|pptx|pps|ppsx)$/i.test(filePath)) return "powerpoint";
+    if (/\.(pdf)$/i.test(filePath)) return "pdf";
+    if (/\.(doc|docx)$/i.test(filePath)) return "word";
+    if (/\.(xls|xlsx)$/i.test(filePath)) return "excel";
+    if (/\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i.test(filePath)) return "image";
+    return "document";
   };
 
+  // Иконка для файла
+  const getFileIcon = (type) => {
+    const iconStyle = { fontSize: 48 };
+    switch (type) {
+      case "video":
+        return <PlayCircleOutlined style={{ ...iconStyle, color: "#1890ff" }} />;
+      case "powerpoint":
+        return <FilePptOutlined style={{ ...iconStyle, color: "#d83b01" }} />;
+      case "pdf":
+        return <FileOutlined style={{ ...iconStyle, color: "#ee3a43" }} />;
+      case "word":
+        return <FileOutlined style={{ ...iconStyle, color: "#2b5797" }} />;
+      case "excel":
+        return <FileOutlined style={{ ...iconStyle, color: "#217346" }} />;
+      case "image":
+        return <FileOutlined style={{ ...iconStyle, color: "#52c41a" }} />;
+      default:
+        return <FileOutlined style={{ ...iconStyle, color: "#faad14" }} />;
+    }
+  };
+
+  // Название типа файла
   const getFileTypeName = (type) => {
-    return type === "video" ? "Видео" : "Файл";
+    const names = {
+      video: "Видео",
+      powerpoint: "PowerPoint",
+      pdf: "PDF",
+      word: "Word",
+      excel: "Excel",
+      image: "Изображение",
+    };
+    return names[type] || "Документ";
+  };
+
+  // Цвет фона для файла
+  const getFileBackground = (type) => {
+    switch (type) {
+      case "video":
+        return "#000";
+      case "powerpoint":
+        return "#fdf0e6";
+      case "pdf":
+        return "#fde8e8";
+      case "word":
+        return "#e8f0f8";
+      case "excel":
+        return "#e8f5ed";
+      case "image":
+        return "#f0faf0";
+      default:
+        return "#fafafa";
+    }
   };
 
   const handleFileClick = (filePath) => {
@@ -158,25 +276,9 @@ export const VideoLesson = () => {
     const type = getFileType(filePath);
 
     if (type === "video") {
-      setPreview({ open: true, url: fullUrl, type: "video" });
-    } else if (type === "image") {
-      setPreview({ open: true, url: fullUrl, type: "image" });
+      setPreview({ open: true, url: fullUrl });
     } else {
       downloadFile(fullUrl, getFileName(filePath));
-    }
-  };
-
-  const handleUploadPreview = (file) => {
-    const url = file.url || (file.originFileObj ? URL.createObjectURL(file.originFileObj) : "");
-    const isVideo = file.type?.startsWith("video") || /\.(mp4|webm|ogg)$/i.test(file.name || "");
-    const isImage = file.type?.startsWith("image") || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name || "");
-
-    if (isVideo) {
-      setPreview({ open: true, url, type: "video" });
-    } else if (isImage) {
-      setPreview({ open: true, url, type: "image" });
-    } else {
-      downloadFile(url, file.name);
     }
   };
 
@@ -194,8 +296,6 @@ export const VideoLesson = () => {
   };
 
   const openModal = (item = null) => {
-    console.log("📝 VideoLesson - openModal:", item ? "Редактирование" : "Создание");
-
     setEditingItem(item);
 
     if (item) {
@@ -204,8 +304,9 @@ export const VideoLesson = () => {
         content: item.content,
         subDepartmentId: item.subDepartmentId ?? null,
         employeeId: item.employeeId ?? null,
+        folderId: item.folderId ?? null,
       });
-      const files = getFiles(item);
+      const files = getVideoFiles(item);
       setFileList(
         files.map((path, i) => ({
           uid: `existing-${i}`,
@@ -217,13 +318,15 @@ export const VideoLesson = () => {
       );
     } else {
       form.resetFields();
+      if (selectedFolderId) {
+        form.setFieldsValue({ folderId: selectedFolderId });
+      }
       setFileList([]);
     }
     setOpen(true);
   };
 
   const closeModal = () => {
-    console.log("❌ VideoLesson - Закрытие модалки");
     setOpen(false);
     setEditingItem(null);
     form.resetFields();
@@ -233,22 +336,17 @@ export const VideoLesson = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      console.log("📝 VideoLesson - handleSave, values:", values);
 
-      // ✅ Исправлено: формируем payload без folderId
-      // Store сам добавит folderId
       const payload = {
         title: values.title || "",
         content: values.content || "",
         subDepartmentId: values.subDepartmentId ?? null,
         employeeId: values.employeeId ?? null,
-        // folderId НЕ УКАЗЫВАЕМ - Store сам найдет папку "ВидеоУрок"
+        folderId: values.folderId ?? null,
         files: fileList
           .filter((f) => f.originFileObj)
           .map((f) => f.originFileObj),
       };
-
-      console.log("📤 VideoLesson - Отправляем payload:", payload);
 
       setPublishing(true);
       
@@ -258,7 +356,6 @@ export const VideoLesson = () => {
         message.success("Видеоурок обновлен!");
       } else {
         response = await addVideoLesson(payload);
-        console.log("✅ Ответ от сервера:", response);
         if (response?.id) {
           setShowConfetti(true);
           setTimeout(() => setShowConfetti(false), 3000);
@@ -267,6 +364,7 @@ export const VideoLesson = () => {
       }
       
       await fetchVideoLessons();
+      await fetchAllFolders();
       closeModal();
     } catch (err) {
       console.error("❌ VideoLesson - Ошибка:", err);
@@ -284,12 +382,12 @@ export const VideoLesson = () => {
 
   const getSubDepartmentName = (id) => {
     if (!id) return "Без отдела";
-    return subdepartments.find((s) => Number(s.id) === Number(id))?.name || "Без отдела";
+    return subdepartments?.find((s) => Number(s.id) === Number(id))?.name || "Без отдела";
   };
 
   const getEmployeeName = (id) => {
     if (!id) return "Неизвестный";
-    const emp = employees.find((e) => Number(e.id) === Number(id));
+    const emp = employees?.find((e) => Number(e.id) === Number(id));
     return emp
       ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email || "Неизвестный"
       : "Неизвестный";
@@ -301,6 +399,104 @@ export const VideoLesson = () => {
       return dayjs(dateString).format("DD.MM.YYYY HH:mm");
     } catch (_) {
       return "Дата не указана";
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!folderName.trim()) {
+      message.error("Введите название папки");
+      return;
+    }
+    
+    // Запрещаем создание папки "ВидеоУрок"
+    if (EXCLUDED_FOLDERS.some(excluded => folderName.trim().toLowerCase() === excluded.toLowerCase())) {
+      message.error("Название папки занято");
+      return;
+    }
+    
+    try {
+      await createNewFolder({
+        name: folderName.trim(),
+      });
+      setFolderName("");
+      setShowFolderModal(false);
+      message.success(`Папка "${folderName}" создана!`);
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка создания папки");
+      console.error(error);
+    }
+  };
+
+  const handleEditFolder = async () => {
+    if (!folderName.trim()) {
+      message.error("Введите название папки");
+      return;
+    }
+    
+    if (EXCLUDED_FOLDERS.some(excluded => folderName.trim().toLowerCase() === excluded.toLowerCase())) {
+      message.error("Название папки занято");
+      return;
+    }
+    
+    try {
+      await updateFolder(editingFolder.id, {
+        name: folderName.trim(),
+      });
+      setFolderName("");
+      setEditingFolder(null);
+      setShowFolderModal(false);
+      message.success(`Папка переименована!`);
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка обновления папки");
+      console.error(error);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    try {
+      const folderName = getFolderName(folderId);
+      const count = getFolderCount(folderId);
+      
+      await deleteFolder(folderId);
+      
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(null);
+      }
+      
+      message.success(`Папка "${folderName}" и ${count} видео удалены`);
+      await fetchVideoLessons();
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка удаления папки");
+      console.error(error);
+    }
+  };
+
+  const handleFolderSelect = (folderId) => {
+    setSelectedFolderId(selectedFolderId === folderId ? null : folderId);
+  };
+
+  const handleRemoveFromFolder = async (videoId) => {
+    try {
+      await moveVideoToFolder(videoId, null);
+      message.success("Видео удалено из папки");
+      await fetchVideoLessons();
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка удаления из папки");
+      console.error(error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await fetchAllFolders();
+      await fetchVideoLessons();
+      message.success("Данные обновлены");
+    } catch (error) {
+      message.error("Ошибка обновления");
     }
   };
 
@@ -318,7 +514,7 @@ export const VideoLesson = () => {
     return (
       <div style={{ padding: 50, textAlign: "center" }}>
         <Empty description={<span style={{ color: "#ff4d4f" }}>Ошибка: {error}</span>} />
-        <Button type="primary" onClick={fetchVideoLessons} style={{ marginTop: 20, background: "#1890ff" }}>
+        <Button type="primary" onClick={handleRefresh} style={{ marginTop: 20, background: "#1890ff" }}>
           Попробовать снова
         </Button>
       </div>
@@ -337,45 +533,169 @@ export const VideoLesson = () => {
         />
       )}
 
-      <Flex justify="space-between" align="center" style={{ marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
-        <div>
-          <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>
-            Видеоуроки
-          </Title>
-          <Text type="secondary">
-            {videoLessons.length} видеоуроков
-          </Text>
-        </div>
-        <Button
-          type="primary"
-          style={{
-            background: "linear-gradient(135deg, #1890ff, #40a9ff)",
-            border: "none",
-            boxShadow: "0 4px 12px rgba(24,144,255,0.3)",
-            fontWeight: "bold",
-            height: 40,
-            padding: "0 24px",
-            borderRadius: 20,
-          }}
-          onClick={() => openModal()}
-        >
-          Добавить видеоурок
-        </Button>
-      </Flex>
+      {/* Шапка */}
+      <div style={{ 
+        background: "#fafafa", 
+        borderRadius: 12, 
+        padding: "20px 24px",
+        marginBottom: 24,
+        border: "1px solid #f0f0f0"
+      }}>
+        <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
+          <div>
+            <Flex align="center" gap={12}>
+              <Title level={4} style={{ margin: 0, color: "#1a1a1a" }}>
+                🎬 Видеоуроки
+              </Title>
+              {/* <Button 
+                type="text" 
+                icon={<ReloadOutlined />} 
+                onClick={handleRefresh}
+                loading={loadingFolders}
+                size="small"
+              /> */}
+            </Flex>
+            <Text type="secondary" style={{ fontSize: 14 }}>
+              {selectedFolderId 
+                ? `${getFolderCount(selectedFolderId)} файлов в папке "${getFolderName(selectedFolderId)}"`
+                : `${displayedVideos.length} файлов всего`
+              }
+            </Text>
+          </div>
+          <Space size="middle" wrap>
+            <Button 
+              icon={<FolderOutlined />}
+              onClick={() => {
+                setEditingFolder(null);
+                setFolderName("");
+                setShowFolderModal(true);
+              }}
+            >
+              Создать папку
+            </Button>
+            <Button 
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openModal()}
+              style={{ 
+                background: "linear-gradient(135deg, #1890ff, #40a9ff)",
+                border: "none",
+                fontWeight: "bold"
+              }}
+            >
+              Добавить файл
+            </Button>
+          </Space>
+        </Flex>
+      </div>
 
+      {/* Папки */}
+      {filteredFolders.length > 0 ? (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 12, fontSize: 13, color: "#999" }}>
+            Все папок: {filteredFolders.length}
+          </div>
+          <Flex wrap="wrap" gap={12}>
+            {filteredFolders.map(folder => {
+              const isSelected = Number(selectedFolderId) === Number(folder.id);
+              const count = getFolderCount(folder.id);
+              
+              return (
+                <Tag
+                  key={folder.id}
+                  closable
+                  onClose={(e) => {
+                    e.preventDefault();
+                    Modal.confirm({
+                      title: `Удалить папку "${folder.name}"?`,
+                      content: `В папке ${count} файлов. Они тоже будут удалены.`,
+                      okText: "Да, удалить",
+                      cancelText: "Отмена",
+                      okButtonProps: { danger: true },
+                      onOk: () => handleDeleteFolder(folder.id),
+                    });
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 14,
+                    borderRadius: 20,
+                    cursor: "pointer",
+                    background: isSelected ? "#1890ff" : "white",
+                    color: isSelected ? "white" : "#666",
+                    border: isSelected ? "none" : "1px solid #d9d9d9",
+                    transition: "all 0.3s",
+                    fontWeight: isSelected ? "bold" : "normal",
+                  }}
+                  onClick={() => handleFolderSelect(folder.id)}
+                >
+                  <FolderOutlined style={{ marginRight: 6 }} />
+                  {folder.name}
+                  <Badge 
+                    count={count} 
+                    style={{ 
+                      marginLeft: 8,
+                      background: isSelected ? "rgba(255,255,255,0.3)" : "#f0f0f0",
+                      color: isSelected ? "white" : "#666",
+                    }}
+                  />
+                  <EditOutlined 
+                    style={{ 
+                      marginLeft: 8, 
+                      fontSize: 12,
+                      opacity: 0.7
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingFolder(folder);
+                      setFolderName(folder.name);
+                      setShowFolderModal(true);
+                    }}
+                  />
+                </Tag>
+              );
+            })}
+          </Flex>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 24, padding: "20px", background: "#fafafa", borderRadius: 12, textAlign: "center" }}>
+          <Text type="secondary">Нет созданных папок</Text>
+          <br />
+          <Button 
+            type="dashed" 
+            icon={<FolderOutlined />}
+            onClick={() => {
+              setEditingFolder(null);
+              setFolderName("");
+              setShowFolderModal(true);
+            }}
+            style={{ marginTop: 8 }}
+          >
+            Создать первую папку
+          </Button>
+        </div>
+      )}
+
+      {/* Файлы */}
       <AnimatePresence>
-        {videoLessons.length === 0 ? (
+        {displayedVideos.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Empty description="Нет видеоуроков" style={{ marginTop: 100 }}>
+            <Empty 
+              description={
+                selectedFolderId 
+                  ? `В папке "${getFolderName(selectedFolderId)}" нет файлов`
+                  : "Нет файлов. Создайте первый файл!"
+              } 
+              style={{ marginTop: 60 }}
+            >
               <Button type="primary" onClick={() => openModal()} style={{ background: "#1890ff" }}>
-                Создать видеоурок
+                {selectedFolderId ? "Добавить файл в папку" : "Создать первый файл"}
               </Button>
             </Empty>
           </motion.div>
         ) : (
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            {videoLessons.map((item) => {
-              const files = getFiles(item);
+            {displayedVideos.map((item) => {
+              const videoFiles = getVideoFiles(item);
 
               return (
                 <motion.div key={item.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -397,31 +717,56 @@ export const VideoLesson = () => {
                       <Tooltip title="Редактировать" key="edit">
                         <EditOutlined style={{ fontSize: 18 }} onClick={() => openModal(item)} />
                       </Tooltip>,
+                      <Tooltip title="Удалить из папки" key="remove">
+                        <span 
+                          onClick={() => {
+                            if (item.folderId) {
+                              Modal.confirm({
+                                title: "Удалить файл из папки?",
+                                content: "Файл останется в общем списке",
+                                okText: "Да",
+                                cancelText: "Отмена",
+                                onOk: () => handleRemoveFromFolder(item.id),
+                              });
+                            } else {
+                              message.info("Файл не привязан к папке");
+                            }
+                          }}
+                        >
+                          <FolderOutlined style={{ fontSize: 18, color: item.folderId ? "#faad14" : "#d9d9d9" }} />
+                        </span>
+                      </Tooltip>,
                       <Tooltip title="Удалить" key="delete">
-                        <DeleteOutlined
-                          style={{ fontSize: 18, color: "#ff4d4f" }}
-                          onClick={() =>
-                            Modal.confirm({
-                              title: "Удалить видеоурок?",
-                              content: "Вы уверены?",
-                              okText: "Да",
-                              cancelText: "Нет",
-                              onOk: async () => {
-                                await removeVideoLesson(item.id);
-                                await fetchVideoLessons();
-                                message.success("Видеоурок удален");
-                              },
-                            })
-                          }
-                        />
+                        <Popconfirm
+                          title="Удалить файл?"
+                          description="Это действие нельзя отменить"
+                          okText="Да"
+                          cancelText="Отмена"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={async () => {
+                            await removeVideoLesson(item.id);
+                            await fetchVideoLessons();
+                            await fetchAllFolders();
+                            message.success("Файл удален");
+                          }}
+                        >
+                          <DeleteOutlined style={{ fontSize: 18, color: "#ff4d4f" }} />
+                        </Popconfirm>
                       </Tooltip>,
                     ]}
                   >
                     <Flex vertical gap={12}>
                       <div>
-                        <Title level={4} style={{ margin: 0 }}>
-                          {item.title}
-                        </Title>
+                        <Flex justify="space-between" align="start" wrap="wrap" gap={8}>
+                          <Title level={4} style={{ margin: 0 }}>
+                            {item.title}
+                          </Title>
+                          {item.folderId && (
+                            <Tag icon={<FolderOutlined />} color="blue" style={{ fontSize: 12 }}>
+                              {getFolderName(item.folderId)}
+                            </Tag>
+                          )}
+                        </Flex>
                         <Flex gap={8} style={{ marginTop: 8, flexWrap: "wrap" }}>
                           <Tag color="orange">{getSubDepartmentName(item.subDepartmentId)}</Tag>
                           <Tag icon={<UserOutlined />} color="blue">
@@ -435,11 +780,11 @@ export const VideoLesson = () => {
 
                       <Text style={{ fontSize: 15 }}>{item.content}</Text>
 
-                      {files.length > 0 && (
+                      {videoFiles.length > 0 && (
                         <div>
                           <Divider style={{ margin: "12px 0" }} />
                           <Flex wrap gap={16}>
-                            {files.map((filePath, index) => {
+                            {videoFiles.map((filePath, index) => {
                               const type = getFileType(filePath);
                               const fileName = getFileName(filePath);
                               const fullUrl = buildFullUrl(filePath);
@@ -451,7 +796,7 @@ export const VideoLesson = () => {
                                   size="small"
                                   hoverable
                                   style={{
-                                    width: 250,
+                                    width: 200,
                                     cursor: "pointer",
                                     border: "1px solid #f0f0f0",
                                   }}
@@ -459,60 +804,30 @@ export const VideoLesson = () => {
                                   onClick={() => handleFileClick(filePath)}
                                 >
                                   <Flex vertical align="center" gap={8}>
-                                    {type === "video" ? (
-                                      <div
-                                        style={{
-                                          width: "100%",
-                                          height: 160,
-                                          background: "#000",
-                                          borderRadius: 8,
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          gap: 8,
-                                          position: "relative",
-                                        }}
-                                      >
-                                        <VideoCameraOutlined style={{ fontSize: 64, color: "#fff" }} />
-                                        <div
-                                          style={{
-                                            position: "absolute",
-                                            bottom: 10,
-                                            right: 10,
-                                            background: "rgba(0,0,0,0.7)",
-                                            color: "#fff",
-                                            padding: "2px 8px",
-                                            borderRadius: 4,
-                                            fontSize: 12,
-                                          }}
-                                        >
-                                          ▶ Видео
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div
-                                        style={{
-                                          width: "100%",
-                                          height: 160,
-                                          background: "#fafafa",
-                                          borderRadius: 8,
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          gap: 8,
-                                        }}
-                                      >
-                                        {getFileIcon(type)}
-                                        <span style={{ fontSize: 12, color: "#666" }}>
-                                          {getFileTypeName(type)}
-                                        </span>
-                                      </div>
-                                    )}
+                                    <div
+                                      style={{
+                                        width: "100%",
+                                        height: 140,
+                                        background: getFileBackground(type),
+                                        borderRadius: 8,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: 8,
+                                      }}
+                                    >
+                                      {getFileIcon(type)}
+                                      <span style={{ 
+                                        fontSize: 12, 
+                                        color: type === "video" ? "#fff" : "#666" 
+                                      }}>
+                                        {getFileTypeName(type)}
+                                      </span>
+                                    </div>
 
                                     <Tooltip title={fileName}>
-                                      <Text ellipsis style={{ fontSize: 13, maxWidth: 220, textAlign: "center" }}>
+                                      <Text ellipsis style={{ fontSize: 13, maxWidth: 180, textAlign: "center" }}>
                                         {fileName}
                                       </Text>
                                     </Tooltip>
@@ -551,10 +866,13 @@ export const VideoLesson = () => {
 
       {/* Модалка создания/редактирования */}
       <Modal
-        title={editingItem ? "Редактировать видеоурок" : "Новый видеоурок"}
+        title={editingItem ? "Редактировать файл" : "Новый файл"}
         open={open}
         onCancel={closeModal}
         footer={[
+          <Button key="cancel" onClick={closeModal}>
+            Отмена
+          </Button>,
           <Button
             key="submit"
             type="primary"
@@ -566,9 +884,6 @@ export const VideoLesson = () => {
             }}
           >
             {editingItem ? "Сохранить" : "Опубликовать"}
-          </Button>,
-          <Button key="cancel" onClick={closeModal}>
-            Отмена
           </Button>,
         ]}
         width={720}
@@ -586,7 +901,20 @@ export const VideoLesson = () => {
             label="Описание"
             rules={[{ required: true, message: "Введите описание" }]}
           >
-            <Input.TextArea placeholder="Описание видео..." autoSize={{ minRows: 4 }} size="large" />
+            <Input.TextArea placeholder="Описание файла..." autoSize={{ minRows: 4 }} size="large" />
+          </Form.Item>
+          <Form.Item name="folderId" label="Папка">
+            <Select
+              placeholder="Выберите папку"
+              allowClear
+              options={[
+                { label: "Без папки", value: null },
+                ...filteredFolders.map((f) => ({
+                  label: `${f.name} (${getFolderCount(f.id)})`,
+                  value: f.id,
+                }))
+              ]}
+            />
           </Form.Item>
           <Form.Item name="subDepartmentId" label="Отдел">
             <Select
@@ -601,7 +929,7 @@ export const VideoLesson = () => {
           </Form.Item>
           <Form.Item name="employeeId" label="Сотрудник">
             <Select
-              placeholder="Выберите Сотрудник"
+              placeholder="Выберите сотрудника"
               allowClear
               loading={employeeLoading}
               options={(employees || []).map((emp) => ({
@@ -610,32 +938,82 @@ export const VideoLesson = () => {
               }))}
             />
           </Form.Item>
-          <Form.Item label="Видеофайлы">
+          <Form.Item label="Файлы">
             <Upload
               multiple
               listType="picture-card"
               beforeUpload={() => false}
               fileList={fileList}
               onChange={(info) => setFileList(info.fileList)}
-              onPreview={handleUploadPreview}
-              accept="video/*,image/*"
+              onPreview={(file) => {
+                const url = file.url || (file.originFileObj ? URL.createObjectURL(file.originFileObj) : "");
+                const type = file.type || "";
+                if (type.startsWith("video/")) {
+                  setPreview({ open: true, url });
+                } else {
+                  downloadFile(url, file.name);
+                }
+              }}
+              accept="video/*,.ppt,.pptx,.pps,.ppsx,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
             >
               <div>
                 <PlusOutlined />
-                <div style={{ marginTop: 8 }}>Загрузить видео</div>
+                <div style={{ marginTop: 8 }}>Загрузить файл</div>
               </div>
             </Upload>
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Превью */}
+      {/* Модалка создания/редактирования папки */}
+      <Modal
+        title={editingFolder ? "Редактировать папку" : "Создать папку"}
+        open={showFolderModal}
+        onCancel={() => {
+          setShowFolderModal(false);
+          setFolderName("");
+          setEditingFolder(null);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setShowFolderModal(false);
+            setFolderName("");
+            setEditingFolder(null);
+          }}>
+            Отмена
+          </Button>,
+          <Button 
+            key="submit" 
+            type="primary" 
+            onClick={editingFolder ? handleEditFolder : handleCreateFolder}
+            style={{ background: "#1890ff" }}
+            loading={loadingFolders}
+          >
+            {editingFolder ? "Сохранить" : "Создать"}
+          </Button>,
+        ]}
+      >
+        <Input
+          placeholder="Введите название папки"
+          value={folderName}
+          onChange={(e) => setFolderName(e.target.value)}
+          onPressEnter={editingFolder ? handleEditFolder : handleCreateFolder}
+          size="large"
+          prefix={<FolderOutlined style={{ color: "#1890ff" }} />}
+          autoFocus
+        />
+        <div style={{ marginTop: 12, color: "#999", fontSize: 13 }}>
+          {editingFolder ? "Введите новое название для папки" : "Введите название для новой папки"}
+        </div>
+      </Modal>
+
+      {/* Превью видео */}
       <Modal
         open={preview.open}
         footer={null}
-        onCancel={() => setPreview({ open: false, url: "", type: "video" })}
+        onCancel={() => setPreview({ open: false, url: "" })}
         centered
-        width={preview.type === "video" ? 860 : 700}
+        width={860}
         bodyStyle={{
           padding: 0,
           background: "#000",
@@ -643,31 +1021,17 @@ export const VideoLesson = () => {
           overflow: "hidden",
         }}
       >
-        {preview.type === "video" ? (
-          <video
-            src={preview.url}
-            controls
-            autoPlay
-            style={{
-              width: "100%",
-              maxHeight: "80vh",
-              display: "block",
-              borderRadius: 12,
-            }}
-          />
-        ) : (
-          <img
-            src={preview.url}
-            alt="preview"
-            style={{
-              width: "100%",
-              maxHeight: "80vh",
-              objectFit: "contain",
-              display: "block",
-              borderRadius: 12,
-            }}
-          />
-        )}
+        <video
+          src={preview.url}
+          controls
+          autoPlay
+          style={{
+            width: "100%",
+            maxHeight: "80vh",
+            display: "block",
+            borderRadius: 12,
+          }}
+        />
       </Modal>
     </div>
   );

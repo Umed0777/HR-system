@@ -4,6 +4,8 @@ import { create } from "zustand";
 import {
   getFolders,
   createFolder,
+  updateFolder,
+  deleteFolder,
 } from "../services/api.service.folder";
 import {
   createAnnouncement,
@@ -11,8 +13,9 @@ import {
   deleteAnnouncement,
 } from "../services/api.service.announcement";
 
-// Название папки
+// Название папки для видеоуроков (системная)
 const VIDEO_FOLDER_NAME = "ВидеоУрок";
+const VIDEO_FOLDER_TYPE = "video"; // Тип папки для видеоуроков
 
 export const useVideoLessonStore = create((set, get) => ({
   // =========================
@@ -20,6 +23,7 @@ export const useVideoLessonStore = create((set, get) => ({
   // =========================
 
   videoLessons: [],
+  allFolders: [],
   currentVideoLesson: null,
   videoFolder: null,
   loading: false,
@@ -36,7 +40,8 @@ export const useVideoLessonStore = create((set, get) => ({
 
     const folder = folders.find(
       (item) =>
-        item.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase() ||
+        (item.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase() &&
+         item.type === VIDEO_FOLDER_TYPE) ||
         item.name?.toLowerCase() === "видеоуроки"
     );
 
@@ -50,11 +55,9 @@ export const useVideoLessonStore = create((set, get) => ({
 
   ensureVideoFolderExists: async () => {
     try {
-      // Получаем все папки
       const response = await getFolders();
       console.log("📥 Получены папки:", response);
 
-      // Извлекаем массив папок из ответа
       let folders = [];
       if (response?.data && Array.isArray(response.data)) {
         folders = response.data;
@@ -66,28 +69,27 @@ export const useVideoLessonStore = create((set, get) => ({
 
       console.log("📁 Массив папок:", folders);
 
-      // Ищем папку
       let videoFolder = get().findVideoFolder(folders);
 
-      // Если папка не найдена - создаём
       if (!videoFolder) {
         console.log(`🆕 Папка "${VIDEO_FOLDER_NAME}" не найдена, создаём...`);
         
         const newFolder = await createFolder({
           name: VIDEO_FOLDER_NAME,
-          description: "Папка для видеоуроков",
+          description: "Системная папка для видеоуроков",
+          type: VIDEO_FOLDER_TYPE, // Указываем тип
         });
 
         console.log("✅ Папка создана:", newFolder);
 
-        // Обновляем state
         videoFolder = newFolder;
         set({ videoFolder: newFolder });
+
+        await get().fetchAllFolders();
 
         return newFolder;
       }
 
-      // Папка найдена
       set({ videoFolder });
       return videoFolder;
     } catch (error) {
@@ -97,7 +99,160 @@ export const useVideoLessonStore = create((set, get) => ({
   },
 
   // =========================
-  // FETCH VIDEO LESSONS
+  // FETCH ALL FOLDERS - ТОЛЬКО ПАПКИ ВИДЕОУРОКОВ
+  // =========================
+
+  fetchAllFolders: async () => {
+    try {
+      console.log("📁 Загрузка папок видеоуроков...");
+      const response = await getFolders();
+      
+      let folders = [];
+      if (response?.data && Array.isArray(response.data)) {
+        folders = response.data;
+      } else if (Array.isArray(response)) {
+        folders = response;
+      } else if (response?.$values && Array.isArray(response.$values)) {
+        folders = response.$values;
+      }
+
+      // ФИЛЬТРУЕМ: показываем только папки видеоуроков (type === "video")
+      // Исключаем папку "ВидеоУрок" из списка доступных для выбора
+      const filteredFolders = folders.filter(folder => {
+        const isVideoFolder = folder.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase();
+        const isVideoType = folder.type === VIDEO_FOLDER_TYPE || 
+                           folder.type === "videos";
+        
+        return !isVideoFolder && isVideoType;
+      });
+
+      set({ allFolders: filteredFolders });
+      console.log(`📁 Загружено папок видеоуроков: ${filteredFolders.length}`);
+      return filteredFolders;
+    } catch (error) {
+      console.error("❌ Ошибка загрузки папок:", error);
+      set({ 
+        error: error.message || "Ошибка загрузки папок",
+        allFolders: []
+      });
+      throw error;
+    }
+  },
+
+  // =========================
+  // CREATE FOLDER - РАЗРЕШЕНО
+  // =========================
+
+  createNewFolder: async (folderData) => {
+    try {
+      console.log("📁 Создание папки для видео:", folderData);
+      
+      // Проверяем, не пытается ли пользователь создать папку "ВидеоУрок"
+      if (folderData.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase()) {
+        throw new Error("Нельзя создать папку с названием 'ВидеоУрок'");
+      }
+      
+      const newFolder = await createFolder({
+        name: folderData.name,
+        description: folderData.description || "Папка видеоуроков",
+        type: VIDEO_FOLDER_TYPE, // Указываем тип
+      });
+
+      console.log("✅ Папка видео создана:", newFolder);
+      
+      await get().fetchAllFolders();
+      
+      return newFolder;
+    } catch (error) {
+      console.error("❌ Ошибка создания папки:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // UPDATE FOLDER - РАЗРЕШЕНО
+  // =========================
+
+  updateFolder: async (folderId, folderData) => {
+    try {
+      console.log(`📁 Обновление папки ${folderId}:`, folderData);
+      
+      // Проверяем, не пытается ли пользователь переименовать в "ВидеоУрок"
+      if (folderData.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase()) {
+        throw new Error("Нельзя переименовать папку в 'ВидеоУрок'");
+      }
+      
+      const updated = await updateFolder(folderId, {
+        ...folderData,
+        type: VIDEO_FOLDER_TYPE, // Сохраняем тип
+      });
+      
+      console.log("✅ Папка видео обновлена:", updated);
+      
+      await get().fetchAllFolders();
+      
+      return updated;
+    } catch (error) {
+      console.error("❌ Ошибка обновления папки:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // DELETE FOLDER - РАЗРЕШЕНО
+  // =========================
+
+  deleteFolder: async (folderId) => {
+    try {
+      console.log(`🗑️ Удаление папки ${folderId}`);
+      
+      // Проверяем, не пытается ли пользователь удалить папку "ВидеоУрок"
+      const folder = get().allFolders.find(f => Number(f.id) === Number(folderId));
+      if (folder?.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase()) {
+        throw new Error("Нельзя удалить папку 'ВидеоУрок'");
+      }
+      
+      await deleteFolder(folderId);
+      
+      console.log("✅ Папка удалена");
+      
+      await get().fetchAllFolders();
+      
+      return true;
+    } catch (error) {
+      console.error("❌ Ошибка удаления папки:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // MOVE VIDEO TO FOLDER - РАЗРЕШЕНО
+  // =========================
+
+  moveVideoToFolder: async (videoId, folderId) => {
+    try {
+      console.log(`📦 Перемещение видео ${videoId} в папку ${folderId}`);
+      
+      const video = get().videoLessons.find(d => Number(d.id) === Number(videoId));
+      if (!video) {
+        throw new Error("Видео не найдено");
+      }
+      
+      await get().editVideoLesson(videoId, {
+        ...video,
+        folderId: folderId,
+      });
+      
+      console.log("✅ Видео перемещено");
+      return true;
+    } catch (error) {
+      console.error("❌ Ошибка перемещения видео:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // FETCH VIDEO LESSONS - ТОЛЬКО ИЗ ПАПКИ "ВидеоУрок"
   // =========================
 
   fetchVideoLessons: async () => {
@@ -107,7 +262,6 @@ export const useVideoLessonStore = create((set, get) => ({
     });
 
     try {
-      // Сначала убеждаемся, что папка существует
       const videoFolder = await get().ensureVideoFolderExists();
 
       if (!videoFolder) {
@@ -120,7 +274,6 @@ export const useVideoLessonStore = create((set, get) => ({
         return [];
       }
 
-      // Получаем свежие данные папки со всеми announcements
       const response = await getFolders();
       let folders = [];
       if (response?.data && Array.isArray(response.data)) {
@@ -135,12 +288,16 @@ export const useVideoLessonStore = create((set, get) => ({
         (f) => Number(f.id) === Number(videoFolder.id)
       );
 
-      // Берем announcements из папки
       const videoLessons = updatedFolder?.announcements 
         ? (Array.isArray(updatedFolder.announcements) 
             ? updatedFolder.announcements 
             : updatedFolder.announcements.$values || [])
         : [];
+
+      videoLessons.forEach(video => {
+        video.folderId = updatedFolder?.id || videoFolder.id;
+        video.folderName = VIDEO_FOLDER_NAME;
+      });
 
       set({
         videoLessons,
@@ -167,33 +324,31 @@ export const useVideoLessonStore = create((set, get) => ({
   },
 
   // =========================
-  // CREATE VIDEO LESSON
+  // CREATE VIDEO LESSON - ВСЕГДА В ПАПКУ "ВидеоУрок"
   // =========================
 
   addVideoLesson: async (newData) => {
     try {
       console.log("📝 Создание видеоурока:", newData);
 
-      // Убеждаемся, что папка существует
       const videoFolder = await get().ensureVideoFolderExists();
 
       if (!videoFolder) {
-        throw new Error(`Папка "${VIDEO_FOLDER_NAME}" не найдена и не может быть создана`);
+        throw new Error(`Папка "${VIDEO_FOLDER_NAME}" не найдена`);
       }
 
       console.log("📁 Создаём в папке:", videoFolder.id, videoFolder.name);
 
-      // Создаем FormData для отправки
       const formData = new FormData();
       
-      // Добавляем текстовые поля
       formData.append("Title", newData.title || "");
       formData.append("Content", newData.content || "");
       formData.append("SubDepartmentId", String(Number(newData.subDepartmentId ?? 0)));
       formData.append("EmployeeId", String(Number(newData.employeeId ?? 0)));
+      
+      // ВСЕГДА в папку "ВидеоУрок"
       formData.append("FolderId", String(Number(videoFolder.id)));
 
-      // Добавляем файлы
       if (newData.files && Array.isArray(newData.files)) {
         newData.files.forEach((file, index) => {
           if (file instanceof File) {
@@ -214,8 +369,8 @@ export const useVideoLessonStore = create((set, get) => ({
 
       console.log("✅ Видеоурок создан:", responseAnnouncement);
 
-      // Обновляем список
       await get().fetchVideoLessons();
+      await get().fetchAllFolders();
 
       return responseAnnouncement;
     } catch (error) {
@@ -232,17 +387,14 @@ export const useVideoLessonStore = create((set, get) => ({
     try {
       console.log("✏️ Обновление видеоурока:", id);
 
-      // Убеждаемся, что папка существует
       const videoFolder = await get().ensureVideoFolderExists();
 
       if (!videoFolder) {
-        throw new Error(`Папка "${VIDEO_FOLDER_NAME}" не найдена и не может быть создана`);
+        throw new Error(`Папка "${VIDEO_FOLDER_NAME}" не найдена`);
       }
 
-      // Создаем FormData для отправки
       const formData = new FormData();
       
-      // Добавляем текстовые поля
       formData.append("Title", updatedData.title || "");
       formData.append("Content", updatedData.content || "");
       
@@ -254,9 +406,9 @@ export const useVideoLessonStore = create((set, get) => ({
         formData.append("EmployeeId", String(Number(updatedData.employeeId)));
       }
       
+      // ВСЕГДА в папку "ВидеоУрок"
       formData.append("FolderId", String(Number(videoFolder.id)));
 
-      // Добавляем только новые файлы
       if (updatedData.files && Array.isArray(updatedData.files)) {
         updatedData.files.forEach((file, index) => {
           if (file instanceof File) {
@@ -278,6 +430,7 @@ export const useVideoLessonStore = create((set, get) => ({
       console.log("✅ Видеоурок обновлен:", updated);
 
       await get().fetchVideoLessons();
+      await get().fetchAllFolders();
 
       return updated;
     } catch (error) {
@@ -304,8 +457,8 @@ export const useVideoLessonStore = create((set, get) => ({
 
       console.log("✅ Видеоурок удален");
       
-      // Обновляем папку
       await get().fetchVideoLessons();
+      await get().fetchAllFolders();
     } catch (error) {
       console.error("❌ Ошибка удаления видеоурока:", error);
       throw error;

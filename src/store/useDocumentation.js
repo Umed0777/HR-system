@@ -4,6 +4,8 @@ import { create } from "zustand";
 import {
   getFolders,
   createFolder,
+  updateFolder,
+  deleteFolder,
 } from "../services/api.service.folder";
 import {
   createAnnouncement,
@@ -11,7 +13,8 @@ import {
   deleteAnnouncement,
 } from "../services/api.service.announcement";
 
-const DOCUMENT_FOLDER_NAME = "Документация";
+// Константа для типа папки документации
+const DOCUMENTATION_FOLDER_TYPE = "documentation";
 
 export const useDocumentationStore = create((set, get) => ({
   // =========================
@@ -19,41 +22,20 @@ export const useDocumentationStore = create((set, get) => ({
   // =========================
 
   documents: [],
+  allFolders: [],
   currentDocument: null,
-  documentFolder: null,
   loading: false,
   error: null,
 
   // =========================
-  // FIND DOCUMENT FOLDER
+  // FETCH ALL FOLDERS - ТОЛЬКО ПАПКИ ДОКУМЕНТАЦИИ
   // =========================
 
-  findDocumentFolder: (folders) => {
-    if (!Array.isArray(folders)) {
-      return null;
-    }
-
-    const folder = folders.find(
-      (item) =>
-        item.name?.toLowerCase() === DOCUMENT_FOLDER_NAME.toLowerCase() ||
-        item.name?.toLowerCase() === "документы"
-    );
-
-    console.log("📚 Найдена папка документации:", folder);
-    return folder || null;
-  },
-
-  // =========================
-  // CREATE DOCUMENT FOLDER IF NOT EXISTS
-  // =========================
-
-  ensureDocumentFolderExists: async () => {
+  fetchAllFolders: async () => {
     try {
-      // Получаем все папки
+      console.log("📁 Загрузка папок документации...");
       const response = await getFolders();
-      console.log("📥 Получены папки:", response);
-
-      // Извлекаем массив папок из ответа
+      
       let folders = [];
       if (response?.data && Array.isArray(response.data)) {
         folders = response.data;
@@ -63,34 +45,95 @@ export const useDocumentationStore = create((set, get) => ({
         folders = response.$values;
       }
 
-      console.log("📁 Массив папок:", folders);
-
-      // Ищем папку
-      let documentFolder = get().findDocumentFolder(folders);
-
-      // Если папка не найдена - создаём
-      if (!documentFolder) {
-        console.log(`🆕 Папка "${DOCUMENT_FOLDER_NAME}" не найдена, создаём...`);
+      // ФИЛЬТРУЕМ: исключаем папку "ВидеоУрок" и показываем только папки документации
+      const filteredFolders = folders.filter(folder => {
+        const isVideoFolder = folder.name?.toLowerCase() === "видеоурок";
+        const isDocFolder = folder.type === DOCUMENTATION_FOLDER_TYPE || 
+                           folder.type === "docs" ||
+                           !folder.type?.includes("video"); // Если type не видео-папка
         
-        const newFolder = await createFolder({
-          name: DOCUMENT_FOLDER_NAME,
-          description: "Папка для документации",
-        });
+        return !isVideoFolder && isDocFolder;
+      });
 
-        console.log("✅ Папка создана:", newFolder);
-
-        // Обновляем state
-        documentFolder = newFolder;
-        set({ documentFolder: newFolder });
-
-        return newFolder;
-      }
-
-      // Папка найдена
-      set({ documentFolder });
-      return documentFolder;
+      set({ allFolders: filteredFolders });
+      console.log(`📁 Загружено папок документации: ${filteredFolders.length}`);
+      return filteredFolders;
     } catch (error) {
-      console.error("❌ Ошибка при работе с папкой документации:", error);
+      console.error("❌ Ошибка загрузки папок:", error);
+      set({ 
+        error: error.message || "Ошибка загрузки папок",
+        allFolders: []
+      });
+      throw error;
+    }
+  },
+
+  // =========================
+  // CREATE FOLDER
+  // =========================
+
+  createNewFolder: async (folderData) => {
+    try {
+      console.log("📁 Создание папки документации:", folderData);
+      
+      const newFolder = await createFolder({
+        name: folderData.name,
+        description: folderData.description || "Папка документации",
+        type: DOCUMENTATION_FOLDER_TYPE, // Указываем тип
+      });
+
+      console.log("✅ Папка документации создана:", newFolder);
+      
+      await get().fetchAllFolders();
+      
+      return newFolder;
+    } catch (error) {
+      console.error("❌ Ошибка создания папки:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // UPDATE FOLDER
+  // =========================
+
+  updateFolder: async (folderId, folderData) => {
+    try {
+      console.log(`📁 Обновление папки ${folderId}:`, folderData);
+      
+      const updated = await updateFolder(folderId, {
+        ...folderData,
+        type: DOCUMENTATION_FOLDER_TYPE,
+      });
+      
+      console.log("✅ Папка обновлена:", updated);
+      
+      await get().fetchAllFolders();
+      
+      return updated;
+    } catch (error) {
+      console.error("❌ Ошибка обновления папки:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // DELETE FOLDER
+  // =========================
+
+  deleteFolder: async (folderId) => {
+    try {
+      console.log(`🗑️ Удаление папки ${folderId}`);
+      
+      await deleteFolder(folderId);
+      
+      console.log("✅ Папка удалена");
+      
+      await get().fetchAllFolders();
+      
+      return true;
+    } catch (error) {
+      console.error("❌ Ошибка удаления папки:", error);
       throw error;
     }
   },
@@ -106,61 +149,38 @@ export const useDocumentationStore = create((set, get) => ({
     });
 
     try {
-      // Сначала убеждаемся, что папка существует
-      const documentFolder = await get().ensureDocumentFolderExists();
-
-      if (!documentFolder) {
-        console.warn(`⚠️ Не удалось создать папку "${DOCUMENT_FOLDER_NAME}"`);
-        set({
-          documents: [],
-          documentFolder: null,
-          loading: false,
-        });
-        return [];
-      }
-
-      // Получаем свежие данные папки со всеми announcements
-      const response = await getFolders();
-      let folders = [];
-      if (response?.data && Array.isArray(response.data)) {
-        folders = response.data;
-      } else if (Array.isArray(response)) {
-        folders = response;
-      } else if (response?.$values && Array.isArray(response.$values)) {
-        folders = response.$values;
-      }
-
-      const updatedFolder = folders.find(
-        (f) => Number(f.id) === Number(documentFolder.id)
-      );
-
-      // Берем announcements из папки
-      const documents = updatedFolder?.announcements 
-        ? (Array.isArray(updatedFolder.announcements) 
-            ? updatedFolder.announcements 
-            : updatedFolder.announcements.$values || [])
-        : [];
-
+      const folders = await get().fetchAllFolders();
+      let allDocs = [];
+      
+      folders.forEach(folder => {
+        if (folder.announcements) {
+          const docs = Array.isArray(folder.announcements) 
+            ? folder.announcements 
+            : (folder.announcements.$values || []);
+          
+          docs.forEach(doc => {
+            doc.folderId = folder.id;
+            doc.folderName = folder.name;
+          });
+          
+          allDocs = [...allDocs, ...docs];
+        }
+      });
+      
+      console.log(`📄 Всего документов: ${allDocs.length}`);
       set({
-        documents,
-        documentFolder: updatedFolder || documentFolder,
+        documents: allDocs,
         loading: false,
       });
-
-      console.log(`✅ Загружено документов: ${documents.length}`);
-      return documents;
+      
+      return allDocs;
     } catch (error) {
       console.error("❌ Ошибка загрузки документов:", error);
-
       set({
         documents: [],
         loading: false,
-        error:
-          error.response?.data?.message ||
-          error.message ||
-          "Ошибка загрузки документов",
+        error: error.response?.data?.message || error.message || "Ошибка загрузки документов",
       });
-
       throw error;
     }
   },
@@ -173,26 +193,21 @@ export const useDocumentationStore = create((set, get) => ({
     try {
       console.log("📝 Создание документа:", newData);
 
-      // Убеждаемся, что папка существует
-      const documentFolder = await get().ensureDocumentFolderExists();
-
-      if (!documentFolder) {
-        throw new Error(`Папка "${DOCUMENT_FOLDER_NAME}" не найдена и не может быть создана`);
-      }
-
-      console.log("📁 Создаём в папке:", documentFolder.id, documentFolder.name);
-
-      // Создаем FormData для отправки
       const formData = new FormData();
       
-      // Добавляем текстовые поля
       formData.append("Title", newData.title || "");
       formData.append("Content", newData.content || "");
       formData.append("SubDepartmentId", String(Number(newData.subDepartmentId ?? 0)));
       formData.append("EmployeeId", String(Number(newData.employeeId ?? 0)));
-      formData.append("FolderId", String(Number(documentFolder.id)));
+      
+      if (newData.folderId) {
+        formData.append("FolderId", String(Number(newData.folderId)));
+        console.log(`📁 Создаём документ в папке ID: ${newData.folderId}`);
+      } else {
+        console.warn("⚠️ FolderId не указан, документ будет без папки");
+        formData.append("FolderId", "0");
+      }
 
-      // Добавляем файлы
       if (newData.files && Array.isArray(newData.files)) {
         newData.files.forEach((file, index) => {
           if (file instanceof File) {
@@ -209,14 +224,14 @@ export const useDocumentationStore = create((set, get) => ({
         console.log(`  ${key}:`, value instanceof File ? value.name : value);
       }
 
-      const responseAnnouncement = await createAnnouncement(formData);
+      const response = await createAnnouncement(formData);
 
-      console.log("✅ Документ создан:", responseAnnouncement);
+      console.log("✅ Документ создан:", response);
 
-      // Обновляем список
       await get().fetchDocuments();
+      await get().fetchAllFolders();
 
-      return responseAnnouncement;
+      return response;
     } catch (error) {
       console.error("❌ Ошибка создания документа:", error);
       throw error;
@@ -229,19 +244,10 @@ export const useDocumentationStore = create((set, get) => ({
 
   editDocument: async (id, updatedData) => {
     try {
-      console.log("✏️ Обновление документа:", id);
+      console.log("✏️ Обновление документа:", id, updatedData);
 
-      // Убеждаемся, что папка существует
-      const documentFolder = await get().ensureDocumentFolderExists();
-
-      if (!documentFolder) {
-        throw new Error(`Папка "${DOCUMENT_FOLDER_NAME}" не найдена и не может быть создана`);
-      }
-
-      // Создаем FormData для отправки
       const formData = new FormData();
       
-      // Добавляем текстовые поля
       formData.append("Title", updatedData.title || "");
       formData.append("Content", updatedData.content || "");
       
@@ -253,9 +259,11 @@ export const useDocumentationStore = create((set, get) => ({
         formData.append("EmployeeId", String(Number(updatedData.employeeId)));
       }
       
-      formData.append("FolderId", String(Number(documentFolder.id)));
+      if (updatedData.folderId !== null && updatedData.folderId !== undefined) {
+        formData.append("FolderId", String(Number(updatedData.folderId)));
+        console.log(`📁 Перемещаем документ в папку ID: ${updatedData.folderId}`);
+      }
 
-      // Добавляем только новые файлы
       if (updatedData.files && Array.isArray(updatedData.files)) {
         updatedData.files.forEach((file, index) => {
           if (file instanceof File) {
@@ -277,6 +285,7 @@ export const useDocumentationStore = create((set, get) => ({
       console.log("✅ Документ обновлен:", updated);
 
       await get().fetchDocuments();
+      await get().fetchAllFolders();
 
       return updated;
     } catch (error) {
@@ -303,10 +312,36 @@ export const useDocumentationStore = create((set, get) => ({
 
       console.log("✅ Документ удален");
       
-      // Обновляем папку
       await get().fetchDocuments();
+      await get().fetchAllFolders();
     } catch (error) {
       console.error("❌ Ошибка удаления документа:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // MOVE DOCUMENT TO FOLDER
+  // =========================
+
+  moveDocumentToFolder: async (docId, folderId) => {
+    try {
+      console.log(`📦 Перемещение документа ${docId} в папку ${folderId}`);
+      
+      const doc = get().documents.find(d => Number(d.id) === Number(docId));
+      if (!doc) {
+        throw new Error("Документ не найден");
+      }
+      
+      await get().editDocument(docId, {
+        ...doc,
+        folderId: folderId,
+      });
+      
+      console.log("✅ Документ перемещен");
+      return true;
+    } catch (error) {
+      console.error("❌ Ошибка перемещения документа:", error);
       throw error;
     }
   },

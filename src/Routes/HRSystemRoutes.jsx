@@ -2,7 +2,7 @@
 import { Route, Routes, Navigate } from "react-router-dom";
 import { HRSystemLayout } from "../layout/HRSystemLayout";
 import { useState } from "react";
-
+import { SurveyManager } from "../pages/SurveyManager";
 import { Announcement } from "../pages/Announcement";
 import { Departament } from "../pages/Departament";
 import { Employee } from "../pages/Employee";
@@ -72,11 +72,13 @@ export const HRSystemRoutes = () => {
           path="test" 
           element={<TestManager onStartTest={handleStartTest} />} 
         />
-        
         <Route path="test-taking" element={<TestSession />} />
         <Route path="subdepartment" element={<Subdepartment />} />
         <Route path="video-lessons" element={<VideoLesson />} />
         <Route path="documentation" element={<Documentation />} />
+        
+        {/* ===== ОПРОСЫ - ВНУТРИ ЗАЩИЩЕННОГО LAYOUT ===== */}
+        <Route path="surveys" element={<SurveyManager />} />
       </Route>
 
       {/* PUBLIC EXTRA */}

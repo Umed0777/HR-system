@@ -20,6 +20,8 @@ import {
   Skeleton,
   Typography,
   Select,
+  Badge,
+  Popconfirm,
 } from "antd";
 import {
   PlusOutlined,
@@ -35,6 +37,8 @@ import {
   FileWordOutlined,
   FileExcelOutlined,
   FilePptOutlined,
+  FolderOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { motion, AnimatePresence } from "framer-motion";
@@ -42,6 +46,9 @@ import Confetti from "react-confetti";
 
 const { Title, Text } = Typography;
 const BASE_URL = import.meta.env.VITE_API;
+
+// Папки которые нужно исключить из Документации
+const EXCLUDED_FOLDERS = ["ВидеоУрок", "видеоурок", "Видеоурок"];
 
 const buildFullUrl = (path) => {
   if (!path) return "";
@@ -52,10 +59,16 @@ const buildFullUrl = (path) => {
 export const Documentation = () => {
   const {
     documents,
+    allFolders,
     fetchDocuments,
+    fetchAllFolders,
     addDocument,
     editDocument,
     removeDocument,
+    createNewFolder,
+    updateFolder,
+    deleteFolder,
+    moveDocumentToFolder,
     loading,
     error,
   } = useDocumentationStore();
@@ -84,17 +97,82 @@ export const Documentation = () => {
   const [showConfetti, setShowConfetti] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [editingFolder, setEditingFolder] = useState(null);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+
   // Загрузка данных
   useEffect(() => {
     const loadData = async () => {
       console.log("🔄 Documentation - Загрузка данных...");
-      await fetchSubDepartments();
-      await fetchEmployee();
-      await fetchDocuments();
-      console.log("✅ Documentation - Данные загружены");
+      setLoadingFolders(true);
+      try {
+        await fetchSubDepartments();
+        await fetchEmployee();
+        await fetchAllFolders();
+        await fetchDocuments();
+        console.log("✅ Documentation - Данные загружены");
+      } catch (error) {
+        console.error("❌ Ошибка загрузки:", error);
+        message.error("Ошибка загрузки данных");
+      } finally {
+        setLoadingFolders(false);
+      }
     };
     loadData();
   }, []);
+
+  // Безопасная проверка
+  const allDocs = Array.isArray(documents) ? documents : [];
+  const allFoldersList = Array.isArray(allFolders) ? allFolders : [];
+
+  // ФИЛЬТРУЕМ папки - исключаем "ВидеоУрок"
+  const filteredFolders = allFoldersList.filter(folder => {
+    const isExcluded = EXCLUDED_FOLDERS.some(excluded => 
+      folder.name?.toLowerCase() === excluded.toLowerCase()
+    );
+    return !isExcluded;
+  });
+
+  // ФИЛЬТРУЕМ документы - исключаем все, что в папке "ВидеоУрок"
+  const filteredDocuments = allDocs.filter(doc => {
+    // Если у документа нет folderId - показываем
+    if (!doc.folderId) return true;
+    
+    // Находим папку документа
+    const folder = allFoldersList.find(f => Number(f.id) === Number(doc.folderId));
+    
+    // Если папка не найдена - показываем
+    if (!folder) return true;
+    
+    // Проверяем, не является ли папка исключенной
+    const isExcluded = EXCLUDED_FOLDERS.some(excluded => 
+      folder.name?.toLowerCase() === excluded.toLowerCase()
+    );
+    
+    return !isExcluded;
+  });
+
+  const getFilteredDocumentsByFolder = () => {
+    if (!selectedFolderId) {
+      return filteredDocuments;
+    }
+    return filteredDocuments.filter(doc => Number(doc.folderId) === Number(selectedFolderId));
+  };
+
+  const displayedDocuments = getFilteredDocumentsByFolder();
+
+  const getFolderName = (id) => {
+    if (!id) return "Без папки";
+    const folder = filteredFolders.find(f => Number(f.id) === Number(id));
+    return folder ? folder.name : "Неизвестная папка";
+  };
+
+  const getFolderCount = (folderId) => {
+    return filteredDocuments.filter(doc => Number(doc.folderId) === Number(folderId)).length;
+  };
 
   const getFileType = (filePath) => {
     if (!filePath || typeof filePath !== "string") return "document";
@@ -221,8 +299,6 @@ export const Documentation = () => {
   };
 
   const openModal = (item = null) => {
-    console.log("📝 Documentation - openModal:", item ? "Редактирование" : "Создание");
-
     setEditingItem(item);
 
     if (item) {
@@ -231,6 +307,7 @@ export const Documentation = () => {
         content: item.content,
         subDepartmentId: item.subDepartmentId ?? null,
         employeeId: item.employeeId ?? null,
+        folderId: item.folderId ?? null,
       });
       const files = getFiles(item);
       setFileList(
@@ -244,13 +321,15 @@ export const Documentation = () => {
       );
     } else {
       form.resetFields();
+      if (selectedFolderId) {
+        form.setFieldsValue({ folderId: selectedFolderId });
+      }
       setFileList([]);
     }
     setOpen(true);
   };
 
   const closeModal = () => {
-    console.log("❌ Documentation - Закрытие модалки");
     setOpen(false);
     setEditingItem(null);
     form.resetFields();
@@ -260,22 +339,17 @@ export const Documentation = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      console.log("📝 Documentation - handleSave, values:", values);
 
-      // ✅ Исправлено: формируем payload без folderId
-      // Store сам добавит folderId
       const payload = {
         title: values.title || "",
         content: values.content || "",
         subDepartmentId: values.subDepartmentId ?? null,
         employeeId: values.employeeId ?? null,
-        // folderId НЕ УКАЗЫВАЕМ - Store сам найдет папку "Документация"
+        folderId: values.folderId ?? null,
         files: fileList
           .filter((f) => f.originFileObj)
           .map((f) => f.originFileObj),
       };
-
-      console.log("📤 Documentation - Отправляем данные:", payload);
 
       setPublishing(true);
       
@@ -293,6 +367,7 @@ export const Documentation = () => {
       }
       
       await fetchDocuments();
+      await fetchAllFolders();
       closeModal();
     } catch (err) {
       console.error("❌ Documentation - Ошибка:", err);
@@ -310,12 +385,12 @@ export const Documentation = () => {
 
   const getSubDepartmentName = (id) => {
     if (!id) return "Без отдела";
-    return subdepartments.find((s) => Number(s.id) === Number(id))?.name || "Без отдела";
+    return subdepartments?.find((s) => Number(s.id) === Number(id))?.name || "Без отдела";
   };
 
   const getEmployeeName = (id) => {
     if (!id) return "Неизвестный";
-    const emp = employees.find((e) => Number(e.id) === Number(id));
+    const emp = employees?.find((e) => Number(e.id) === Number(id));
     return emp
       ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email || "Неизвестный"
       : "Неизвестный";
@@ -327,6 +402,105 @@ export const Documentation = () => {
       return dayjs(dateString).format("DD.MM.YYYY HH:mm");
     } catch (_) {
       return "Дата не указана";
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!folderName.trim()) {
+      message.error("Введите название папки");
+      return;
+    }
+    
+    // Запрещаем создание папки "ВидеоУрок"
+    if (EXCLUDED_FOLDERS.some(excluded => folderName.trim().toLowerCase() === excluded.toLowerCase())) {
+      message.error("Название папки занято");
+      return;
+    }
+    
+    try {
+      await createNewFolder({
+        name: folderName.trim(),
+      });
+      setFolderName("");
+      setShowFolderModal(false);
+      message.success(`Папка "${folderName}" создана!`);
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка создания папки");
+      console.error(error);
+    }
+  };
+
+  const handleEditFolder = async () => {
+    if (!folderName.trim()) {
+      message.error("Введите название папки");
+      return;
+    }
+    
+    // Запрещаем переименование в "ВидеоУрок"
+    if (EXCLUDED_FOLDERS.some(excluded => folderName.trim().toLowerCase() === excluded.toLowerCase())) {
+      message.error("Название папки занято");
+      return;
+    }
+    
+    try {
+      await updateFolder(editingFolder.id, {
+        name: folderName.trim(),
+      });
+      setFolderName("");
+      setEditingFolder(null);
+      setShowFolderModal(false);
+      message.success(`Папка переименована!`);
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка обновления папки");
+      console.error(error);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    try {
+      const folderName = getFolderName(folderId);
+      const count = getFolderCount(folderId);
+      
+      await deleteFolder(folderId);
+      
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(null);
+      }
+      
+      message.success(`Папка "${folderName}" и ${count} документов удалены`);
+      await fetchDocuments();
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка удаления папки");
+      console.error(error);
+    }
+  };
+
+  const handleFolderSelect = (folderId) => {
+    setSelectedFolderId(selectedFolderId === folderId ? null : folderId);
+  };
+
+  const handleRemoveFromFolder = async (docId) => {
+    try {
+      await moveDocumentToFolder(docId, null);
+      message.success("Документ удален из папки");
+      await fetchDocuments();
+      await fetchAllFolders();
+    } catch (error) {
+      message.error("Ошибка удаления из папки");
+      console.error(error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await fetchAllFolders();
+      await fetchDocuments();
+      message.success("Данные обновлены");
+    } catch (error) {
+      message.error("Ошибка обновления");
     }
   };
 
@@ -344,7 +518,7 @@ export const Documentation = () => {
     return (
       <div style={{ padding: 50, textAlign: "center" }}>
         <Empty description={<span style={{ color: "#ff4d4f" }}>Ошибка: {error}</span>} />
-        <Button type="primary" onClick={fetchDocuments} style={{ marginTop: 20, background: "#52c41a" }}>
+        <Button type="primary" onClick={handleRefresh} style={{ marginTop: 20, background: "#52c41a" }}>
           Попробовать снова
         </Button>
       </div>
@@ -363,44 +537,161 @@ export const Documentation = () => {
         />
       )}
 
-      <Flex justify="space-between" align="center" style={{ marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
-        <div>
-          <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>
-            Документация
-          </Title>
-          <Text type="secondary">
-            {documents.length} документов
-          </Text>
-        </div>
-        <Button
-          type="primary"
-          style={{
-            background: "linear-gradient(135deg, #52c41a, #73d13d)",
-            border: "none",
-            boxShadow: "0 4px 12px rgba(82,196,26,0.3)",
-            fontWeight: "bold",
-            height: 40,
-            padding: "0 24px",
-            borderRadius: 20,
-          }}
-          onClick={() => openModal()}
-        >
-          Добавить документ
-        </Button>
-      </Flex>
+      {/* Шапка */}
+      <div style={{ 
+        background: "#fafafa", 
+        borderRadius: 12, 
+        padding: "20px 24px",
+        marginBottom: 24,
+        border: "1px solid #f0f0f0"
+      }}>
+        <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
+          <div>
+            <Flex align="center" gap={12}>
+              <Title level={4} style={{ margin: 0, color: "#1a1a1a" }}>
+                📚 Документация
+              </Title>
+            </Flex>
+            <Text type="secondary" style={{ fontSize: 14 }}>
+              {selectedFolderId 
+                ? `${getFolderCount(selectedFolderId)} документов в папке "${getFolderName(selectedFolderId)}"`
+                : `${displayedDocuments.length} документов всего`
+              }
+            </Text>
+          </div>
+          <Space size="middle" wrap>
+            <Button 
+              icon={<FolderOutlined />}
+              onClick={() => {
+                setEditingFolder(null);
+                setFolderName("");
+                setShowFolderModal(true);
+              }}
+            >
+              Создать папку
+            </Button>
+            <Button 
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openModal()}
+              style={{ 
+                background: "linear-gradient(135deg, #52c41a, #73d13d)",
+                border: "none",
+                fontWeight: "bold"
+              }}
+            >
+              Добавить документ
+            </Button>
+          </Space>
+        </Flex>
+      </div>
 
+      {/* Папки - показываем только отфильтрованные */}
+      {filteredFolders.length > 0 ? (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 12, fontSize: 13, color: "#999" }}>
+            Все папок: {filteredFolders.length}
+          </div>
+          <Flex wrap="wrap" gap={12}>
+            {filteredFolders.map(folder => {
+              const isSelected = Number(selectedFolderId) === Number(folder.id);
+              const count = getFolderCount(folder.id);
+              
+              return (
+                <Tag
+                  key={folder.id}
+                  closable
+                  onClose={(e) => {
+                    e.preventDefault();
+                    Modal.confirm({
+                      title: `Удалить папку "${folder.name}"?`,
+                      content: `В папке ${count} документов. Они тоже будут удалены.`,
+                      okText: "Да, удалить",
+                      cancelText: "Отмена",
+                      okButtonProps: { danger: true },
+                      onOk: () => handleDeleteFolder(folder.id),
+                    });
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 14,
+                    borderRadius: 20,
+                    cursor: "pointer",
+                    background: isSelected ? "#52c41a" : "white",
+                    color: isSelected ? "white" : "#666",
+                    border: isSelected ? "none" : "1px solid #d9d9d9",
+                    transition: "all 0.3s",
+                    fontWeight: isSelected ? "bold" : "normal",
+                  }}
+                  onClick={() => handleFolderSelect(folder.id)}
+                >
+                  <FolderOutlined style={{ marginRight: 6 }} />
+                  {folder.name}
+                  <Badge 
+                    count={count} 
+                    style={{ 
+                      marginLeft: 8,
+                      background: isSelected ? "rgba(255,255,255,0.3)" : "#f0f0f0",
+                      color: isSelected ? "white" : "#666",
+                    }}
+                  />
+                  <EditOutlined 
+                    style={{ 
+                      marginLeft: 8, 
+                      fontSize: 12,
+                      opacity: 0.7
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingFolder(folder);
+                      setFolderName(folder.name);
+                      setShowFolderModal(true);
+                    }}
+                  />
+                </Tag>
+              );
+            })}
+          </Flex>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 24, padding: "20px", background: "#fafafa", borderRadius: 12, textAlign: "center" }}>
+          <Text type="secondary">Нет созданных папок</Text>
+          <br />
+          <Button 
+            type="dashed" 
+            icon={<FolderOutlined />}
+            onClick={() => {
+              setEditingFolder(null);
+              setFolderName("");
+              setShowFolderModal(true);
+            }}
+            style={{ marginTop: 8 }}
+          >
+            Создать первую папку
+          </Button>
+        </div>
+      )}
+
+      {/* Документы */}
       <AnimatePresence>
-        {documents.length === 0 ? (
+        {displayedDocuments.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Empty description="Нет документов" style={{ marginTop: 100 }}>
+            <Empty 
+              description={
+                selectedFolderId 
+                  ? `В папке "${getFolderName(selectedFolderId)}" нет документов`
+                  : "Нет документов. Создайте первый документ!"
+              } 
+              style={{ marginTop: 60 }}
+            >
               <Button type="primary" onClick={() => openModal()} style={{ background: "#52c41a" }}>
-                Создать документ
+                {selectedFolderId ? "Добавить документ в папку" : "Создать первый документ"}
               </Button>
             </Empty>
           </motion.div>
         ) : (
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            {documents.map((item) => {
+            {displayedDocuments.map((item) => {
               const files = getFiles(item);
 
               return (
@@ -423,31 +714,56 @@ export const Documentation = () => {
                       <Tooltip title="Редактировать" key="edit">
                         <EditOutlined style={{ fontSize: 18 }} onClick={() => openModal(item)} />
                       </Tooltip>,
+                      <Tooltip title="Удалить из папки" key="remove">
+                        <span 
+                          onClick={() => {
+                            if (item.folderId) {
+                              Modal.confirm({
+                                title: "Удалить документ из папки?",
+                                content: "Документ останется в общем списке",
+                                okText: "Да",
+                                cancelText: "Отмена",
+                                onOk: () => handleRemoveFromFolder(item.id),
+                              });
+                            } else {
+                              message.info("Документ не привязан к папке");
+                            }
+                          }}
+                        >
+                          <FolderOutlined style={{ fontSize: 18, color: item.folderId ? "#faad14" : "#d9d9d9" }} />
+                        </span>
+                      </Tooltip>,
                       <Tooltip title="Удалить" key="delete">
-                        <DeleteOutlined
-                          style={{ fontSize: 18, color: "#ff4d4f" }}
-                          onClick={() =>
-                            Modal.confirm({
-                              title: "Удалить документ?",
-                              content: "Вы уверены?",
-                              okText: "Да",
-                              cancelText: "Нет",
-                              onOk: async () => {
-                                await removeDocument(item.id);
-                                await fetchDocuments();
-                                message.success("Документ удален");
-                              },
-                            })
-                          }
-                        />
+                        <Popconfirm
+                          title="Удалить документ?"
+                          description="Это действие нельзя отменить"
+                          okText="Да"
+                          cancelText="Отмена"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={async () => {
+                            await removeDocument(item.id);
+                            await fetchDocuments();
+                            await fetchAllFolders();
+                            message.success("Документ удален");
+                          }}
+                        >
+                          <DeleteOutlined style={{ fontSize: 18, color: "#ff4d4f" }} />
+                        </Popconfirm>
                       </Tooltip>,
                     ]}
                   >
                     <Flex vertical gap={12}>
                       <div>
-                        <Title level={4} style={{ margin: 0 }}>
-                          {item.title}
-                        </Title>
+                        <Flex justify="space-between" align="start" wrap="wrap" gap={8}>
+                          <Title level={4} style={{ margin: 0 }}>
+                            {item.title}
+                          </Title>
+                          {item.folderId && (
+                            <Tag icon={<FolderOutlined />} color="green" style={{ fontSize: 12 }}>
+                              {getFolderName(item.folderId)}
+                            </Tag>
+                          )}
+                        </Flex>
                         <Flex gap={8} style={{ marginTop: 8, flexWrap: "wrap" }}>
                           <Tag color="orange">{getSubDepartmentName(item.subDepartmentId)}</Tag>
                           <Tag icon={<UserOutlined />} color="blue">
@@ -542,12 +858,15 @@ export const Documentation = () => {
         )}
       </AnimatePresence>
 
-      {/* Модалка создания/редактирования */}
+      {/* Модалка создания/редактирования документа */}
       <Modal
         title={editingItem ? "Редактировать документ" : "Новый документ"}
         open={open}
         onCancel={closeModal}
         footer={[
+          <Button key="cancel" onClick={closeModal}>
+            Отмена
+          </Button>,
           <Button
             key="submit"
             type="primary"
@@ -559,9 +878,6 @@ export const Documentation = () => {
             }}
           >
             {editingItem ? "Сохранить" : "Опубликовать"}
-          </Button>,
-          <Button key="cancel" onClick={closeModal}>
-            Отмена
           </Button>,
         ]}
         width={720}
@@ -581,6 +897,19 @@ export const Documentation = () => {
           >
             <Input.TextArea placeholder="Описание документа..." autoSize={{ minRows: 4 }} size="large" />
           </Form.Item>
+          <Form.Item name="folderId" label="Папка">
+            <Select
+              placeholder="Выберите папку"
+              allowClear
+              options={[
+                { label: "Без папки", value: null },
+                ...filteredFolders.map((f) => ({
+                  label: `${f.name} (${getFolderCount(f.id)})`,
+                  value: f.id,
+                }))
+              ]}
+            />
+          </Form.Item>
           <Form.Item name="subDepartmentId" label="Отдел">
             <Select
               placeholder="Выберите отдел"
@@ -594,7 +923,7 @@ export const Documentation = () => {
           </Form.Item>
           <Form.Item name="employeeId" label="Сотрудник">
             <Select
-              placeholder="Выберите Сотрудник"
+              placeholder="Выберите сотрудника"
               allowClear
               loading={employeeLoading}
               options={(employees || []).map((emp) => ({
@@ -620,6 +949,48 @@ export const Documentation = () => {
             </Upload>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Модалка создания/редактирования папки */}
+      <Modal
+        title={editingFolder ? "Редактировать папку" : "Создать папку"}
+        open={showFolderModal}
+        onCancel={() => {
+          setShowFolderModal(false);
+          setFolderName("");
+          setEditingFolder(null);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setShowFolderModal(false);
+            setFolderName("");
+            setEditingFolder(null);
+          }}>
+            Отмена
+          </Button>,
+          <Button 
+            key="submit" 
+            type="primary" 
+            onClick={editingFolder ? handleEditFolder : handleCreateFolder}
+            style={{ background: "#52c41a" }}
+            loading={loadingFolders}
+          >
+            {editingFolder ? "Сохранить" : "Создать"}
+          </Button>,
+        ]}
+      >
+        <Input
+          placeholder="Введите название папки"
+          value={folderName}
+          onChange={(e) => setFolderName(e.target.value)}
+          onPressEnter={editingFolder ? handleEditFolder : handleCreateFolder}
+          size="large"
+          prefix={<FolderOutlined style={{ color: "#52c41a" }} />}
+          autoFocus
+        />
+        <div style={{ marginTop: 12, color: "#999", fontSize: 13 }}>
+          {editingFolder ? "Введите новое название для папки" : "Введите название для новой папки"}
+        </div>
       </Modal>
 
       {/* Превью */}

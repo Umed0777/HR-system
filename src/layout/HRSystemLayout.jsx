@@ -1,3 +1,4 @@
+// layout/HRSystemLayout.jsx
 import { Button, Layout, Menu } from "antd";
 import {
   ApartmentOutlined,
@@ -15,6 +16,7 @@ import {
   FileTextOutlined,
   VideoCameraOutlined,
   FilePdfOutlined,
+  BarsOutlined,
 } from "@ant-design/icons";
 import { useEffect, useState, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -43,11 +45,13 @@ export const HRSystemLayout = () => {
   // Определяем openKeys на основе текущего пути
   useEffect(() => {
     if (!initialized) return;
-    
+
     const path = location.pathname;
     const newOpenKeys = [];
 
-    if (["/department", "/position", "/subdepartment", "/employee"].includes(path)) {
+    if (
+      ["/department", "/position", "/subdepartment", "/employee"].includes(path)
+    ) {
       newOpenKeys.push("administration");
     }
 
@@ -123,25 +127,29 @@ export const HRSystemLayout = () => {
             },
           ],
         },
-        // {
-        //   key: "/question",
-        //   icon: <QuestionCircleOutlined />,
-        //   label: "Вопросы",
-        // },
         {
           key: "/test",
           icon: <FormOutlined />,
           label: "Тесты",
         },
         {
+          key: "/surveys",
+          icon: <BarsOutlined />,
+          label: "Опросы",
+        },
+        {
           key: "/test-taking",
           icon: <CheckSquareOutlined />,
-          label: "Резултаты",
+          label: "Результаты",
         },
       );
     }
 
-    if (roles.includes("Basic") && !roles.includes("Admin") && !roles.includes("SuperAdmin")) {
+    if (
+      roles.includes("Basic") &&
+      !roles.includes("Admin") &&
+      !roles.includes("SuperAdmin")
+    ) {
       items.push(
         {
           key: "announcement",
@@ -153,7 +161,7 @@ export const HRSystemLayout = () => {
               icon: <ReadOutlined />,
               label: "Инструкции",
             },
-             {
+            {
               key: "/video-lessons",
               icon: <VideoCameraOutlined />,
               label: "ВидеоУрок",
@@ -165,20 +173,20 @@ export const HRSystemLayout = () => {
             },
           ],
         },
-        // {
-        //   key: "/question",
-        //   icon: <QuestionCircleOutlined />,
-        //   label: "Вопросы",
-        // },
         {
           key: "/test",
           icon: <FormOutlined />,
           label: "Тесты",
         },
         {
+          key: "/surveys",
+          icon: <BarsOutlined />,
+          label: "Опросы",
+        },
+        {
           key: "/test-taking",
           icon: <CheckSquareOutlined />,
-          label: "Резултаты",
+          label: "Результаты",
         },
       );
     }
@@ -201,7 +209,14 @@ export const HRSystemLayout = () => {
   if (!initialized) {
     return (
       <Layout style={{ minHeight: "100vh", background: "#4b0000" }}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100vh",
+          }}
+        >
           <h2 style={{ color: "#fff" }}>Загрузка...</h2>
         </div>
       </Layout>
@@ -221,30 +236,28 @@ export const HRSystemLayout = () => {
         width={270}
         style={{
           margin: 15,
-          height: "calc(100vh - 30px)", // Фиксированная высота
+          height: "calc(100vh - 30px)",
           borderRadius: 20,
-          overflow: "hidden", // Скрываем переполнение
+          overflow: "hidden",
           background: "#8b0000",
           boxShadow: "0 20px 40px rgba(0,0,0,.35)",
-          position: "sticky", // Делаем сайдбар sticky
-          top: 15, // Отступ сверху
-          alignSelf: "flex-start", // Выравнивание по верхнему краю
+          position: "sticky",
+          top: 15,
+          alignSelf: "flex-start",
         }}
       >
-        {/* Контейнер для содержимого сайдбара */}
         <div
           style={{
             height: "100%",
             display: "flex",
             flexDirection: "column",
-            overflow: "hidden", // Скрываем переполнение
+            overflow: "hidden",
           }}
         >
-          {/* Верхняя часть с логотипом - фиксированная */}
           <div
             style={{
               height: 90,
-              flexShrink: 0, // Не сжимается
+              flexShrink: 0,
               display: "flex",
               alignItems: "center",
               justifyContent: collapsed ? "center" : "space-between",
@@ -278,18 +291,17 @@ export const HRSystemLayout = () => {
               onClick={() => setCollapsed(false)}
               style={{
                 margin: 10,
-                position: 'relative',
+                position: "relative",
                 left: 15,
                 flexShrink: 0,
               }}
             />
           )}
 
-          {/* Меню - скроллится внутри */}
           <div
             style={{
               flex: 1,
-              overflowY: "auto", // Только меню скроллится
+              overflowY: "auto",
               overflowX: "hidden",
               paddingBottom: 20,
             }}
@@ -343,7 +355,7 @@ export const HRSystemLayout = () => {
             padding: 25,
             background: "#fff",
             overflow: "auto",
-            minHeight: "calc(100vh - 120px)", // Минимальная высота
+            minHeight: "calc(100vh - 120px)",
           }}
         >
           <Outlet />
