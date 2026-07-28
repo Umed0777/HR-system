@@ -36,7 +36,6 @@ import {
   FileOutlined,
   FilePptOutlined,
   FolderOutlined,
-  ReloadOutlined,
   PlayCircleOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -45,9 +44,6 @@ import Confetti from "react-confetti";
 
 const { Title, Text } = Typography;
 const BASE_URL = import.meta.env.VITE_API;
-
-// Папка "ВидеоУрок" - скрываем её из списка, так как это системная папка
-const EXCLUDED_FOLDERS = ["ВидеоУрок", "видеоурок", "Видеоурок"];
 
 const buildFullUrl = (path) => {
   if (!path) return "";
@@ -126,42 +122,23 @@ export const VideoLesson = () => {
   const allVideos = Array.isArray(videoLessons) ? videoLessons : [];
   const allFoldersList = Array.isArray(allFolders) ? allFolders : [];
 
-  // ФИЛЬТРУЕМ папки - исключаем "ВидеоУрок"
-  const filteredFolders = allFoldersList.filter(folder => {
-    const isExcluded = EXCLUDED_FOLDERS.some(excluded => 
-      folder.name?.toLowerCase() === excluded.toLowerCase()
-    );
-    return !isExcluded;
-  });
-
-  // Фильтруем видео - исключаем видео из папки "ВидеоУрок"
-  const filteredVideos = allVideos.filter(video => {
-    if (!video.folderId) return true;
-    const folder = allFoldersList.find(f => Number(f.id) === Number(video.folderId));
-    if (!folder) return true;
-    const isExcluded = EXCLUDED_FOLDERS.some(excluded => 
-      folder.name?.toLowerCase() === excluded.toLowerCase()
-    );
-    return !isExcluded;
-  });
-
   const getFilteredVideosByFolder = () => {
     if (!selectedFolderId) {
-      return filteredVideos;
+      return allVideos;
     }
-    return filteredVideos.filter(video => Number(video.folderId) === Number(selectedFolderId));
+    return allVideos.filter(video => Number(video.folderId) === Number(selectedFolderId));
   };
 
   const displayedVideos = getFilteredVideosByFolder();
 
   const getFolderName = (id) => {
     if (!id) return "Без папки";
-    const folder = filteredFolders.find(f => Number(f.id) === Number(id));
+    const folder = allFoldersList.find(f => Number(f.id) === Number(id));
     return folder ? folder.name : "Неизвестная папка";
   };
 
   const getFolderCount = (folderId) => {
-    return filteredVideos.filter(video => Number(video.folderId) === Number(folderId)).length;
+    return allVideos.filter(video => Number(video.folderId) === Number(folderId)).length;
   };
 
   const extractPath = (file) => {
@@ -408,12 +385,6 @@ export const VideoLesson = () => {
       return;
     }
     
-    // Запрещаем создание папки "ВидеоУрок"
-    if (EXCLUDED_FOLDERS.some(excluded => folderName.trim().toLowerCase() === excluded.toLowerCase())) {
-      message.error("Название папки занято");
-      return;
-    }
-    
     try {
       await createNewFolder({
         name: folderName.trim(),
@@ -431,11 +402,6 @@ export const VideoLesson = () => {
   const handleEditFolder = async () => {
     if (!folderName.trim()) {
       message.error("Введите название папки");
-      return;
-    }
-    
-    if (EXCLUDED_FOLDERS.some(excluded => folderName.trim().toLowerCase() === excluded.toLowerCase())) {
-      message.error("Название папки занято");
       return;
     }
     
@@ -547,13 +513,6 @@ export const VideoLesson = () => {
               <Title level={4} style={{ margin: 0, color: "#1a1a1a" }}>
                 🎬 Видеоуроки
               </Title>
-              {/* <Button 
-                type="text" 
-                icon={<ReloadOutlined />} 
-                onClick={handleRefresh}
-                loading={loadingFolders}
-                size="small"
-              /> */}
             </Flex>
             <Text type="secondary" style={{ fontSize: 14 }}>
               {selectedFolderId 
@@ -590,13 +549,13 @@ export const VideoLesson = () => {
       </div>
 
       {/* Папки */}
-      {filteredFolders.length > 0 ? (
+      {allFoldersList.length > 0 ? (
         <div style={{ marginBottom: 24 }}>
           <div style={{ marginBottom: 12, fontSize: 13, color: "#999" }}>
-            Все папок: {filteredFolders.length}
+            Все папок: {allFoldersList.length}
           </div>
           <Flex wrap="wrap" gap={12}>
-            {filteredFolders.map(folder => {
+            {allFoldersList.map(folder => {
               const isSelected = Number(selectedFolderId) === Number(folder.id);
               const count = getFolderCount(folder.id);
               
@@ -909,7 +868,7 @@ export const VideoLesson = () => {
               allowClear
               options={[
                 { label: "Без папки", value: null },
-                ...filteredFolders.map((f) => ({
+                ...allFoldersList.map((f) => ({
                   label: `${f.name} (${getFolderCount(f.id)})`,
                   value: f.id,
                 }))

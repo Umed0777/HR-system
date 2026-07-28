@@ -1,21 +1,19 @@
 // src/store/useVideoLesson.js
-
 import { create } from "zustand";
 import {
   getFolders,
+  getFoldersByType,
   createFolder,
   updateFolder,
   deleteFolder,
 } from "../services/api.service.folder";
 import {
+  getAnnouncement,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
 } from "../services/api.service.announcement";
-
-// Название папки для видеоуроков (системная)
-const VIDEO_FOLDER_NAME = "ВидеоУрок";
-const VIDEO_FOLDER_TYPE = "video"; // Тип папки для видеоуроков
+import { FOLDER_TYPES } from "../constants/folderTypes";
 
 export const useVideoLessonStore = create((set, get) => ({
   // =========================
@@ -25,88 +23,21 @@ export const useVideoLessonStore = create((set, get) => ({
   videoLessons: [],
   allFolders: [],
   currentVideoLesson: null,
-  videoFolder: null,
   loading: false,
   error: null,
 
   // =========================
-  // FIND VIDEO FOLDER
-  // =========================
-
-  findVideoFolder: (folders) => {
-    if (!Array.isArray(folders)) {
-      return null;
-    }
-
-    const folder = folders.find(
-      (item) =>
-        (item.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase() &&
-         item.type === VIDEO_FOLDER_TYPE) ||
-        item.name?.toLowerCase() === "видеоуроки"
-    );
-
-    console.log("🎥 Найдена папка видеоуроков:", folder);
-    return folder || null;
-  },
-
-  // =========================
-  // CREATE VIDEO FOLDER IF NOT EXISTS
-  // =========================
-
-  ensureVideoFolderExists: async () => {
-    try {
-      const response = await getFolders();
-      console.log("📥 Получены папки:", response);
-
-      let folders = [];
-      if (response?.data && Array.isArray(response.data)) {
-        folders = response.data;
-      } else if (Array.isArray(response)) {
-        folders = response;
-      } else if (response?.$values && Array.isArray(response.$values)) {
-        folders = response.$values;
-      }
-
-      console.log("📁 Массив папок:", folders);
-
-      let videoFolder = get().findVideoFolder(folders);
-
-      if (!videoFolder) {
-        console.log(`🆕 Папка "${VIDEO_FOLDER_NAME}" не найдена, создаём...`);
-        
-        const newFolder = await createFolder({
-          name: VIDEO_FOLDER_NAME,
-          description: "Системная папка для видеоуроков",
-          type: VIDEO_FOLDER_TYPE, // Указываем тип
-        });
-
-        console.log("✅ Папка создана:", newFolder);
-
-        videoFolder = newFolder;
-        set({ videoFolder: newFolder });
-
-        await get().fetchAllFolders();
-
-        return newFolder;
-      }
-
-      set({ videoFolder });
-      return videoFolder;
-    } catch (error) {
-      console.error("❌ Ошибка при работе с папкой видеоуроков:", error);
-      throw error;
-    }
-  },
-
-  // =========================
-  // FETCH ALL FOLDERS - ТОЛЬКО ПАПКИ ВИДЕОУРОКОВ
+  // FETCH ALL FOLDERS - ТОЛЬКО ПАПКИ ВИДЕОУРОКОВ (folderType = 1)
   // =========================
 
   fetchAllFolders: async () => {
     try {
       console.log("📁 Загрузка папок видеоуроков...");
-      const response = await getFolders();
       
+      // Запрашиваем папки с folderType = 1 (видеоуроки)
+      const response = await getFoldersByType(FOLDER_TYPES.VIDEO);
+      
+      // Нормализуем ответ
       let folders = [];
       if (response?.data && Array.isArray(response.data)) {
         folders = response.data;
@@ -116,18 +47,13 @@ export const useVideoLessonStore = create((set, get) => ({
         folders = response.$values;
       }
 
-      // ФИЛЬТРУЕМ: показываем только папки видеоуроков (type === "video")
-      // Исключаем папку "ВидеоУрок" из списка доступных для выбора
-      const filteredFolders = folders.filter(folder => {
-        const isVideoFolder = folder.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase();
-        const isVideoType = folder.type === VIDEO_FOLDER_TYPE || 
-                           folder.type === "videos";
-        
-        return !isVideoFolder && isVideoType;
-      });
+      // Фильтруем по folderType на всякий случай
+      const filteredFolders = folders.filter(folder => 
+        folder.folderType === FOLDER_TYPES.VIDEO
+      );
 
+      console.log("📁 Получены папки видео:", filteredFolders);
       set({ allFolders: filteredFolders });
-      console.log(`📁 Загружено папок видеоуроков: ${filteredFolders.length}`);
       return filteredFolders;
     } catch (error) {
       console.error("❌ Ошибка загрузки папок:", error);
@@ -140,28 +66,93 @@ export const useVideoLessonStore = create((set, get) => ({
   },
 
   // =========================
-  // CREATE FOLDER - РАЗРЕШЕНО
+  // FETCH VIDEO LESSONS
+  // =========================
+
+  fetchVideoLessons: async () => {
+    set({ loading: true, error: null });
+
+    try {
+      // Получаем папки видео
+      const folders = await get().fetchAllFolders();
+      const folderIds = folders.map(f => f.id);
+      
+      console.log("📁 ID папок видео:", folderIds);
+
+      // Если нет папок, возвращаем пустой массив
+      if (folderIds.length === 0) {
+        console.log("📁 Нет папок видео");
+        set({ videoLessons: [], loading: false });
+        return [];
+      }
+
+      // Загружаем все объявления
+      const response = await getAnnouncement();
+      
+      let allAnnouncements = [];
+      if (response?.data && Array.isArray(response.data)) {
+        allAnnouncements = response.data;
+      } else if (Array.isArray(response)) {
+        allAnnouncements = response;
+      } else if (response?.$values && Array.isArray(response.$values)) {
+        allAnnouncements = response.$values;
+      }
+
+      console.log(`📄 Всего объявлений: ${allAnnouncements.length}`);
+
+      // Фильтруем объявления по folderId
+      const videoAnnouncements = allAnnouncements.filter(ann => {
+        if (ann.folderId) {
+          return folderIds.includes(Number(ann.folderId));
+        }
+        return false; // Объявления без папки не показываем в видео
+      });
+
+      // Добавляем информацию о папке
+      const enrichedVideos = videoAnnouncements.map(video => {
+        const folder = folders.find(f => Number(f.id) === Number(video.folderId));
+        return {
+          ...video,
+          folderName: folder ? folder.name : null,
+          folderType: folder ? folder.folderType : null,
+        };
+      });
+
+      console.log(`🎬 Всего видеоуроков: ${enrichedVideos.length}`);
+      set({
+        videoLessons: enrichedVideos,
+        loading: false,
+      });
+      
+      return enrichedVideos;
+    } catch (error) {
+      console.error("❌ Ошибка загрузки видеоуроков:", error);
+      set({
+        videoLessons: [],
+        loading: false,
+        error: error.response?.data?.message || error.message || "Ошибка загрузки видеоуроков",
+      });
+      throw error;
+    }
+  },
+
+  // =========================
+  // CREATE FOLDER
   // =========================
 
   createNewFolder: async (folderData) => {
     try {
-      console.log("📁 Создание папки для видео:", folderData);
+      console.log("📁 Создание папки видеоуроков:", folderData);
       
-      // Проверяем, не пытается ли пользователь создать папку "ВидеоУрок"
-      if (folderData.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase()) {
-        throw new Error("Нельзя создать папку с названием 'ВидеоУрок'");
-      }
-      
+      // Создаем папку с folderType = 1 (видеоуроки)
       const newFolder = await createFolder({
         name: folderData.name,
         description: folderData.description || "Папка видеоуроков",
-        type: VIDEO_FOLDER_TYPE, // Указываем тип
+        folderType: FOLDER_TYPES.VIDEO, // Важно!
       });
 
-      console.log("✅ Папка видео создана:", newFolder);
-      
+      console.log("✅ Папка видеоуроков создана:", newFolder);
       await get().fetchAllFolders();
-      
       return newFolder;
     } catch (error) {
       console.error("❌ Ошибка создания папки:", error);
@@ -170,27 +161,20 @@ export const useVideoLessonStore = create((set, get) => ({
   },
 
   // =========================
-  // UPDATE FOLDER - РАЗРЕШЕНО
+  // UPDATE FOLDER
   // =========================
 
   updateFolder: async (folderId, folderData) => {
     try {
       console.log(`📁 Обновление папки ${folderId}:`, folderData);
       
-      // Проверяем, не пытается ли пользователь переименовать в "ВидеоУрок"
-      if (folderData.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase()) {
-        throw new Error("Нельзя переименовать папку в 'ВидеоУрок'");
-      }
-      
       const updated = await updateFolder(folderId, {
         ...folderData,
-        type: VIDEO_FOLDER_TYPE, // Сохраняем тип
+        folderType: FOLDER_TYPES.VIDEO, // Сохраняем тип
       });
       
-      console.log("✅ Папка видео обновлена:", updated);
-      
+      console.log("✅ Папка обновлена:", updated);
       await get().fetchAllFolders();
-      
       return updated;
     } catch (error) {
       console.error("❌ Ошибка обновления папки:", error);
@@ -199,25 +183,40 @@ export const useVideoLessonStore = create((set, get) => ({
   },
 
   // =========================
-  // DELETE FOLDER - РАЗРЕШЕНО
+  // DELETE FOLDER
   // =========================
 
   deleteFolder: async (folderId) => {
     try {
       console.log(`🗑️ Удаление папки ${folderId}`);
       
-      // Проверяем, не пытается ли пользователь удалить папку "ВидеоУрок"
-      const folder = get().allFolders.find(f => Number(f.id) === Number(folderId));
-      if (folder?.name?.toLowerCase() === VIDEO_FOLDER_NAME.toLowerCase()) {
-        throw new Error("Нельзя удалить папку 'ВидеоУрок'");
+      // Получаем все видео в этой папке
+      const videosToDelete = get().videoLessons.filter(
+        video => Number(video.folderId) === Number(folderId)
+      );
+      
+      // Удаляем все видео из папки
+      for (const video of videosToDelete) {
+        try {
+          await deleteAnnouncement(video.id);
+          console.log(`✅ Видео ${video.id} удалено`);
+        } catch (error) {
+          console.error(`❌ Ошибка удаления видео ${video.id}:`, error);
+        }
       }
       
+      // Удаляем папку
       await deleteFolder(folderId);
-      
       console.log("✅ Папка удалена");
       
-      await get().fetchAllFolders();
+      // Обновляем состояние
+      set((state) => ({
+        videoLessons: state.videoLessons.filter(
+          video => Number(video.folderId) !== Number(folderId)
+        ),
+      }));
       
+      await get().fetchAllFolders();
       return true;
     } catch (error) {
       console.error("❌ Ошибка удаления папки:", error);
@@ -226,118 +225,12 @@ export const useVideoLessonStore = create((set, get) => ({
   },
 
   // =========================
-  // MOVE VIDEO TO FOLDER - РАЗРЕШЕНО
-  // =========================
-
-  moveVideoToFolder: async (videoId, folderId) => {
-    try {
-      console.log(`📦 Перемещение видео ${videoId} в папку ${folderId}`);
-      
-      const video = get().videoLessons.find(d => Number(d.id) === Number(videoId));
-      if (!video) {
-        throw new Error("Видео не найдено");
-      }
-      
-      await get().editVideoLesson(videoId, {
-        ...video,
-        folderId: folderId,
-      });
-      
-      console.log("✅ Видео перемещено");
-      return true;
-    } catch (error) {
-      console.error("❌ Ошибка перемещения видео:", error);
-      throw error;
-    }
-  },
-
-  // =========================
-  // FETCH VIDEO LESSONS - ТОЛЬКО ИЗ ПАПКИ "ВидеоУрок"
-  // =========================
-
-  fetchVideoLessons: async () => {
-    set({
-      loading: true,
-      error: null,
-    });
-
-    try {
-      const videoFolder = await get().ensureVideoFolderExists();
-
-      if (!videoFolder) {
-        console.warn(`⚠️ Не удалось создать папку "${VIDEO_FOLDER_NAME}"`);
-        set({
-          videoLessons: [],
-          videoFolder: null,
-          loading: false,
-        });
-        return [];
-      }
-
-      const response = await getFolders();
-      let folders = [];
-      if (response?.data && Array.isArray(response.data)) {
-        folders = response.data;
-      } else if (Array.isArray(response)) {
-        folders = response;
-      } else if (response?.$values && Array.isArray(response.$values)) {
-        folders = response.$values;
-      }
-
-      const updatedFolder = folders.find(
-        (f) => Number(f.id) === Number(videoFolder.id)
-      );
-
-      const videoLessons = updatedFolder?.announcements 
-        ? (Array.isArray(updatedFolder.announcements) 
-            ? updatedFolder.announcements 
-            : updatedFolder.announcements.$values || [])
-        : [];
-
-      videoLessons.forEach(video => {
-        video.folderId = updatedFolder?.id || videoFolder.id;
-        video.folderName = VIDEO_FOLDER_NAME;
-      });
-
-      set({
-        videoLessons,
-        videoFolder: updatedFolder || videoFolder,
-        loading: false,
-      });
-
-      console.log(`✅ Загружено видеоуроков: ${videoLessons.length}`);
-      return videoLessons;
-    } catch (error) {
-      console.error("❌ Ошибка загрузки видеоуроков:", error);
-
-      set({
-        videoLessons: [],
-        loading: false,
-        error:
-          error.response?.data?.message ||
-          error.message ||
-          "Ошибка загрузки видеоуроков",
-      });
-
-      throw error;
-    }
-  },
-
-  // =========================
-  // CREATE VIDEO LESSON - ВСЕГДА В ПАПКУ "ВидеоУрок"
+  // CREATE VIDEO LESSON
   // =========================
 
   addVideoLesson: async (newData) => {
     try {
       console.log("📝 Создание видеоурока:", newData);
-
-      const videoFolder = await get().ensureVideoFolderExists();
-
-      if (!videoFolder) {
-        throw new Error(`Папка "${VIDEO_FOLDER_NAME}" не найдена`);
-      }
-
-      console.log("📁 Создаём в папке:", videoFolder.id, videoFolder.name);
 
       const formData = new FormData();
       
@@ -346,8 +239,20 @@ export const useVideoLessonStore = create((set, get) => ({
       formData.append("SubDepartmentId", String(Number(newData.subDepartmentId ?? 0)));
       formData.append("EmployeeId", String(Number(newData.employeeId ?? 0)));
       
-      // ВСЕГДА в папку "ВидеоУрок"
-      formData.append("FolderId", String(Number(videoFolder.id)));
+      // Проверяем, что folderId принадлежит папке видео
+      if (newData.folderId) {
+        const folders = get().allFolders;
+        const folderExists = folders.some(f => Number(f.id) === Number(newData.folderId));
+        if (folderExists) {
+          formData.append("FolderId", String(Number(newData.folderId)));
+          console.log(`📁 Создаём видео в папке ID: ${newData.folderId}`);
+        } else {
+          console.warn(`⚠️ Папка ${newData.folderId} не найдена в видео`);
+          formData.append("FolderId", "0");
+        }
+      } else {
+        formData.append("FolderId", "0");
+      }
 
       if (newData.files && Array.isArray(newData.files)) {
         newData.files.forEach((file, index) => {
@@ -360,19 +265,11 @@ export const useVideoLessonStore = create((set, get) => ({
         });
       }
 
-      console.log("📤 Отправляем FormData:");
-      for (const [key, value] of formData.entries()) {
-        console.log(`  ${key}:`, value instanceof File ? value.name : value);
-      }
-
-      const responseAnnouncement = await createAnnouncement(formData);
-
-      console.log("✅ Видеоурок создан:", responseAnnouncement);
+      const response = await createAnnouncement(formData);
+      console.log("✅ Видеоурок создан:", response);
 
       await get().fetchVideoLessons();
-      await get().fetchAllFolders();
-
-      return responseAnnouncement;
+      return response;
     } catch (error) {
       console.error("❌ Ошибка создания видеоурока:", error);
       throw error;
@@ -385,16 +282,9 @@ export const useVideoLessonStore = create((set, get) => ({
 
   editVideoLesson: async (id, updatedData) => {
     try {
-      console.log("✏️ Обновление видеоурока:", id);
-
-      const videoFolder = await get().ensureVideoFolderExists();
-
-      if (!videoFolder) {
-        throw new Error(`Папка "${VIDEO_FOLDER_NAME}" не найдена`);
-      }
+      console.log("✏️ Обновление видеоурока:", id, updatedData);
 
       const formData = new FormData();
-      
       formData.append("Title", updatedData.title || "");
       formData.append("Content", updatedData.content || "");
       
@@ -406,8 +296,17 @@ export const useVideoLessonStore = create((set, get) => ({
         formData.append("EmployeeId", String(Number(updatedData.employeeId)));
       }
       
-      // ВСЕГДА в папку "ВидеоУрок"
-      formData.append("FolderId", String(Number(videoFolder.id)));
+      if (updatedData.folderId !== null && updatedData.folderId !== undefined) {
+        const folders = get().allFolders;
+        const folderExists = folders.some(f => Number(f.id) === Number(updatedData.folderId));
+        if (folderExists || updatedData.folderId === 0) {
+          formData.append("FolderId", String(Number(updatedData.folderId || 0)));
+          console.log(`📁 Перемещаем видео в папку ID: ${updatedData.folderId}`);
+        } else {
+          console.warn(`⚠️ Папка ${updatedData.folderId} не найдена`);
+          formData.append("FolderId", "0");
+        }
+      }
 
       if (updatedData.files && Array.isArray(updatedData.files)) {
         updatedData.files.forEach((file, index) => {
@@ -420,18 +319,10 @@ export const useVideoLessonStore = create((set, get) => ({
         });
       }
 
-      console.log("📤 Отправляем FormData на обновление:");
-      for (const [key, value] of formData.entries()) {
-        console.log(`  ${key}:`, value instanceof File ? value.name : value);
-      }
-
       const updated = await updateAnnouncement(id, formData);
-
       console.log("✅ Видеоурок обновлен:", updated);
 
       await get().fetchVideoLessons();
-      await get().fetchAllFolders();
-
       return updated;
     } catch (error) {
       console.error("❌ Ошибка обновления видеоурока:", error);
@@ -446,9 +337,8 @@ export const useVideoLessonStore = create((set, get) => ({
   removeVideoLesson: async (id) => {
     try {
       console.log("🗑️ Удаление видеоурока:", id);
-
       await deleteAnnouncement(id);
-
+      
       set((state) => ({
         videoLessons: state.videoLessons.filter(
           (item) => Number(item.id) !== Number(id)
@@ -456,11 +346,44 @@ export const useVideoLessonStore = create((set, get) => ({
       }));
 
       console.log("✅ Видеоурок удален");
-      
       await get().fetchVideoLessons();
-      await get().fetchAllFolders();
     } catch (error) {
       console.error("❌ Ошибка удаления видеоурока:", error);
+      throw error;
+    }
+  },
+
+  // =========================
+  // MOVE VIDEO TO FOLDER
+  // =========================
+
+  moveVideoToFolder: async (videoId, folderId) => {
+    try {
+      console.log(`📦 Перемещение видео ${videoId} в папку ${folderId}`);
+      
+      const video = get().videoLessons.find(v => Number(v.id) === Number(videoId));
+      if (!video) {
+        throw new Error("Видео не найдено");
+      }
+      
+      // Проверяем, что папка существует в видео
+      if (folderId) {
+        const folders = get().allFolders;
+        const folderExists = folders.some(f => Number(f.id) === Number(folderId));
+        if (!folderExists) {
+          throw new Error("Папка не найдена в видеоуроках");
+        }
+      }
+      
+      await get().editVideoLesson(videoId, {
+        ...video,
+        folderId: folderId || 0,
+      });
+      
+      console.log("✅ Видео перемещено");
+      return true;
+    } catch (error) {
+      console.error("❌ Ошибка перемещения видео:", error);
       throw error;
     }
   },

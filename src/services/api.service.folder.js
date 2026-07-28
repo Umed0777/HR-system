@@ -9,15 +9,22 @@ const API = axios.create({
 export const getFolders = async () => {
   try {
     const res = await API.get("/api/Folder");
-
     console.log("📁 GET /api/Folder:", res.data);
-
     return res.data;
   } catch (error) {
-    console.error(
-      "❌ Ошибка загрузки папок:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Ошибка загрузки папок:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// GET FOLDERS BY TYPE
+export const getFoldersByType = async (folderType) => {
+  try {
+    const res = await API.get(`/api/Folder?folderType=${folderType}`);
+    console.log(`📁 GET /api/Folder?folderType=${folderType}:`, res.data);
+    return res.data;
+  } catch (error) {
+    console.error("❌ Ошибка загрузки папок по типу:", error.response?.data || error.message);
     throw error;
   }
 };
@@ -26,15 +33,10 @@ export const getFolders = async () => {
 export const getFolderById = async (id) => {
   try {
     const res = await API.get(`/api/Folder/${id}`);
-
     console.log(`📁 GET /api/Folder/${id}:`, res.data);
-
     return res.data;
   } catch (error) {
-    console.error(
-      "❌ Ошибка получения папки:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Ошибка получения папки:", error.response?.data || error.message);
     throw error;
   }
 };
@@ -43,15 +45,10 @@ export const getFolderById = async (id) => {
 export const createFolder = async (data) => {
   try {
     const res = await API.post("/api/Folder", data);
-
     console.log("✅ Папка создана:", res.data);
-
     return res.data;
   } catch (error) {
-    console.error(
-      "❌ Ошибка создания папки:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Ошибка создания папки:", error.response?.data || error.message);
     throw error;
   }
 };
@@ -60,15 +57,10 @@ export const createFolder = async (data) => {
 export const updateFolder = async (id, data) => {
   try {
     const res = await API.put(`/api/Folder/${id}`, data);
-
     console.log("✅ Папка обновлена:", res.data);
-
     return res.data;
   } catch (error) {
-    console.error(
-      "❌ Ошибка обновления папки:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Ошибка обновления папки:", error.response?.data || error.message);
     throw error;
   }
 };
@@ -77,15 +69,10 @@ export const updateFolder = async (id, data) => {
 export const deleteFolder = async (id) => {
   try {
     const res = await API.delete(`/api/Folder/${id}`);
-
     console.log("✅ Папка удалена:", res.data);
-
     return res.data;
   } catch (error) {
-    console.error(
-      "❌ Ошибка удаления папки:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Ошибка удаления папки:", error.response?.data || error.message);
     throw error;
   }
 };
