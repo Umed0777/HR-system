@@ -98,25 +98,30 @@ export const VideoLesson = () => {
   const [loadingFolders, setLoadingFolders] = useState(false);
 
   // Загрузка данных
-  useEffect(() => {
-    const loadData = async () => {
-      console.log("🔄 VideoLesson - Загрузка данных...");
-      setLoadingFolders(true);
-      try {
-        await fetchSubDepartments();
-        await fetchEmployee();
-        await fetchAllFolders();
-        await fetchVideoLessons();
-        console.log("✅ VideoLesson - Данные загружены");
-      } catch (error) {
-        console.error("❌ Ошибка загрузки:", error);
-        message.error("Ошибка загрузки данных");
-      } finally {
-        setLoadingFolders(false);
-      }
-    };
-    loadData();
-  }, []);
+useEffect(() => {
+  const loadData = async () => {
+    console.log("🔄 VideoLesson - Загрузка данных...");
+    setLoadingFolders(true);
+
+    try {
+      await fetchSubDepartments();
+      await fetchEmployee();
+
+      // fetchVideoLessons внутри сам загрузит папки
+      // и достанет из них announcements
+      await fetchVideoLessons();
+
+      console.log("✅ VideoLesson - Данные загружены");
+    } catch (error) {
+      console.error("❌ Ошибка загрузки:", error);
+      message.error("Ошибка загрузки данных");
+    } finally {
+      setLoadingFolders(false);
+    }
+  };
+
+  loadData();
+}, []);
 
   // Безопасная проверка на undefined
   const allVideos = Array.isArray(videoLessons) ? videoLessons : [];

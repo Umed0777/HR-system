@@ -1,4 +1,5 @@
-// layout/HRSystemLayout.jsx
+// layout/HRSystemLayout.jsx - ОБНОВЛЕННАЯ ВЕРСИЯ
+
 import { Button, Layout, Menu } from "antd";
 import {
   ApartmentOutlined,
@@ -17,6 +18,7 @@ import {
   VideoCameraOutlined,
   FilePdfOutlined,
   BarsOutlined,
+  BarChartOutlined, // 👈 ДОБАВИТЬ
 } from "@ant-design/icons";
 import { useEffect, useState, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -57,6 +59,10 @@ export const HRSystemLayout = () => {
 
     if (["/announcement", "/video-lessons", "/documentation"].includes(path)) {
       newOpenKeys.push("announcement");
+    }
+
+    if (["/test", "/test-taking", "/surveys", "/survey-results"].includes(path)) {
+      newOpenKeys.push("testing");
     }
 
     setOpenKeys(newOpenKeys);
@@ -128,19 +134,31 @@ export const HRSystemLayout = () => {
           ],
         },
         {
-          key: "/test",
+          key: "testing", // 👈 НОВЫЙ КЛЮЧ
           icon: <FormOutlined />,
-          label: "Тесты",
-        },
-        {
-          key: "/surveys",
-          icon: <BarsOutlined />,
-          label: "Опросы",
-        },
-        {
-          key: "/test-taking",
-          icon: <CheckSquareOutlined />,
-          label: "Результаты",
+          label: "Тестирование",
+          children: [
+            {
+              key: "/test",
+              icon: <FormOutlined />,
+              label: "Тесты",
+            },
+            {
+              key: "/surveys",
+              icon: <BarsOutlined />,
+              label: "Опросы",
+            },
+            {
+              key: "/survey-results", // 👈 НОВЫЙ ПУНКТ
+              icon: <BarChartOutlined />,
+              label: "Результаты опросов",
+            },
+            {
+              key: "/test-taking",
+              icon: <CheckSquareOutlined />,
+              label: "Результаты тестов",
+            },
+          ],
         },
       );
     }
@@ -157,11 +175,6 @@ export const HRSystemLayout = () => {
           label: "База знаний",
           children: [
             {
-              key: "/announcement",
-              icon: <ReadOutlined />,
-              label: "Инструкции",
-            },
-            {
               key: "/video-lessons",
               icon: <VideoCameraOutlined />,
               label: "ВидеоУрок",
@@ -174,19 +187,31 @@ export const HRSystemLayout = () => {
           ],
         },
         {
-          key: "/test",
+          key: "testing", // 👈 НОВЫЙ КЛЮЧ
           icon: <FormOutlined />,
-          label: "Тесты",
-        },
-        {
-          key: "/surveys",
-          icon: <BarsOutlined />,
-          label: "Опросы",
-        },
-        {
-          key: "/test-taking",
-          icon: <CheckSquareOutlined />,
-          label: "Результаты",
+          label: "Тестирование",
+          children: [
+            {
+              key: "/test",
+              icon: <FormOutlined />,
+              label: "Тесты",
+            },
+            {
+              key: "/surveys",
+              icon: <BarsOutlined />,
+              label: "Опросы",
+            },
+            {
+              key: "/survey-results", // 👈 НОВЫЙ ПУНКТ
+              icon: <BarChartOutlined />,
+              label: "Результаты опросов",
+            },
+            {
+              key: "/test-taking",
+              icon: <CheckSquareOutlined />,
+              label: "Результаты тестов",
+            },
+          ],
         },
       );
     }

@@ -1,4 +1,4 @@
-// components/TestManager.jsx - УПРАВЛЕНИЕ ТЕСТАМИ + КНОПКА НАЧАТЬ ТЕСТ
+// components/TestManager.jsx - ТОЛЬКО ТЕСТЫ (testType !== 0)
 
 import { useEffect, useState, useCallback } from "react";
 import { useTestStore } from "../store/useTest";
@@ -448,6 +448,10 @@ export const TestManager = ({ onStartTest }) => {
 
   const API_BASE = "http://10.65.10.22:8525/api";
 
+  // ==================== ФИЛЬТРУЕМ ТОЛЬКО ТЕСТЫ (НЕ ОПРОСЫ) ====================
+  // testType === 1 - тесты, testType === 0 - опросы
+  const testTests = tests.filter(test => test.testType !== 0);
+
   // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
   const getQuestionText = useCallback((question) => {
@@ -491,7 +495,7 @@ export const TestManager = ({ onStartTest }) => {
 
   const getUsedQuestionIds = useCallback(() => {
     const usedIds = new Set();
-    tests.forEach(test => {
+    testTests.forEach(test => {
       if (test.questions && test.questions.length > 0) {
         test.questions.forEach(q => {
           if (q.id) usedIds.add(q.id);
@@ -499,7 +503,7 @@ export const TestManager = ({ onStartTest }) => {
       }
     });
     return usedIds;
-  }, [tests]);
+  }, [testTests]);
 
   const getAvailableQuestions = useCallback(() => {
     const usedIds = getUsedQuestionIds();
@@ -527,11 +531,9 @@ export const TestManager = ({ onStartTest }) => {
 
   // ===== ПРОВЕРКА - ТОЛЬКО 1 ПОПЫТКА =====
   const checkCanStartTest = useCallback((employeeId, testId) => {
-    // Считаем ЗАВЕРШЕННЫЕ сессии (status === 2)
     const completedSessions = sessions.filter(
       (s) => s.employeeId === employeeId && s.testId === testId && s.status === 2
     );
-    // Можно начать если завершенных сессий НЕТ (0)
     return completedSessions.length === 0;
   }, [sessions]);
 
@@ -945,6 +947,7 @@ export const TestManager = ({ onStartTest }) => {
       titleTj: titleTj || titleRu,
       descriptionRu: descriptionRu || descriptionTj,
       descriptionTj: descriptionTj || descriptionRu,
+      testType: 1, // ТЕСТ (не опрос)
       questions: questionsData,
     };
 
@@ -1018,7 +1021,6 @@ export const TestManager = ({ onStartTest }) => {
 
     setSelectedSubDepartmentId(subDeptId);
 
-    // ПРОВЕРКА - ТОЛЬКО 1 ПОПЫТКА
     if (!canStartTest) {
       message.error("Сотрудник уже прошел этот тест. Повторная сдача недоступна.");
       return;
@@ -1045,7 +1047,6 @@ export const TestManager = ({ onStartTest }) => {
       return;
     }
 
-    // Проверка и создание назначения
     let hasAssignment = testAssignments.some(
       a => a.employeeId === selectedEmployeeId && a.testId === selectedTestId
     );
@@ -1163,7 +1164,7 @@ export const TestManager = ({ onStartTest }) => {
 
   // ==================== РЕНДЕР ====================
 
-  if (loading && sessions.length === 0 && tests.length === 0) {
+  if (loading && sessions.length === 0 && testTests.length === 0) {
     return (
       <div style={{ display: "flex", justifyContent: "center", padding: 50, alignItems: "center", height: "60vh" }}>
         <Spin size="small" tip={t[lang].loading} />
@@ -1190,7 +1191,7 @@ export const TestManager = ({ onStartTest }) => {
             📋 {t[lang].title}
           </Title>
           <Text type="secondary" style={{ fontSize: 14 }}>
-            Всего {tests.length} {tests.length === 1 ? "тест" : "тестов"} • Всего {questions.length} вопросов • {sessions.length} сессий
+            Всего {testTests.length} {testTests.length === 1 ? "тест" : "тестов"} • Всего {questions.length} вопросов • {sessions.length} сессий
           </Text>
         </div>
 
@@ -1210,7 +1211,6 @@ export const TestManager = ({ onStartTest }) => {
             TJ
           </Button>
           
-          {/* КНОПКА НАЧАТЬ ТЕСТ */}
           <Button
             type="primary"
             onClick={() => {
@@ -1246,7 +1246,7 @@ export const TestManager = ({ onStartTest }) => {
 
       {/* ==================== СПИСОК ТЕСТОВ ==================== */}
       <AnimatePresence>
-        {!tests || tests.length === 0 ? (
+        {!testTests || testTests.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
             <Card style={{ textAlign: "center", padding: 60, borderRadius: 20 }}>
               <FileTextOutlined style={{ fontSize: 64, color: "#ff4b2b", marginBottom: 20 }} />
@@ -1262,7 +1262,7 @@ export const TestManager = ({ onStartTest }) => {
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
             <Row gutter={[24, 24]}>
-              {tests.map((test, index) => {
+              {testTests.map((test, index) => {
                 const isHovered = hoveredCard === test.id;
                 const isNew = newTestId === test.id;
                 const questionCount = test.questions?.length || 0;
@@ -1416,7 +1416,7 @@ export const TestManager = ({ onStartTest }) => {
         width={650}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          {/* Выбор теста */}
+          {/* Выбор теста - только ТЕСТЫ (не опросы) */}
           <div>
             <Text strong>{t[lang].test}:</Text>
             <Select
@@ -1427,7 +1427,7 @@ export const TestManager = ({ onStartTest }) => {
               showSearch
               size="large"
             >
-              {tests.map((test) => (
+              {testTests.map((test) => (
                 <Option key={test.id} value={test.id}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1485,7 +1485,7 @@ export const TestManager = ({ onStartTest }) => {
 
           {/* Выбор сотрудника */}
           <div>
-            <Text strong>{t[lang].employee}Сотрудник:</Text>
+            <Text strong>{t[lang].employee}Сотрудника</Text>
             <Select
               placeholder={t[lang].selectEmployee}
               value={selectedEmployeeId}
@@ -1506,7 +1506,7 @@ export const TestManager = ({ onStartTest }) => {
               {Object.entries(groupedEmployees).map(([department, deptEmployees]) => (
                 <Select.OptGroup key={department} label={`${t[lang].department}: ${department}`}>
                   {deptEmployees.map((emp) => (
-                    <Option key={emp.id} value={emp.id} >
+                    <Option key={emp.id} value={emp.id}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <UserOutlined />
                         {emp.firstName} {emp.lastName}
@@ -1526,7 +1526,7 @@ export const TestManager = ({ onStartTest }) => {
 
           {/* Отделение */}
           <div>
-            <Text strong>{t[lang].subDepartment}Отдел:</Text>
+            <Text strong>{t[lang].subDepartment}Отделение</Text>
             {selectedEmployeeId ? (
               <>
                 {selectedSubDepartmentId ? (
@@ -1571,7 +1571,6 @@ export const TestManager = ({ onStartTest }) => {
             )}
           </div>
 
-          {/* ===== СООБЩЕНИЕ ЕСЛИ ТЕСТ УЖЕ ПРОЙДЕН ===== */}
           {selectedEmployeeId && selectedTestId && !canStartTest && (
             <Alert 
               message={t[lang].alreadyPassed} 

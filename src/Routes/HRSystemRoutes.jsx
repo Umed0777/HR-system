@@ -1,8 +1,10 @@
-// Routes/HRSystemRoutes.jsx
+// Routes/HRSystemRoutes.jsx - ОБНОВЛЕННАЯ ВЕРСИЯ
+
 import { Route, Routes, Navigate } from "react-router-dom";
 import { HRSystemLayout } from "../layout/HRSystemLayout";
 import { useState } from "react";
 import { SurveyManager } from "../pages/SurveyManager";
+import { SurveyResultsPage } from "../pages/SurveyResultsPage"; // 👈 ДОБАВИТЬ
 import { Announcement } from "../pages/Announcement";
 import { Departament } from "../pages/Departament";
 import { Employee } from "../pages/Employee";
@@ -67,18 +69,22 @@ export const HRSystemRoutes = () => {
         <Route path="employee" element={<Employee />} />
         <Route path="question" element={<Question />} />
         
-        {/* ===== ПЕРЕДАЕМ onStartTest В TestManager ===== */}
+        {/* ТЕСТЫ */}
         <Route 
           path="test" 
           element={<TestManager onStartTest={handleStartTest} />} 
         />
         <Route path="test-taking" element={<TestSession />} />
+        
         <Route path="subdepartment" element={<Subdepartment />} />
         <Route path="video-lessons" element={<VideoLesson />} />
         <Route path="documentation" element={<Documentation />} />
         
-        {/* ===== ОПРОСЫ - ВНУТРИ ЗАЩИЩЕННОГО LAYOUT ===== */}
+        {/* ===== ОПРОСЫ ===== */}
         <Route path="surveys" element={<SurveyManager />} />
+        
+        {/* 👇 НОВЫЙ МАРШРУТ ДЛЯ РЕЗУЛЬТАТОВ ОПРОСОВ */}
+        <Route path="survey-results" element={<SurveyResultsPage />} />
       </Route>
 
       {/* PUBLIC EXTRA */}

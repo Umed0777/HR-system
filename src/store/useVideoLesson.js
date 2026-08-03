@@ -1,14 +1,12 @@
 // src/store/useVideoLesson.js
 import { create } from "zustand";
 import {
-  getFolders,
   getFoldersByType,
   createFolder,
   updateFolder,
   deleteFolder,
 } from "../services/api.service.folder";
 import {
-  getAnnouncement,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
@@ -69,72 +67,64 @@ export const useVideoLessonStore = create((set, get) => ({
   // FETCH VIDEO LESSONS
   // =========================
 
-  fetchVideoLessons: async () => {
-    set({ loading: true, error: null });
+  // =========================
+// FETCH VIDEO LESSONS
+// =========================
 
-    try {
-      // Получаем папки видео
-      const folders = await get().fetchAllFolders();
-      const folderIds = folders.map(f => f.id);
-      
-      console.log("📁 ID папок видео:", folderIds);
+fetchVideoLessons: async () => {
+  set({ loading: true, error: null });
 
-      // Если нет папок, возвращаем пустой массив
-      if (folderIds.length === 0) {
-        console.log("📁 Нет папок видео");
-        set({ videoLessons: [], loading: false });
-        return [];
-      }
+  try {
+    console.log("🎬 Загрузка видеоуроков...");
 
-      // Загружаем все объявления
-      const response = await getAnnouncement();
-      
-      let allAnnouncements = [];
-      if (response?.data && Array.isArray(response.data)) {
-        allAnnouncements = response.data;
-      } else if (Array.isArray(response)) {
-        allAnnouncements = response;
-      } else if (response?.$values && Array.isArray(response.$values)) {
-        allAnnouncements = response.$values;
-      }
+    // Получаем только папки с folderType = VIDEO
+    const folders = await get().fetchAllFolders();
 
-      console.log(`📄 Всего объявлений: ${allAnnouncements.length}`);
+    console.log("📁 Папки видео:", folders);
 
-      // Фильтруем объявления по folderId
-      const videoAnnouncements = allAnnouncements.filter(ann => {
-        if (ann.folderId) {
-          return folderIds.includes(Number(ann.folderId));
-        }
-        return false; // Объявления без папки не показываем в видео
-      });
+    // Берем объявления непосредственно из каждой папки
+    const videoLessons = folders.flatMap((folder) => {
+      const announcements = Array.isArray(folder.announcements)
+        ? folder.announcements
+        : [];
 
-      // Добавляем информацию о папке
-      const enrichedVideos = videoAnnouncements.map(video => {
-        const folder = folders.find(f => Number(f.id) === Number(video.folderId));
-        return {
-          ...video,
-          folderName: folder ? folder.name : null,
-          folderType: folder ? folder.folderType : null,
-        };
-      });
+      return announcements.map((announcement) => ({
+        ...announcement,
 
-      console.log(`🎬 Всего видеоуроков: ${enrichedVideos.length}`);
-      set({
-        videoLessons: enrichedVideos,
-        loading: false,
-      });
-      
-      return enrichedVideos;
-    } catch (error) {
-      console.error("❌ Ошибка загрузки видеоуроков:", error);
-      set({
-        videoLessons: [],
-        loading: false,
-        error: error.response?.data?.message || error.message || "Ошибка загрузки видеоуроков",
-      });
-      throw error;
-    }
-  },
+        // ID папки
+        folderId: folder.id,
+
+        // Дополнительная информация о папке
+        folderName: folder.name,
+        folderType: folder.folderType,
+      }));
+    });
+
+    console.log("🎬 Найдено видеоуроков:", videoLessons.length);
+    console.log("🎬 Видеоуроки:", videoLessons);
+
+    set({
+      videoLessons,
+      loading: false,
+      error: null,
+    });
+
+    return videoLessons;
+  } catch (error) {
+    console.error("❌ Ошибка загрузки видеоуроков:", error);
+
+    set({
+      videoLessons: [],
+      loading: false,
+      error:
+        error.response?.data?.message ||
+        error.message ||
+        "Ошибка загрузки видеоуроков",
+    });
+
+    throw error;
+  }
+},
 
   // =========================
   // CREATE FOLDER
