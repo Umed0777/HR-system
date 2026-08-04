@@ -70,72 +70,59 @@ export const useDocumentationStore = create((set, get) => ({
   // =========================
 
   fetchDocuments: async () => {
-    set({ loading: true, error: null });
+  set({ loading: true, error: null });
 
-    try {
-      // Получаем папки документации
-      const folders = await get().fetchAllFolders();
-      const folderIds = folders.map(f => f.id);
-      
-      console.log("📁 ID папок документации:", folderIds);
+  try {
+    console.log("📚 Загрузка документов...");
 
-      // Если нет папок, возвращаем пустой массив
-      if (folderIds.length === 0) {
-        console.log("📁 Нет папок документации");
-        set({ documents: [], loading: false });
-        return [];
-      }
+    // Получаем только папки с folderType = DOCUMENTATION (2)
+    const folders = await get().fetchAllFolders();
 
-      // Загружаем все объявления
-      const response = await getAnnouncement();
-      
-      let allAnnouncements = [];
-      if (response?.data && Array.isArray(response.data)) {
-        allAnnouncements = response.data;
-      } else if (Array.isArray(response)) {
-        allAnnouncements = response;
-      } else if (response?.$values && Array.isArray(response.$values)) {
-        allAnnouncements = response.$values;
-      }
+    console.log("📁 Папки документации:", folders);
 
-      console.log(`📄 Всего объявлений: ${allAnnouncements.length}`);
+    // Берем объявления непосредственно из каждой папки
+    const documents = folders.flatMap((folder) => {
+      const announcements = Array.isArray(folder.announcements)
+        ? folder.announcements
+        : [];
 
-      // Фильтруем объявления по folderId
-      const docAnnouncements = allAnnouncements.filter(ann => {
-        if (ann.folderId) {
-          return folderIds.includes(Number(ann.folderId));
-        }
-        return false; // Объявления без папки не показываем в документации
-      });
+      return announcements.map((announcement) => ({
+        ...announcement,
 
-      // Добавляем информацию о папке
-      const enrichedDocs = docAnnouncements.map(doc => {
-        const folder = folders.find(f => Number(f.id) === Number(doc.folderId));
-        return {
-          ...doc,
-          folderName: folder ? folder.name : null,
-          folderType: folder ? folder.folderType : null,
-        };
-      });
+        // ID папки
+        folderId: folder.id,
 
-      console.log(`📚 Всего документов: ${enrichedDocs.length}`);
-      set({
-        documents: enrichedDocs,
-        loading: false,
-      });
-      
-      return enrichedDocs;
-    } catch (error) {
-      console.error("❌ Ошибка загрузки документов:", error);
-      set({
-        documents: [],
-        loading: false,
-        error: error.response?.data?.message || error.message || "Ошибка загрузки документов",
-      });
-      throw error;
-    }
-  },
+        // Дополнительная информация о папке
+        folderName: folder.name,
+        folderType: folder.folderType,
+      }));
+    });
 
+    console.log("📚 Найдено документов:", documents.length);
+    console.log("📚 Документы:", documents);
+
+    set({
+      documents,
+      loading: false,
+      error: null,
+    });
+
+    return documents;
+  } catch (error) {
+    console.error("❌ Ошибка загрузки документов:", error);
+
+    set({
+      documents: [],
+      loading: false,
+      error:
+        error.response?.data?.message ||
+        error.message ||
+        "Ошибка загрузки документов",
+    });
+
+    throw error;
+  }
+},
   // =========================
   // CREATE FOLDER
   // =========================
