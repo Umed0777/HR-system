@@ -1,14 +1,12 @@
 // src/store/useDocumentation.js
 import { create } from "zustand";
 import {
-  getFolders,
   getFoldersByType,
   createFolder,
   updateFolder,
   deleteFolder,
 } from "../services/api.service.folder";
 import {
-  getAnnouncement,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,

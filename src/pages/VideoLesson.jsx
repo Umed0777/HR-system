@@ -107,8 +107,9 @@ useEffect(() => {
       await fetchSubDepartments();
       await fetchEmployee();
 
-      // fetchVideoLessons внутри сам загрузит папки
-      // и достанет из них announcements
+      // Сначала загружаем папки (они обновят allFolders)
+      await fetchAllFolders();
+      // Затем загружаем видео (уже используя свежие папки)
       await fetchVideoLessons();
 
       console.log("✅ VideoLesson - Данные загружены");
