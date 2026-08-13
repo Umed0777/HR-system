@@ -1,6 +1,5 @@
-// components/TestSession.jsx - С 2 ПОПЫТКАМИ
-
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import {
   Button,
@@ -771,11 +770,9 @@ export const TestSession = ({ testData, onClose }) => {
 
   // ===== ФУНКЦИЯ ПРОВЕРКИ - 2 ПОПЫТКИ =====
   const checkCanStartTest = useCallback((employeeId, testId) => {
-    // Считаем ЗАВЕРШЕННЫЕ сессии (status === 2)
     const completedSessions = sessions.filter(
       (s) => s.employeeId === employeeId && s.testId === testId && s.status === 2
     );
-    // Можно начать если завершенных сессий МЕНЬШЕ 2
     return completedSessions.length < 2;
   }, [sessions]);
 
@@ -1223,10 +1220,8 @@ export const TestSession = ({ testData, onClose }) => {
       const test = tests.find((t) => t.id === currentSessionLocal.testId);
       const employee = employees.find((e) => e.id === currentSessionLocal.employeeId);
 
-      // Получаем информацию о попытках
       const attemptInfo = getAttemptInfo(currentSessionLocal.employeeId, currentSessionLocal.testId);
 
-      // Данные для белого модального окна
       const resultData = {
         score: finished.score || 0,
         correctAnswers: finished.correctAnswersCount || 0,
@@ -1235,11 +1230,10 @@ export const TestSession = ({ testData, onClose }) => {
         passed: passed,
         employeeName: employee ? `${employee.firstName} ${employee.lastName}` : "—",
         testName: lang === "ru" ? test?.titleRu || test?.title || "—" : test?.titleTj || test?.title || "—",
-        attemptsLeft: attemptInfo.remaining - 1, // Сколько осталось после этой попытки
+        attemptsLeft: attemptInfo.remaining - 1,
         isLastAttempt: attemptInfo.isLastAttempt,
       };
 
-      // Показываем белое модальное окно
       showTestResults(resultData);
 
       if (passed) {
@@ -1268,7 +1262,6 @@ export const TestSession = ({ testData, onClose }) => {
   // ===== ПОВТОРНАЯ СДАЧА ТЕСТА =====
   const handleRetakeTest = async (testId, employeeId) => {
     try {
-      // Проверяем сколько попыток уже было
       const attemptInfo = getAttemptInfo(employeeId, testId);
       
       if (attemptInfo.isCompleted) {
@@ -1403,83 +1396,290 @@ export const TestSession = ({ testData, onClose }) => {
     localStorage.setItem("testsession_lang", newLang);
   };
 
-  // ===== ЭКСПОРТ В EXCEL =====
-  const exportAllToExcel = () => {
+  // ===== НОВАЯ ФУНКЦИЯ ЭКСПОРТА ВСЕХ (ExcelJS) =====
+  const exportAllToExcel = async () => {
     try {
-      const exportData = sessions.map((session) => {
-        const test = tests.find((t) => t.id === session.testId);
-        const employee = employees.find((e) => e.id === session.employeeId);
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'HR System';
+      workbook.created = new Date();
 
-        return {
-          ID: session.id,
-          "Тест": lang === "ru" ? test?.titleRu || test?.title || "" : test?.titleTj || test?.title || "",
-          Сотрудник: employee ? `${employee.firstName} ${employee.lastName}` : "",
-          Email: employee?.email || "",
-          Отдел: employee?.department || "",
-          Статус: session.status === 1 ? "В процессе" : "Завершен",
-          "Дата начала": session.startedAt ? new Date(session.startedAt).toLocaleString() : "",
-          "Дата завершения": session.finishedAt ? new Date(session.finishedAt).toLocaleString() : "",
-          "Длительность (мин)": session.durationMinutes || "",
-          "Результат (%)": session.score !== null ? `${session.score}%` : "",
-          "Правильные ответы": session.correctAnswersCount || 0,
-          "Всего вопросов": session.totalQuestionsCount || 0,
-        };
-      });
+      // ЛИСТ "Сводка"
+      const summarySheet = workbook.addWorksheet('Сводка', { properties: { tabColor: { argb: 'FF4B2B' } } });
+      summarySheet.addRow(['Отчёт по тестированиям']);
+      summarySheet.mergeCells('A1:C1');
+      const titleRow = summarySheet.getRow(1);
+      titleRow.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B2B' } };
+      titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
+      summarySheet.getRow(1).height = 40;
 
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Тестирования");
+      summarySheet.addRow([]);
 
       const statsData = [
-        { Показатель: "Всего сессий", Значение: stats.total },
-        { Показатель: "Завершенных сессий", Значение: stats.completed },
-        { Показатель: "В процессе", Значение: stats.inProgress },
-        { Показатель: "Средний балл", Значение: `${stats.averageScore}%` },
+        ['Показатель', 'Значение'],
+        ['Всего сессий', stats.total],
+        ['Завершено', stats.completed],
+        ['В процессе', stats.inProgress],
+        ['Средний балл', `${stats.averageScore}%`],
       ];
-      const wsStats = XLSX.utils.json_to_sheet(statsData);
-      XLSX.utils.book_append_sheet(wb, wsStats, "Статистика");
+      statsData.forEach((row) => {
+        const r = summarySheet.addRow(row);
+        r.font = { size: 12 };
+        if (row[0] === 'Показатель') {
+          r.font = { bold: true };
+          r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6E6E6' } };
+        }
+      });
+      summarySheet.getColumn(1).width = 25;
+      summarySheet.getColumn(2).width = 20;
 
-      XLSX.writeFile(
-        wb,
-        `test_sessions_${new Date().toISOString().split("T")[0]}.xlsx`,
-      );
-      message.success("Excel файл успешно создан");
+      // ЛИСТ "Детали"
+      const detailSheet = workbook.addWorksheet('Детали', { properties: { tabColor: { argb: 'FF1890FF' } } });
+
+      const headerRow = detailSheet.addRow([
+        'ID', 'Тест', 'Сотрудник', 'Email', 'Отдел', 'Статус',
+        'Дата начала', 'Дата завершения', 'Длительность (мин)', 'Результат', 'Правильные ответы', 'Всего вопросов'
+      ]);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B2B' } };
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+      headerRow.height = 28;
+
+      sessions.forEach((session) => {
+        const test = tests.find((t) => t.id === session.testId);
+        const employee = employees.find((e) => e.id === session.employeeId);
+        const row = detailSheet.addRow([
+          session.id,
+          lang === 'ru' ? test?.titleRu || test?.title || '' : test?.titleTj || test?.title || '',
+          employee ? `${employee.firstName} ${employee.lastName}` : '',
+          employee?.email || '',
+          employee?.department || '',
+          session.status === 1 ? 'В процессе' : 'Завершен',
+          session.startedAt ? new Date(session.startedAt).toLocaleString() : '',
+          session.finishedAt ? new Date(session.finishedAt).toLocaleString() : '',
+          session.durationMinutes || '',
+          session.score !== null ? `${session.score}%` : '',
+          session.correctAnswersCount || 0,
+          session.totalQuestionsCount || 0,
+        ]);
+        const statusCell = row.getCell(6);
+        if (session.status === 1) {
+          statusCell.font = { color: { argb: 'FF1890FF' } };
+        } else {
+          statusCell.font = { color: { argb: 'FF52C41A' } };
+        }
+        const scoreCell = row.getCell(10);
+        if (session.score !== null) {
+          if (session.score >= 70) {
+            scoreCell.font = { color: { argb: 'FF52C41A' }, bold: true };
+          } else {
+            scoreCell.font = { color: { argb: 'FFFF4D4F' }, bold: true };
+          }
+        }
+        row.alignment = { horizontal: 'center', vertical: 'middle' };
+        row.height = 24;
+      });
+
+      detailSheet.getColumn(1).width = 8;
+      detailSheet.getColumn(2).width = 30;
+      detailSheet.getColumn(3).width = 25;
+      detailSheet.getColumn(4).width = 25;
+      detailSheet.getColumn(5).width = 20;
+      detailSheet.getColumn(6).width = 15;
+      detailSheet.getColumn(7).width = 20;
+      detailSheet.getColumn(8).width = 20;
+      detailSheet.getColumn(9).width = 15;
+      detailSheet.getColumn(10).width = 15;
+      detailSheet.getColumn(11).width = 18;
+      detailSheet.getColumn(12).width = 16;
+      detailSheet.autoFilter = {
+        from: 'A1',
+        to: `L${sessions.length + 1}`,
+      };
+
+      // ЛИСТ "Рейтинг"
+      const rankingSheet = workbook.addWorksheet('Рейтинг', { properties: { tabColor: { argb: 'FFFAAD14' } } });
+
+      const employeeStats = employees
+        .map((emp) => {
+          const empSessions = sessions.filter(
+            (s) => s.employeeId === emp.id && s.status === 2 && s.score !== null
+          );
+          const completed = empSessions.length;
+          const avgScore = completed > 0 ? empSessions.reduce((sum, s) => sum + (s.score || 0), 0) / completed : 0;
+          const bestScore = completed > 0 ? Math.max(...empSessions.map((s) => s.score || 0)) : 0;
+          return { ...emp, completed, avgScore: Math.round(avgScore), bestScore };
+        })
+        .filter((emp) => emp.completed > 0)
+        .sort((a, b) => b.avgScore - a.avgScore);
+
+      if (employeeStats.length > 0) {
+        const rankHeader = rankingSheet.addRow(['Рейтинг сотрудников']);
+        rankingSheet.mergeCells('A1:E1');
+        rankHeader.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+        rankHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAAD14' } };
+        rankHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        rankingSheet.getRow(1).height = 36;
+
+        rankingSheet.addRow([]);
+
+        const rankCols = rankingSheet.addRow([
+          'Место', 'Сотрудник', 'Отдел', 'Пройдено тестов', 'Средний балл', 'Лучший результат'
+        ]);
+        rankCols.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        rankCols.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B2B' } };
+        rankCols.alignment = { horizontal: 'center', vertical: 'middle' };
+        rankCols.height = 28;
+
+        employeeStats.forEach((emp, idx) => {
+          const row = rankingSheet.addRow([
+            idx + 1,
+            `${emp.firstName} ${emp.lastName}`,
+            emp.department || '—',
+            emp.completed,
+            `${emp.avgScore}%`,
+            `${emp.bestScore}%`,
+          ]);
+          const placeCell = row.getCell(1);
+          if (idx === 0) {
+            placeCell.font = { color: { argb: 'FFFFD700' }, bold: true, size: 14 };
+          } else if (idx === 1) {
+            placeCell.font = { color: { argb: 'FFC0C0C0' }, bold: true, size: 14 };
+          } else if (idx === 2) {
+            placeCell.font = { color: { argb: 'FFCD7F32' }, bold: true, size: 14 };
+          }
+          row.alignment = { horizontal: 'center', vertical: 'middle' };
+          row.height = 24;
+        });
+
+        rankingSheet.getColumn(1).width = 10;
+        rankingSheet.getColumn(2).width = 30;
+        rankingSheet.getColumn(3).width = 25;
+        rankingSheet.getColumn(4).width = 18;
+        rankingSheet.getColumn(5).width = 18;
+        rankingSheet.getColumn(6).width = 20;
+      } else {
+        rankingSheet.addRow(['Нет данных для рейтинга']);
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `test_sessions_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      message.success('Excel файл успешно создан с оформлением!');
     } catch (error) {
-      console.error("Export error:", error);
-      message.error("Ошибка при создании Excel файла");
+      console.error('Export error:', error);
+      message.error('Ошибка при создании Excel файла');
     }
   };
 
-  // ===== ЭКСПОРТ ОДНОЙ СЕССИИ =====
+  // ===== НОВАЯ ФУНКЦИЯ ЭКСПОРТА ОДНОЙ СЕССИИ (ExcelJS) =====
   const exportSingleSessionToExcel = async (session) => {
     try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'HR System';
+
+      const sheet = workbook.addWorksheet('Сессия', { properties: { tabColor: { argb: 'FF4B2B' } } });
+
+      sheet.addRow(['Отчёт по тестированию']);
+      sheet.mergeCells('A1:C1');
+      const titleRow = sheet.getRow(1);
+      titleRow.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B2B' } };
+      titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.getRow(1).height = 40;
+
+      sheet.addRow([]);
+
       const test = tests.find((t) => t.id === session.testId);
       const employee = employees.find((e) => e.id === session.employeeId);
 
-      const mainData = [
-        { Параметр: "ID сессии", Значение: session.id },
-        { Параметр: "Сотрудник", Значение: employee ? `${employee.firstName} ${employee.lastName}` : "" },
-        { Параметр: "Тест", Значение: test?.titleRu || test?.title || "" },
-        { Параметр: "Статус", Значение: session.status === 1 ? "В процессе" : "Завершен" },
-        { Параметр: "Дата начала", Значение: session.startedAt ? new Date(session.startedAt).toLocaleString() : "" },
-        { Параметр: "Дата завершения", Значение: session.finishedAt ? new Date(session.finishedAt).toLocaleString() : "" },
-        { Параметр: "Длительность", Значение: session.durationMinutes ? `${Math.floor(session.durationMinutes)} мин ${Math.round((session.durationMinutes % 1) * 60)} сек` : "" },
-        { Параметр: "Результат", Значение: session.score !== null ? `${session.score}%` : "" },
-        { Параметр: "Правильные ответы", Значение: `${session.correctAnswersCount || 0}/${session.totalQuestionsCount || 0}` },
+      const infoData = [
+        ['ID сессии', session.id],
+        ['Сотрудник', employee ? `${employee.firstName} ${employee.lastName}` : '—'],
+        ['Тест', lang === 'ru' ? test?.titleRu || test?.title || '' : test?.titleTj || test?.title || ''],
+        ['Статус', session.status === 1 ? 'В процессе' : 'Завершен'],
+        ['Дата начала', session.startedAt ? new Date(session.startedAt).toLocaleString() : '—'],
+        ['Дата завершения', session.finishedAt ? new Date(session.finishedAt).toLocaleString() : '—'],
+        ['Длительность', session.durationMinutes ? `${Math.floor(session.durationMinutes)} мин ${Math.round((session.durationMinutes % 1) * 60)} сек` : '—'],
+        ['Результат', session.score !== null ? `${session.score}%` : '—'],
+        ['Правильные ответы', `${session.correctAnswersCount || 0}/${session.totalQuestionsCount || 0}`],
       ];
 
-      const wsMain = XLSX.utils.json_to_sheet(mainData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, wsMain, "Информация");
+      infoData.forEach((row) => {
+        const r = sheet.addRow(row);
+        r.font = { size: 12 };
+        r.getCell(1).font = { bold: true };
+        r.alignment = { vertical: 'middle' };
+        r.height = 24;
+      });
 
-      XLSX.writeFile(
-        wb,
-        `session_${session.id}_${employee?.firstName || ""}_${new Date().toISOString().split("T")[0]}.xlsx`,
-      );
-      message.success("Excel файл успешно создан");
+      sheet.getColumn(1).width = 30;
+      sheet.getColumn(2).width = 40;
+
+      if (session.answers && session.answers.length > 0) {
+        const answerSheet = workbook.addWorksheet('Ответы', { properties: { tabColor: { argb: 'FF52C41A' } } });
+        const ansHeader = answerSheet.addRow(['№', 'Вопрос', 'Ответ', 'Результат']);
+        ansHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        ansHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF52C41A' } };
+        ansHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        ansHeader.height = 28;
+
+        session.answers.forEach((answer, idx) => {
+          const question = test?.questions?.find((q) => q.id === answer.questionId);
+          const questionText = lang === 'ru'
+            ? question?.contentRu || question?.content || '—'
+            : question?.contentTj || question?.content || '—';
+          let answerText = '—';
+          if (answer.optionId !== null && question?.type === 3) {
+            answerText = `Рейтинг: ${answer.optionId}/10`;
+          } else if (answer.optionId !== null && question?.options) {
+            const opt = question.options.find((o) => o.id === answer.optionId);
+            answerText = lang === 'ru' ? opt?.textRu || opt?.text : opt?.textTj || opt?.text;
+          } else if (answer.textAnswer) {
+            answerText = answer.textAnswer;
+          }
+          const isCorrect = answer.isCorrect !== undefined ? answer.isCorrect : null;
+          const row = answerSheet.addRow([
+            idx + 1,
+            questionText,
+            answerText,
+            question?.type === 3 ? 'Рейтинг' : (isCorrect ? '✅ Правильно' : '❌ Неправильно'),
+          ]);
+          row.alignment = { horizontal: 'center', vertical: 'middle' };
+          row.height = 24;
+          const resultCell = row.getCell(4);
+          if (question?.type === 3) {
+            resultCell.font = { color: { argb: 'FFFAAD14' }, bold: true };
+          } else if (isCorrect) {
+            resultCell.font = { color: { argb: 'FF52C41A' }, bold: true };
+          } else if (isCorrect === false) {
+            resultCell.font = { color: { argb: 'FFFF4D4F' }, bold: true };
+          }
+        });
+
+        answerSheet.getColumn(1).width = 8;
+        answerSheet.getColumn(2).width = 50;
+        answerSheet.getColumn(3).width = 40;
+        answerSheet.getColumn(4).width = 20;
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `session_${session.id}_${employee?.firstName || ''}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      message.success('Excel файл с деталями успешно создан!');
     } catch (error) {
-      console.error("Export error:", error);
-      message.error("Ошибка при создании Excel файла");
+      console.error('Export error:', error);
+      message.error('Ошибка при создании Excel файла');
     }
   };
 
@@ -1854,7 +2054,6 @@ export const TestSession = ({ testData, onClose }) => {
     );
   }
 
-  // Получаем информацию о попытках для текущего теста
   const attemptInfo = currentSessionLocal ? getAttemptInfo(
     currentSessionLocal.employeeId,
     currentSessionLocal.testId
@@ -1862,7 +2061,6 @@ export const TestSession = ({ testData, onClose }) => {
 
   return (
     <div ref={scrollRef} style={{ padding: 30, background: "#f0f2f5", minHeight: "100vh" }}>
-      {/* ===== БЕЛОЕ МОДАЛЬНОЕ ОКНО РЕЗУЛЬТАТОВ ===== */}
       <TestResultsModal
         visible={testResultModalVisible}
         result={testResultData}
@@ -1876,7 +2074,6 @@ export const TestSession = ({ testData, onClose }) => {
         lang={lang}
       />
 
-      {/* ===== ВЕРХНЯЯ ПАНЕЛЬ ===== */}
       <Card style={{ marginBottom: 24, borderRadius: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
           <div>
@@ -1915,7 +2112,6 @@ export const TestSession = ({ testData, onClose }) => {
         </div>
       </Card>
 
-      {/* ===== СТАТИСТИКА ===== */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
         <Card style={{ borderRadius: 12 }}>
           <Statistic
@@ -1952,7 +2148,6 @@ export const TestSession = ({ testData, onClose }) => {
         </Card>
       </div>
 
-      {/* ===== АКТИВНЫЙ ТЕСТ ===== */}
       {isTestActive && currentSessionLocal && !sessionComplete && !isFinished && sessionQuestions.length > 0 && (
         <>
           <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000 }}>
@@ -2133,12 +2328,10 @@ export const TestSession = ({ testData, onClose }) => {
         </>
       )}
 
-      {/* ===== РЕЙТИНГ СОТРУДНИКОВ ===== */}
       {showRanking && !isTestActive && (
         <EmployeeRanking sessions={sessions} employees={employees} tests={tests} lang={lang} />
       )}
 
-      {/* ===== ИСТОРИЯ ТЕСТИРОВАНИЙ ===== */}
       {(!isTestActive || sessionComplete) && (
         <Card
           title={
@@ -2169,7 +2362,6 @@ export const TestSession = ({ testData, onClose }) => {
         </Card>
       )}
 
-      {/* ===== МОДАЛЬНОЕ ОКНО ДЕТАЛЕЙ СЕССИИ ===== */}
       <SessionDetailsModal
         visible={sessionModalVisible}
         session={selectedSessionForModal}
@@ -2182,7 +2374,6 @@ export const TestSession = ({ testData, onClose }) => {
         lang={lang}
       />
 
-      {/* ===== МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ===== */}
       <Modal
         title={t[lang].confirmFinish}
         open={showConfirmFinish}

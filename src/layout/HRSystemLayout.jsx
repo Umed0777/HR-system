@@ -134,7 +134,7 @@ export const HRSystemLayout = () => {
           ],
         },
         {
-          key: "testing", // 👈 НОВЫЙ КЛЮЧ
+          key: "testing",
           icon: <FormOutlined />,
           label: "Тестирование",
           children: [
@@ -149,7 +149,7 @@ export const HRSystemLayout = () => {
               label: "Опросы",
             },
             {
-              key: "/survey-results", // 👈 НОВЫЙ ПУНКТ
+              key: "/survey-results",
               icon: <BarChartOutlined />,
               label: "Результаты опросов",
             },
@@ -187,7 +187,7 @@ export const HRSystemLayout = () => {
           ],
         },
         {
-          key: "testing", // 👈 НОВЫЙ КЛЮЧ
+          key: "testing",
           icon: <FormOutlined />,
           label: "Тестирование",
           children: [
@@ -201,16 +201,16 @@ export const HRSystemLayout = () => {
               icon: <BarsOutlined />,
               label: "Опросы",
             },
-            {
-              key: "/survey-results", // 👈 НОВЫЙ ПУНКТ
-              icon: <BarChartOutlined />,
-              label: "Результаты опросов",
-            },
-            {
-              key: "/test-taking",
-              icon: <CheckSquareOutlined />,
-              label: "Результаты тестов",
-            },
+            // {
+            //   key: "/survey-results",
+            //   icon: <BarChartOutlined />,
+            //   label: "Результаты опросов",
+            // },
+            // {
+            //   key: "/test-taking",
+            //   icon: <CheckSquareOutlined />,
+            //   label: "Результаты тестов",
+            // },
           ],
         },
       );

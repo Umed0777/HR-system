@@ -68,10 +68,6 @@ export const useVideoLessonStore = create((set, get) => ({
   // FETCH VIDEO LESSONS
   // =========================
 
-  // =========================
-// FETCH VIDEO LESSONS
-// =========================
-
 fetchVideoLessons: async () => {
   set({ loading: true, error: null });
 

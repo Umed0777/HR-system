@@ -41,7 +41,7 @@ export const Subdepartment = () => {
 
   useEffect(() => {
     fetchSubDepartments(1, 10);
-    fetchDepartments();
+    fetchDepartments(1,100);
   }, [fetchDepartments, fetchSubDepartments]);
 
   const openModal = (item = null) => {

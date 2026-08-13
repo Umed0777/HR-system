@@ -493,9 +493,12 @@ export const TestManager = ({ onStartTest }) => {
     return { label: lang === "ru" ? "Тест" : "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
   }, [lang]);
 
-  const getUsedQuestionIds = useCallback(() => {
+  // ===== ИСПРАВЛЕННЫЕ ФУНКЦИИ С ПАРАМЕТРОМ excludeTestId =====
+  const getUsedQuestionIds = useCallback((excludeTestId = null) => {
     const usedIds = new Set();
     testTests.forEach(test => {
+      // Пропускаем текущий тест при редактировании
+      if (excludeTestId && Number(test.id) === Number(excludeTestId)) return;
       if (test.questions && test.questions.length > 0) {
         test.questions.forEach(q => {
           if (q.id) usedIds.add(q.id);
@@ -505,8 +508,8 @@ export const TestManager = ({ onStartTest }) => {
     return usedIds;
   }, [testTests]);
 
-  const getAvailableQuestions = useCallback(() => {
-    const usedIds = getUsedQuestionIds();
+  const getAvailableQuestions = useCallback((excludeTestId = null) => {
+    const usedIds = getUsedQuestionIds(excludeTestId);
     return questions.filter(q => !usedIds.has(q.id));
   }, [questions, getUsedQuestionIds]);
 
@@ -600,7 +603,10 @@ export const TestManager = ({ onStartTest }) => {
   }, [selectedEmployeeId, selectedTestId, sessions, checkCanStartTest]);
 
   const stats = getStats();
-  const availableQuestions = getAvailableQuestions();
+  // ===== ИСПОЛЬЗУЕМ НОВЫЕ ФУНКЦИИ С excludeTestId =====
+  const currentEditingId = editingItem?.id;
+  const usedIds = getUsedQuestionIds(currentEditingId);
+  const availableQuestions = getAvailableQuestions(currentEditingId);
   
   const filteredAvailableQuestions = availableQuestions.filter(q => {
     const searchMatch = getQuestionText(q).toLowerCase().includes(searchTerm.toLowerCase());
@@ -1485,7 +1491,7 @@ export const TestManager = ({ onStartTest }) => {
 
           {/* Выбор сотрудника */}
           <div>
-            <Text strong>{t[lang].employee}Сотрудника</Text>
+            <Text strong>Сотрудника</Text>
             <Select
               placeholder={t[lang].selectEmployee}
               value={selectedEmployeeId}
@@ -1504,7 +1510,7 @@ export const TestManager = ({ onStartTest }) => {
               }}
             >
               {Object.entries(groupedEmployees).map(([department, deptEmployees]) => (
-                <Select.OptGroup key={department} label={`${t[lang].department}: ${department}`}>
+                <Select.OptGroup key={department} label={`Отдел: ${department}`}>
                   {deptEmployees.map((emp) => (
                     <Option key={emp.id} value={emp.id}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1526,7 +1532,7 @@ export const TestManager = ({ onStartTest }) => {
 
           {/* Отделение */}
           <div>
-            <Text strong>{t[lang].subDepartment}Отделение</Text>
+            <Text strong>Отделение</Text>
             {selectedEmployeeId ? (
               <>
                 {selectedSubDepartmentId ? (
@@ -1564,8 +1570,8 @@ export const TestManager = ({ onStartTest }) => {
               </>
             ) : (
               <div style={{ marginTop: 8 }}>
-                <Select placeholder={t[lang].selectSubDepartment} disabled style={{ width: "100%" }}>
-                  <Option value="">{t[lang].selectEmployee}</Option>
+                <Select placeholder="Выберите отделение" disabled style={{ width: "100%" }}>
+                  <Option value="">Сначала выберите сотрудника</Option>
                 </Select>
               </div>
             )}
@@ -1707,7 +1713,7 @@ export const TestManager = ({ onStartTest }) => {
                             <Tag color="blue" style={{ borderRadius: 20 }}>
                               {editingItem 
                                 ? `В тесте: ${selectedQuestionIds.length} вопросов`
-                                : `Доступно: ${availableQuestions.length} вопросов`
+                                : `Доступно: ${availableQuestions.length} вопросов` // используем исправленную переменную
                               }
                             </Tag>
                           </div>
@@ -1785,7 +1791,7 @@ export const TestManager = ({ onStartTest }) => {
                             </Space>
                           </Flex>
                           
-                          {availableQuestions.length > 0 && (
+                          {availableQuestions.length > 0 && ( // используем исправленную переменную
                             <div style={{ marginTop: 12 }}>
                               <Text type="secondary" style={{ fontSize: 13 }}>
                                 {t[lang].showing} {displayQuestions.length} {t[lang].of} {availableQuestions.length} {t[lang].questionsFound}
@@ -1841,7 +1847,7 @@ export const TestManager = ({ onStartTest }) => {
                             <Row gutter={[16, 16]}>
                               {displayQuestions.map((question) => {
                                 const isSelected = selectedQuestionIds.includes(question.id);
-                                const usedIds = getUsedQuestionIds();
+                                // Исправлено: вопрос считается занятым, если он используется в других тестах И не выбран в текущем (и мы НЕ в режиме редактирования)
                                 const isUsed = usedIds.has(question.id) && !isSelected && !editingItem;
                                 const typeInfo = getTypeLabel(question.type);
                                 
@@ -2093,7 +2099,7 @@ export const TestManager = ({ onStartTest }) => {
         open={previewOpen}
         footer={null}
         onCancel={() => setPreviewOpen(false)}
-        width={900}
+        width={1200}
         title={
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 20px', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 18, fontWeight: 600 }}>

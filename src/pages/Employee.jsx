@@ -40,9 +40,9 @@ export const Employee = () => {
 
     useEffect(() => {
         fetchEmployee(1, 10);
-        fetchDepartments();
-        fetchSubDepartments();
-        fetchPositions();
+        fetchDepartments(1,100);
+        fetchSubDepartments(1,100);
+        fetchPositions(1,100);
     }, []);
 
     // Обработчик смены страницы
