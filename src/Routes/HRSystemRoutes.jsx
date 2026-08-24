@@ -4,7 +4,7 @@ import { Route, Routes, Navigate } from "react-router-dom";
 import { HRSystemLayout } from "../layout/HRSystemLayout";
 import { useState } from "react";
 import { SurveyManager } from "../pages/SurveyManager";
-import { SurveyResultsPage } from "../pages/SurveyResultsPage"; // 👈 ДОБАВИТЬ
+import { SurveyResultsPage } from "../pages/SurveyResultsPage";
 import { Announcement } from "../pages/Announcement";
 import { Departament } from "../pages/Departament";
 import { Employee } from "../pages/Employee";
@@ -20,8 +20,8 @@ import { VideoLesson } from "../pages/VideoLesson";
 import { Documentation } from "../pages/Documentation";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
+import Articles from "../pages/Articles";
 
-// 🔐 simple guard
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem("token");
   return token ? children : <Navigate to="/login" replace />;
@@ -83,8 +83,9 @@ export const HRSystemRoutes = () => {
         {/* ===== ОПРОСЫ ===== */}
         <Route path="surveys" element={<SurveyManager />} />
         
-        {/* 👇 НОВЫЙ МАРШРУТ ДЛЯ РЕЗУЛЬТАТОВ ОПРОСОВ */}
+        {/*  НОВЫЙ МАРШРУТ ДЛЯ РЕЗУЛЬТАТОВ ОПРОСОВ */}
         <Route path="survey-results" element={<SurveyResultsPage />} />
+        <Route path="article" element = {<Articles />} /> 
       </Route>
 
       {/* PUBLIC EXTRA */}

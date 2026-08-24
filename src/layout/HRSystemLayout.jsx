@@ -18,7 +18,7 @@ import {
   VideoCameraOutlined,
   FilePdfOutlined,
   BarsOutlined,
-  BarChartOutlined, // 👈 ДОБАВИТЬ
+  BarChartOutlined,
 } from "@ant-design/icons";
 import { useEffect, useState, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -160,6 +160,11 @@ export const HRSystemLayout = () => {
             },
           ],
         },
+        {
+          key: "/article",
+          icon: <ReadOutlined />,
+          label: "Новосты",
+        }
       );
     }
 
@@ -359,14 +364,14 @@ export const HRSystemLayout = () => {
             height: 75,
             margin: 15,
             borderRadius: 20,
-            background: "rgba(255,255,255,.12)",
+            background: "rgba(255,255,255,.15)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "0 20px",
           }}
         >
-          <h2 style={{ color: "#fff" }}>HR Management System</h2>
+          <h2 style={{ color: "#f00" }}>HR Management System</h2>
 
           <Button danger icon={<UserOutlined />} onClick={handleLogout}>
             Выйти
