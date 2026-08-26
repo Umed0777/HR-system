@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Button,
   Modal,
@@ -10,343 +10,193 @@ import {
   Empty,
   Spin,
 } from "antd";
-import { Link } from "react-router-dom";
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   UploadOutlined,
-  PlayCircleOutlined,
   FileImageOutlined,
   VideoCameraOutlined,
+  PlayCircleOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-
+import { useProfileStore } from "../store/useProfileStore";
 import { useArticlesStore } from "../store/useArticles";
 
 const API_URL = import.meta.env.VITE_API_ARTICLES;
 
-const Articles = () => {
-  // ===============================
-  // ZUSTAND
-  // ===============================
-
+const MyArticles = () => {
+  // ===== PROFILE STORE =====
   const {
-    articles,
+    profile,
     loading,
     error,
-    fetchArticles,
-    addArticle,
-    editArticle,
-    removeArticle,
-  } = useArticlesStore();
+    fetchMyProfile,
+    editMyArticle,
+    removeMyArticle,
+    updateMyArticleFiles,
+  } = useProfileStore();
 
-  // ===============================
-  // MODAL
-  // ===============================
+  // ===== ARTICLES STORE (для создания новых статей, используем общий create) =====
+  const { addArticle } = useArticlesStore();
 
+  // ===== LOCAL STATE =====
   const [isModalOpen, setIsModalOpen] = useState(false);
-
   const [editingArticle, setEditingArticle] = useState(null);
-
-  // ===============================
-  // FORM
-  // ===============================
-
   const [title, setTitle] = useState("");
-
   const [description, setDescription] = useState("");
-
   const [text, setText] = useState("");
-
   const [image, setImage] = useState(null);
-
   const [video, setVideo] = useState(null);
-
-  // ===============================
-  // SEARCH
-  // ===============================
-
   const [search, setSearch] = useState("");
-
-  // ===============================
-  // PREVIEW
-  // ===============================
-
   const [preview, setPreview] = useState(null);
 
-  // ===============================
-  // INITIAL FETCH
-  // ===============================
+  // ===== FILTERED ARTICLES (поиск) =====
+  const filteredArticles = profile?.articles?.filter((article) =>
+    article.title?.toLowerCase().includes(search.toLowerCase()) ||
+    article.description?.toLowerCase().includes(search.toLowerCase())
+  ) || [];
 
+  // ===== INITIAL FETCH =====
   useEffect(() => {
-    fetchArticles(20, 0, "");
-  }, [fetchArticles]);
+    fetchMyProfile();
+  }, [fetchMyProfile]);
 
-  // ===============================
-  // SEARCH
-  // ===============================
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchArticles(20, 0, search.trim());
-    }, 500);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [search, fetchArticles]);
-
-  // ===============================
-  // IMAGE / VIDEO URL
-  // ===============================
-
+  // ===== GET FILE URL (как в Articles) =====
   const getFileUrl = (fileUrl) => {
-    if (!fileUrl) {
-      return null;
-    }
-
-    // Полный URL
-    if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-      return fileUrl;
-    }
-
-    // Убираем / в начале
+    if (!fileUrl) return null;
+    if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) return fileUrl;
     const cleanUrl = fileUrl.replace(/^\/+/, "");
-
     return `${API_URL}/${cleanUrl}`;
   };
 
-  // ===============================
-  // RESET FORM
-  // ===============================
-
+  // ===== RESET FORM =====
   const resetForm = () => {
     setTitle("");
     setDescription("");
     setText("");
-
     setImage(null);
     setVideo(null);
-
     setEditingArticle(null);
   };
 
-  // ===============================
-  // CREATE MODAL
-  // ===============================
-
+  // ===== OPEN CREATE =====
   const openCreateModal = () => {
     resetForm();
-
     setIsModalOpen(true);
   };
 
-  // ===============================
-  // EDIT MODAL
-  // ===============================
-
+  // ===== OPEN EDIT =====
   const openEditModal = (article) => {
     setEditingArticle(article);
-
     setTitle(article.title || "");
-
     setDescription(article.description || "");
-
     setText(article.text || "");
-
     setImage(null);
     setVideo(null);
-
     setIsModalOpen(true);
   };
 
-  // ===============================
-  // SAVE
-  // ===============================
-
+  // ===== SAVE (CREATE or UPDATE) =====
   const handleSave = async () => {
     try {
-      // TITLE
-      if (!title.trim()) {
-        message.error("Введите название статьи");
-
+      if (!title.trim() || !description.trim() || !text.trim()) {
+        message.error("Заполните все обязательные поля");
         return;
       }
-
-      // DESCRIPTION
-      if (!description.trim()) {
-        message.error("Введите описание");
-
-        return;
-      }
-
-      // TEXT
-      if (!text.trim()) {
-        message.error("Введите текст статьи");
-
-        return;
-      }
-
-      // ===============================
-      // FORMDATA
-      // ===============================
 
       const formData = new FormData();
-
       formData.append("title", title.trim());
-
       formData.append("description", description.trim());
-
       formData.append("text", text.trim());
-
-      // STATUS AUTOMATIC
       formData.append("status", "published");
 
-      // IMAGE
-      if (image) {
-        formData.append("cover", image);
-      }
-
-      // VIDEO
-      if (video) {
-        formData.append("video", video);
-      }
-
-      // ===============================
-      // UPDATE
-      // ===============================
+      if (image) formData.append("cover", image);
+      if (video) formData.append("video", video);
 
       if (editingArticle) {
-        await editArticle(editingArticle.id, formData);
-
-        message.success("Статья успешно обновлена");
-      }
-
-      // ===============================
-      // CREATE
-      // ===============================
-      else {
+        // Для обновления своей статьи используем два эндпоинта:
+        // 1. Обновляем текстовые поля (PUT /api/me/articles/{id})
+        await editMyArticle(editingArticle.id, {
+          title: title.trim(),
+          description: description.trim(),
+          text: text.trim(),
+          status: "published",
+        });
+        // 2. Если есть новые файлы, обновляем их отдельно
+        if (image || video) {
+          const fileData = new FormData();
+          if (image) fileData.append("cover", image);
+          if (video) fileData.append("video", video);
+          await updateMyArticleFiles(editingArticle.id, fileData);
+        }
+        message.success("Статья обновлена");
+      } else {
+        // Создаём новую статью (используем общий эндпоинт /api/articles)
         await addArticle(formData);
-
-        message.success("Статья успешно создана");
+        message.success("Статья создана");
       }
-
-      // ===============================
-      // CLOSE
-      // ===============================
 
       setIsModalOpen(false);
-
       resetForm();
-
-      // ===============================
-      // REFRESH
-      // ===============================
-
-      await fetchArticles(20, 0, search.trim());
+      await fetchMyProfile(); // обновляем список своих статей
     } catch (error) {
-      console.error(
-        "Ошибка сохранения:",
-        error.response?.data || error.message,
-      );
-
-      message.error(
-        error.response?.data?.error || "Не удалось сохранить статью",
-      );
+      console.error(error);
+      message.error(error.response?.data?.error || "Не удалось сохранить статью");
     }
   };
 
-  // ===============================
-  // DELETE
-  // ===============================
-
+  // ===== DELETE =====
   const handleDelete = async (id) => {
     try {
-      await removeArticle(id);
-
-      message.success("Статья успешно удалена");
-
-      await fetchArticles(20, 0, search.trim());
+      await removeMyArticle(id);
+      message.success("Статья удалена");
+      await fetchMyProfile();
     } catch (error) {
-      console.error("Ошибка удаления:", error.response?.data || error.message);
-
+      console.error(error);
       message.error(error.response?.data?.error || "Не удалось удалить статью");
     }
   };
 
-  // ===============================
-  // IMAGE UPLOAD
-  // ===============================
-
+  // ===== UPLOAD HANDLERS (как в Articles) =====
   const handleImageUpload = (file) => {
-    // TYPE
     if (!file.type.startsWith("image/")) {
       message.error("Можно загружать только изображения");
-
       return Upload.LIST_IGNORE;
     }
-
-    // SIZE 5 MB
-    const isValidSize = file.size / 1024 / 1024 < 5;
-
-    if (!isValidSize) {
+    if (file.size / 1024 / 1024 > 5) {
       message.error("Размер изображения не должен превышать 5 MB");
-
       return Upload.LIST_IGNORE;
     }
-
     setImage(file);
-
     return false;
   };
-
-  // ===============================
-  // VIDEO UPLOAD
-  // ===============================
 
   const handleVideoUpload = (file) => {
-    // TYPE
     if (!file.type.startsWith("video/")) {
       message.error("Можно загружать только видео");
-
       return Upload.LIST_IGNORE;
     }
-
-    // SIZE 100 MB
-    const isValidSize = file.size / 1024 / 1024 < 100;
-
-    if (!isValidSize) {
+    if (file.size / 1024 / 1024 > 100) {
       message.error("Размер видео не должен превышать 100 MB");
-
       return Upload.LIST_IGNORE;
     }
-
     setVideo(file);
-
     return false;
   };
 
-  // ===============================
-  // CLOSE MODAL
-  // ===============================
-
+  // ===== CLOSE =====
   const closeModal = () => {
     setIsModalOpen(false);
-
     resetForm();
   };
 
-  // ===============================
-  // ERROR
-  // ===============================
-
-  if (error && !articles.length) {
+  // ===== ERROR =====
+  if (error && !profile) {
     return (
       <div className="p-6">
         <div className="rounded-xl bg-red-50 p-5 text-red-500">
-          <p className="font-semibold">Ошибка загрузки:</p>
-
+          <p className="font-semibold">Ошибка загрузки профиля:</p>
           <pre className="mt-2 whitespace-pre-wrap">
             {typeof error === "string" ? error : JSON.stringify(error, null, 2)}
           </pre>
@@ -355,38 +205,27 @@ const Articles = () => {
     );
   }
 
-  // ===============================
-  // UI
-  // ===============================
-
+  // ===== RENDER =====
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* ===============================
-          HEADER
-      =============================== */}
-
+      {/* HEADER */}
       <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Статьи</h1>
-
-          <p className="mt-1 text-gray-500">Управление новостями и статьями</p>
+          <h1 className="text-3xl font-bold text-gray-900">Мои статьи</h1>
+          <p className="mt-1 text-gray-500">
+            {profile?.login ? `Пользователь: ${profile.login}` : "Загрузка..."}
+          </p>
         </div>
-
         <div className="flex flex-col gap-3 sm:flex-row">
-          {/* SEARCH */}
-
           <Input
             allowClear
             prefix={<SearchOutlined />}
-            placeholder="Поиск статей..."
+            placeholder="Поиск по моим статьям..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             size="middle"
             className="w-full sm:w-72"
           />
-
-          {/* ADD */}
-
           <Button
             danger
             type="primary"
@@ -399,26 +238,19 @@ const Articles = () => {
         </div>
       </div>
 
-      {/* ===============================
-          LOADING
-      =============================== */}
-
+      {/* LOADING */}
       {loading && (
         <div className="mb-5 flex justify-center">
           <Spin />
         </div>
       )}
 
-      {/* ===============================
-          EMPTY
-      =============================== */}
-
-      {!loading && (!articles || articles.length === 0) ? (
+      {/* EMPTY */}
+      {!loading && filteredArticles.length === 0 && (
         <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
           <Empty
-            description={search ? "Статьи не найдены" : "Статей пока нет"}
+            description={search ? "Статьи не найдены" : "У вас пока нет статей"}
           />
-
           {!search && (
             <Button
               type="primary"
@@ -430,38 +262,25 @@ const Articles = () => {
             </Button>
           )}
         </div>
-      ) : (
-        /* ===============================
-           CARDS
-        =============================== */
+      )}
 
+      {/* CARDS */}
+      {!loading && filteredArticles.length > 0 && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {articles.map((article) => {
+          {filteredArticles.map((article) => {
             const coverUrl = getFileUrl(article.cover_url);
-
             const videoUrl = getFileUrl(article.video_url);
-
             return (
               <div
                 key={article.id}
                 className="overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
               >
-                {/* ===============================
-                      MEDIA
-                  =============================== */}
-
+                {/* MEDIA */}
                 <div className="relative h-60 w-full overflow-hidden bg-gray-100">
-                  {/* VIDEO */}
-
                   {videoUrl ? (
                     <div
                       className="group relative h-full w-full cursor-pointer bg-black"
-                      onClick={() =>
-                        setPreview({
-                          type: "video",
-                          url: videoUrl,
-                        })
-                      }
+                      onClick={() => setPreview({ type: "video", url: videoUrl })}
                     >
                       <video
                         src={videoUrl}
@@ -469,138 +288,84 @@ const Articles = () => {
                         muted
                         preload="metadata"
                       />
-
-                      {/* DARK */}
-
                       <div className="absolute inset-0 bg-black/20 transition group-hover:bg-black/40" />
-
-                      {/* PLAY */}
-
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/90 text-3xl text-black shadow-lg transition group-hover:scale-110">
                           <PlayCircleOutlined />
                         </div>
                       </div>
-
-                      {/* VIDEO LABEL */}
-
                       <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-black/70 px-3 py-2 text-sm text-white">
-                        <VideoCameraOutlined />
-                        Видео
+                        <VideoCameraOutlined /> Видео
                       </div>
                     </div>
                   ) : coverUrl ? (
-                    /* IMAGE */
-
                     <div
                       className="group relative h-full w-full cursor-pointer"
-                      onClick={() =>
-                        setPreview({
-                          type: "image",
-                          url: coverUrl,
-                        })
-                      }
+                      onClick={() => setPreview({ type: "image", url: coverUrl })}
                     >
                       <img
                         src={coverUrl}
-                        alt={article.title || "Article"}
+                        alt={article.title}
                         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                        onError={(event) => {
-                          event.currentTarget.src = "/placeholder.jpg";
-                        }}
+                        onError={(e) => (e.currentTarget.src = "/placeholder.jpg")}
                       />
-
-                      {/* IMAGE ICON */}
-
                       <div className="absolute right-3 top-3 rounded-lg bg-black/60 p-2 text-white opacity-0 transition group-hover:opacity-100">
                         <FileImageOutlined />
                       </div>
                     </div>
                   ) : (
-                    /* NO MEDIA */
-
                     <div className="flex h-full items-center justify-center text-gray-400">
                       <div className="text-center">
                         <FileImageOutlined className="text-4xl" />
-
                         <p className="mt-2">Нет изображения</p>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* ===============================
-                      CONTENT
-                  =============================== */}
-
+                {/* CONTENT */}
                 <div className="p-5">
-                  {/* STATUS */}
-
                   <div className="mb-3">
                     <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
                       Опубликовано
                     </span>
                   </div>
-
-                  {/* TITLE */}
-
                   <h2 className="line-clamp-2 text-xl font-bold text-gray-900">
                     {article.title}
                   </h2>
-
-                  {/* DESCRIPTION */}
-
                   <p className="mt-3 line-clamp-3 text-sm leading-6 text-gray-600">
                     {article.description || "Описание отсутствует"}
                   </p>
-
-                  {/* DATE */}
-
                   {article.created_at && (
                     <p className="mt-4 text-xs text-gray-400">
                       {new Date(article.created_at).toLocaleDateString("ru-RU")}
                     </p>
                   )}
-
-                  {/* BUTTONS */}
-
                   <div className="mt-5 flex gap-2">
                     <Link to={`/article/${article.id}`} className="flex-1">
                       <Button type="primary" danger className="w-full">
                         Читать
                       </Button>
                     </Link>
-
-                    {/* EDIT */}
-
-                    {/* <Button
+                    <Button
                       className="flex-1"
                       icon={<EditOutlined />}
                       onClick={() => openEditModal(article)}
                     >
                       Изменить
-                    </Button> */}
-
-                    {/* DELETE */}
-
-                    {/* <Popconfirm
+                    </Button>
+                    <Popconfirm
                       title="Удалить статью?"
                       description="Это действие нельзя отменить."
                       okText="Удалить"
                       cancelText="Отмена"
-                      okButtonProps={{
-                        danger: true,
-                      }}
+                      okButtonProps={{ danger: true }}
                       onConfirm={() => handleDelete(article.id)}
                     >
-                      <Button
-                        danger
-                        className="flex-1"
-                        icon={<DeleteOutlined />}
-                      >
+                      <Button danger className="flex-1" icon={<DeleteOutlined />}>
                         Удалить
                       </Button>
-                    </Popconfirm> */}
+                    </Popconfirm>
                   </div>
                 </div>
               </div>
@@ -609,10 +374,7 @@ const Articles = () => {
         </div>
       )}
 
-      {/* =====================================================
-          CREATE / EDIT MODAL
-      ===================================================== */}
-
+      {/* MODAL CREATE/EDIT */}
       <Modal
         title={editingArticle ? "Редактировать статью" : "Добавить статью"}
         open={isModalOpen}
@@ -625,59 +387,41 @@ const Articles = () => {
         confirmLoading={loading}
       >
         <div className="flex flex-col gap-5">
-          {/* TITLE */}
-
           <div>
             <label className="mb-1 block text-sm font-medium">
-              Название
-              <span className="text-red-500"> *</span>
+              Название <span className="text-red-500"> *</span>
             </label>
-
             <Input
               size="large"
               placeholder="Введите название"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(e) => setTitle(e.target.value)}
             />
           </div>
-
-          {/* DESCRIPTION */}
-
           <div>
             <label className="mb-1 block text-sm font-medium">
-              Описание
-              <span className="text-red-500"> *</span>
+              Описание <span className="text-red-500"> *</span>
             </label>
-
             <Input.TextArea
               rows={4}
               placeholder="Введите описание"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-
-          {/* TEXT */}
-
           <div>
             <label className="mb-1 block text-sm font-medium">
-              Текст статьи
-              <span className="text-red-500"> *</span>
+              Текст статьи <span className="text-red-500"> *</span>
             </label>
-
             <Input.TextArea
               rows={8}
               placeholder="Введите полный текст статьи"
               value={text}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(e) => setText(e.target.value)}
             />
           </div>
-
-          {/* COVER */}
-
           <div>
             <label className="mb-2 block text-sm font-medium">Обложка</label>
-
             <Upload
               beforeUpload={handleImageUpload}
               maxCount={1}
@@ -686,47 +430,35 @@ const Articles = () => {
             >
               <Button icon={<UploadOutlined />}>Выбрать изображение</Button>
             </Upload>
+            {editingArticle?.cover_url && !image && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">Текущая обложка:</p>
+                <img
+                  src={getFileUrl(editingArticle.cover_url)}
+                  alt="Текущая обложка"
+                  className="h-48 w-full rounded-xl object-cover"
+                  onClick={() =>
+                    setPreview({
+                      type: "image",
+                      url: getFileUrl(editingArticle.cover_url),
+                    })
+                  }
+                />
+              </div>
+            )}
+            {image && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">Новая обложка:</p>
+                <img
+                  src={URL.createObjectURL(image)}
+                  alt="Preview"
+                  className="h-48 w-full cursor-pointer rounded-xl object-cover"
+                />
+              </div>
+            )}
           </div>
-
-          {/* OLD COVER */}
-
-          {editingArticle?.cover_url && !image && (
-            <div>
-              <p className="mb-2 text-sm text-gray-500">Текущая обложка:</p>
-
-              <img
-                src={getFileUrl(editingArticle.cover_url)}
-                alt="Текущая обложка"
-                className="h-48 w-full rounded-xl object-cover"
-                onClick={() =>
-                  setPreview({
-                    type: "image",
-                    url: getFileUrl(editingArticle.cover_url),
-                  })
-                }
-              />
-            </div>
-          )}
-
-          {/* NEW COVER */}
-
-          {image && (
-            <div>
-              <p className="mb-2 text-sm text-gray-500">Новая обложка:</p>
-
-              <img
-                src={URL.createObjectURL(image)}
-                alt="Preview"
-                className="h-48 w-full cursor-pointer rounded-xl object-cover"
-              />
-            </div>
-          )}
-
-          {/* VIDEO */}
-
           <div>
             <label className="mb-2 block text-sm font-medium">Видео</label>
-
             <Upload
               beforeUpload={handleVideoUpload}
               maxCount={1}
@@ -735,75 +467,57 @@ const Articles = () => {
             >
               <Button icon={<VideoCameraOutlined />}>Выбрать видео</Button>
             </Upload>
-          </div>
-
-          {/* OLD VIDEO */}
-
-          {editingArticle?.video_url && !video && (
-            <div>
-              <p className="mb-2 text-sm text-gray-500">Текущее видео:</p>
-
-              <div
-                className="relative cursor-pointer overflow-hidden rounded-xl bg-black"
-                onClick={() =>
-                  setPreview({
-                    type: "video",
-                    url: getFileUrl(editingArticle.video_url),
-                  })
-                }
-              >
-                <video
-                  src={getFileUrl(editingArticle.video_url)}
-                  className="h-48 w-full object-cover"
-                  muted
-                  preload="metadata"
-                />
-
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-2xl">
-                    <PlayCircleOutlined />
+            {editingArticle?.video_url && !video && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">Текущее видео:</p>
+                <div
+                  className="relative cursor-pointer overflow-hidden rounded-xl bg-black"
+                  onClick={() =>
+                    setPreview({
+                      type: "video",
+                      url: getFileUrl(editingArticle.video_url),
+                    })
+                  }
+                >
+                  <video
+                    src={getFileUrl(editingArticle.video_url)}
+                    className="h-48 w-full object-cover"
+                    muted
+                    preload="metadata"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-2xl">
+                      <PlayCircleOutlined />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* NEW VIDEO */}
-
-          {video && (
-            <div>
-              <p className="mb-2 text-sm text-gray-500">Новое видео:</p>
-
-              <div className="overflow-hidden rounded-xl bg-black">
-                <video
-                  src={URL.createObjectURL(video)}
-                  controls
-                  className="max-h-64 w-full"
-                />
+            )}
+            {video && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">Новое видео:</p>
+                <div className="overflow-hidden rounded-xl bg-black">
+                  <video
+                    src={URL.createObjectURL(video)}
+                    controls
+                    className="max-h-64 w-full"
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </Modal>
 
-      {/* =====================================================
-          LARGE IMAGE / VIDEO PREVIEW
-      ===================================================== */}
-
+      {/* PREVIEW MODAL */}
       <Modal
         open={!!preview}
         footer={null}
         onCancel={() => setPreview(null)}
         centered
         width={preview?.type === "video" ? 1000 : 900}
-        styles={{
-          body: {
-            padding: 0,
-          },
-        }}
+        styles={{ body: { padding: 0 } }}
       >
-        {/* IMAGE */}
-
         {preview?.type === "image" && (
           <div className="flex max-h-[80vh] items-center justify-center bg-black">
             <img
@@ -813,17 +527,9 @@ const Articles = () => {
             />
           </div>
         )}
-
-        {/* VIDEO */}
-
         {preview?.type === "video" && (
           <div className="flex max-h-[80vh] items-center justify-center bg-black">
-            <video
-              src={preview.url}
-              controls
-              autoPlay
-              className="max-h-[80vh] w-full"
-            />
+            <video src={preview.url} controls autoPlay className="max-h-[80vh] w-full" />
           </div>
         )}
       </Modal>
@@ -831,4 +537,4 @@ const Articles = () => {
   );
 };
 
-export default Articles;
+export default MyArticles;

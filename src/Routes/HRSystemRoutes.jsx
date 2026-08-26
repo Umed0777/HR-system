@@ -21,6 +21,9 @@ import { Documentation } from "../pages/Documentation";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 import Articles from "../pages/Articles";
+import Chat from "../pages/Chat";
+import ArticleDetail from "../pages/ArticleDetail";
+import MyArticles from "../pages/MyArticles";
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem("token");
@@ -86,6 +89,9 @@ export const HRSystemRoutes = () => {
         {/*  НОВЫЙ МАРШРУТ ДЛЯ РЕЗУЛЬТАТОВ ОПРОСОВ */}
         <Route path="survey-results" element={<SurveyResultsPage />} />
         <Route path="article" element = {<Articles />} /> 
+        <Route path="article/:id" element={<ArticleDetail />} />
+        <Route path="my-articles" element={<MyArticles />} />
+        <Route path="chat" element = {<Chat />} />
       </Route>
 
       {/* PUBLIC EXTRA */}

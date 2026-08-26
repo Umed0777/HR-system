@@ -9,7 +9,6 @@ import {
   IdcardOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  QuestionCircleOutlined,
   ReadOutlined,
   TeamOutlined,
   UserOutlined,
@@ -19,6 +18,7 @@ import {
   FilePdfOutlined,
   BarsOutlined,
   BarChartOutlined,
+  MessageOutlined,
 } from "@ant-design/icons";
 import { useEffect, useState, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -61,7 +61,9 @@ export const HRSystemLayout = () => {
       newOpenKeys.push("announcement");
     }
 
-    if (["/test", "/test-taking", "/surveys", "/survey-results"].includes(path)) {
+    if (
+      ["/test", "/test-taking", "/surveys", "/survey-results"].includes(path)
+    ) {
       newOpenKeys.push("testing");
     }
 
@@ -164,7 +166,17 @@ export const HRSystemLayout = () => {
           key: "/article",
           icon: <ReadOutlined />,
           label: "Новосты",
-        }
+        },
+        {
+          key: "/my-articles",
+          icon: <UserOutlined />,
+          label: "Мои статьи",
+        },
+        {
+          key: "/chat",
+          icon: <MessageOutlined />,
+          label: "Чат",
+        },
       );
     }
 
@@ -356,7 +368,10 @@ export const HRSystemLayout = () => {
 
       <Layout
         style={{
-          minHeight: "100vh",
+          background:
+            "linear-gradient(135deg, #f8f8f8 0%, #e2e2e2 50%, #cfcfcf 100%)",
+          borderRadius: "20px",
+          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.12)",
         }}
       >
         <div
@@ -371,7 +386,7 @@ export const HRSystemLayout = () => {
             padding: "0 20px",
           }}
         >
-          <h2 style={{ color: "#f00" }}>HR Management System</h2>
+          <h2 style={{ color: "#ef4444" }}>HR Management System</h2>
 
           <Button danger icon={<UserOutlined />} onClick={handleLogout}>
             Выйти

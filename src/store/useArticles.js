@@ -15,11 +15,11 @@ export const useArticlesStore = create((set) => ({
   error: null,
 
   // GET ALL
-  fetchArticles: async (limit = 20, offset = 0) => {
+  fetchArticles: async (limit = 20, offset = 0, query = "" ) => {
     set({ loading: true, error: null });
 
     try {
-      const data = await getArticles(limit, offset);
+      const data = await getArticles(limit, offset,query);
 
       set({
         articles: data,
