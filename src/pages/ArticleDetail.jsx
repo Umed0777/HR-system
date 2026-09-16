@@ -21,6 +21,8 @@ import {
   CommentOutlined,
   DownOutlined,
   RightOutlined,
+  PlayCircleOutlined,
+  FileImageOutlined,
 } from "@ant-design/icons";
 import { useArticlesStore } from "../store/useArticles";
 import { useCommentsStore } from "../store/useComments";
@@ -53,7 +55,6 @@ const ArticleDetail = () => {
   const [editingComment, setEditingComment] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editText, setEditText] = useState("");
-  // Для сворачивания веток
   const [collapsedReplies, setCollapsedReplies] = useState(new Set());
 
   // Загрузка данных
@@ -88,7 +89,7 @@ const ArticleDetail = () => {
   // --- Редактирование ---
   const openEditModal = (comment) => {
     setEditingComment(comment);
-    setEditText(comment.text);
+    setEditText(comment.text || ""); // гарантируем строку
     setIsEditModalOpen(true);
   };
 
@@ -138,7 +139,22 @@ const ArticleDetail = () => {
     return `${import.meta.env.VITE_API_ARTICLES}/${cleanUrl}`;
   };
 
-  // --- Рендер одного комментария (рекурсивно) с улучшенным UI ---
+  // ===============================
+  // РАБОТА С MEDIA (как в Articles)
+  // ===============================
+  const getMainMedia = (media) => {
+    if (!media || media.length === 0) return undefined;
+    const sorted = [...media].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    return sorted[0];
+  };
+
+  // Получаем все медиа для отображения в деталях (можно показать все)
+  const getAllMedia = (media) => {
+    if (!media || media.length === 0) return [];
+    return [...media].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  };
+
+  // --- Рендер одного комментария (рекурсивно) ---
   const renderComment = useCallback(
     (comment, level = 0) => {
       const isReply = level > 0;
@@ -157,7 +173,6 @@ const ArticleDetail = () => {
           }}
         >
           <div className="flex items-start gap-3">
-            {/* Аватар */}
             <Avatar
               size={40}
               icon={<UserOutlined />}
@@ -167,7 +182,6 @@ const ArticleDetail = () => {
             </Avatar>
 
             <div className="flex-1">
-              {/* Заголовок: автор + дата */}
               <div className="flex flex-wrap items-center gap-2">
                 <Text strong>{comment.created_by}</Text>
                 <Text type="secondary" style={{ fontSize: 12 }}>
@@ -186,12 +200,10 @@ const ArticleDetail = () => {
                 )}
               </div>
 
-              {/* Текст комментария */}
               <Paragraph className="mt-1 mb-2" style={{ whiteSpace: "pre-wrap" }}>
                 {comment.text}
               </Paragraph>
 
-              {/* Действия */}
               <Space size="small" className="flex-wrap">
                 <Button
                   type="link"
@@ -238,7 +250,6 @@ const ArticleDetail = () => {
                 )}
               </Space>
 
-              {/* Вложенные ответы */}
               {hasReplies && !isCollapsed && (
                 <div className="mt-2">
                   {comment.replies.map((reply) => renderComment(reply, level + 1))}
@@ -266,9 +277,12 @@ const ArticleDetail = () => {
     return <div className="p-6 text-center text-gray-500">Статья не найдена</div>;
   }
 
+  // Получаем медиа из статьи
+  const mediaItems = article.media || [];
+  const sortedMedia = getAllMedia(mediaItems);
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Кнопка назад */}
       <Button
         icon={<ArrowLeftOutlined />}
         onClick={() => navigate("/article")}
@@ -287,21 +301,41 @@ const ArticleDetail = () => {
             Опубликовано: {new Date(article.created_at).toLocaleDateString("ru-RU")}
           </p>
         )}
-        {article.cover_url && (
-          <img
-            src={getFileUrl(article.cover_url)}
-            alt="Обложка"
-            className="mt-4 max-h-96 w-full rounded-lg object-contain"
-          />
+
+        {/* ============================================
+            ОТОБРАЖЕНИЕ ВСЕХ МЕДИА (видео, изображения)
+        ============================================ */}
+        {sortedMedia.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {sortedMedia.map((item) => {
+              const url = getFileUrl(item.url);
+              if (!url) return null;
+              if (item.type === "image") {
+                return (
+                  <img
+                    key={item.id}
+                    src={url}
+                    alt="Медиа"
+                    className="max-h-96 w-full rounded-lg object-contain border border-gray-200"
+                  />
+                );
+              } else if (item.type === "video") {
+                return (
+                  <video
+                    key={item.id}
+                    src={url}
+                    controls
+                    className="w-full rounded-lg"
+                    style={{ maxHeight: "500px" }}
+                  />
+                );
+              }
+              return null;
+            })}
+          </div>
         )}
-        {article.video_url && (
-          <video
-            src={getFileUrl(article.video_url)}
-            controls
-            className="mt-4 w-full rounded-lg"
-            style={{ maxHeight: "500px" }}
-          />
-        )}
+
+        {/* Текст статьи */}
         <div className="mt-6 prose prose-sm max-w-none whitespace-pre-wrap text-gray-800">
           {article.text}
         </div>
@@ -311,7 +345,6 @@ const ArticleDetail = () => {
       <div className="bg-white rounded-2xl shadow-sm p-6">
         <h2 className="text-xl font-semibold mb-4">Комментарии</h2>
 
-        {/* Форма добавления */}
         <div className="mb-6">
           {replyTo && (
             <div className="mb-2 text-sm text-blue-600">
@@ -349,7 +382,6 @@ const ArticleDetail = () => {
           </div>
         </div>
 
-        {/* Список комментариев */}
         {commentsLoading ? (
           <div className="flex justify-center py-8">
             <Spin />
@@ -365,7 +397,7 @@ const ArticleDetail = () => {
         )}
       </div>
 
-      {/* Модалка редактирования */}
+      {/* Модалка редактирования комментария */}
       <Modal
         title="Редактировать комментарий"
         open={isEditModalOpen}

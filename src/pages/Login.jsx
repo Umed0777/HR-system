@@ -76,11 +76,11 @@ const Login = () => {
             </Button>
           </Form.Item>
         </Form>
-        <Form.Item style={{ textAlign: "center", marginTop: 10 }}>
+        {/* <Form.Item style={{ textAlign: "center", marginTop: 10 }}>
           <Text>
             Нет аккаунта? <Link to="/register" style={{color: '#f00'}}>Регистрация</Link>
           </Text>
-        </Form.Item>
+        </Form.Item> */}
       </Card>
     </div>
   );

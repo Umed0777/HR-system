@@ -21,14 +21,11 @@ export const useQuestionStore = create((set, get) => ({
   error: null,
   totalRecords: 0,
 
-  // ==================== QUESTION METHODS ====================
-  
-  fetchQuestions: async (pageNumber = 1, pageSize = 10) => {
+  fetchQuestions: async (pageNumber = 1, pageSize = 10, type = null) => {
     set({ loading: true, error: null });
     try {
-      const res = await getQuestions(pageNumber, pageSize);
-      console.log("Fetched questions:", res.data);
-      console.log(res.totalRecords); 
+      const res = await getQuestions(pageNumber, pageSize, type);
+      console.log("Fetched questions:", res.data, "type:", type);
       set({
         questions: res.data,
         totalRecords: res.totalRecords,
@@ -62,11 +59,9 @@ export const useQuestionStore = create((set, get) => ({
     try {
       const res = await createQuestion(data);
       console.log("Added question:", res.data);
-      
       set((state) => ({
         questions: [...state.questions, res.data],
       }));
-      
       return res.data;
     } catch (err) {
       console.log("Add error:", err.response?.data || err.message);
@@ -77,14 +72,10 @@ export const useQuestionStore = create((set, get) => ({
   editQuestion: async (id, data) => {
     try {
       const res = await updateQuestion(id, data);
-      console.log("Updated question:", res.data); 
-      
+      console.log("Updated question:", res.data);
       set((state) => ({
-        questions: state.questions.map((q) =>
-          q.id === id ? res.data : q
-        ),
+        questions: state.questions.map((q) => (q.id === id ? res.data : q)),
       }));
-      
       return res.data;
     } catch (err) {
       console.log("Edit error:", err.response?.data || err.message);
@@ -104,22 +95,14 @@ export const useQuestionStore = create((set, get) => ({
     }
   },
 
-  // ==================== ANSWER METHODS ====================
-  
   fetchAnswers: async () => {
     set({ loading: true, error: null });
     try {
       const res = await getAnswers();
       console.log("Fetched answers:", res.data);
-      set({
-        answers: res.data,
-        loading: false,
-      });
+      set({ answers: res.data, loading: false });
     } catch (err) {
-      set({
-        error: err.message,
-        loading: false,
-      });
+      set({ error: err.message, loading: false });
     }
   },
 
@@ -127,32 +110,22 @@ export const useQuestionStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const res = await getAnswerById(id);
-      set({
-        currentAnswer: res.data,
-        loading: false,
-      });
+      set({ currentAnswer: res.data, loading: false });
     } catch (err) {
-      set({
-        error: err.message,
-        loading: false,
-      });
+      set({ error: err.message, loading: false });
     }
   },
 
   fetchAnswersByQuestionId: (questionId) => {
     const { answers } = get();
-    return answers.filter(answer => answer.questionId === questionId);
+    return answers.filter((answer) => answer.questionId === questionId);
   },
 
   addAnswer: async (data) => {
     try {
       const res = await createAnswer(data);
       console.log("Added answer:", res.data);
-      
-      set((state) => ({
-        answers: [...state.answers, res.data],
-      }));
-      
+      set((state) => ({ answers: [...state.answers, res.data] }));
       return res.data;
     } catch (err) {
       console.log("Add answer error:", err.response?.data || err.message);
@@ -164,13 +137,9 @@ export const useQuestionStore = create((set, get) => ({
     try {
       const res = await updateAnswer(id, data);
       console.log("Updated answer:", res.data);
-      
       set((state) => ({
-        answers: state.answers.map((a) =>
-          a.id === id ? res.data : a
-        ),
+        answers: state.answers.map((a) => (a.id === id ? res.data : a)),
       }));
-      
       return res.data;
     } catch (err) {
       console.log("Edit answer error:", err.response?.data || err.message);
@@ -190,14 +159,14 @@ export const useQuestionStore = create((set, get) => ({
     }
   },
 
-  // Дополнительный метод для получения ответов студента
   fetchStudentAnswer: async (questionId, employeeId, testId) => {
     try {
       const { answers } = get();
       return answers.find(
-        answer => answer.questionId === questionId && 
-                 answer.employeeId === employeeId && 
-                 answer.testId === testId
+        (answer) =>
+          answer.questionId === questionId &&
+          answer.employeeId === employeeId &&
+          answer.testId === testId
       );
     } catch (err) {
       console.log("Fetch student answer error:", err);

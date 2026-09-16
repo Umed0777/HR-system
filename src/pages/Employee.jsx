@@ -39,10 +39,10 @@ export const Employee = () => {
     });
 
     useEffect(() => {
-        fetchEmployee(1, 10);
-        fetchDepartments(1,100);
-        fetchSubDepartments(1,100);
-        fetchPositions(1,100);
+        fetchEmployee(1, 1000);
+        fetchDepartments(1,1000);
+        fetchSubDepartments(1,1000);
+        fetchPositions(1,1000);
     }, []);
 
     // Обработчик смены страницы
@@ -146,7 +146,7 @@ export const Employee = () => {
         { title: "Фамилия", dataIndex: "lastName", key: "lastName" },
         { title: "Email", dataIndex: "email", key: "email" },
         { title: "Телефон", dataIndex: "phone", key: "phone" },
-        { title: "Адрес", dataIndex: "address", key: "address" },
+        // { title: "Адрес", dataIndex: "address", key: "address" },
         {
             title: "Управление",
             key: "department",
@@ -218,7 +218,7 @@ export const Employee = () => {
                     pageSize={pageSize}
                     total={totalRecords}
                     onChange={handlePageChange}
-                    // showSizeChanger
+                    showSizeChanger = {false}
                     // showQuickJumper
                     showTotal={(total) => `Всего ${total} записей`}
                     pageSizeOptions={[5, 10, 20, 50]}
@@ -251,9 +251,9 @@ export const Employee = () => {
                         <Descriptions.Item label="Телефон">
                             <a href={`tel:${viewingEmployee.phone}`}>{viewingEmployee.phone || "-"}</a>
                         </Descriptions.Item>
-                        <Descriptions.Item label="Адрес">
+                        {/* <Descriptions.Item label="Адрес">
                             {viewingEmployee.address || "-"}
-                        </Descriptions.Item>
+                        </Descriptions.Item> */}
                         <Descriptions.Item label="Управление">
                             <Tag color="green">{getDepartmentName(viewingEmployee.departmentId)}</Tag>
                         </Descriptions.Item>
@@ -308,12 +308,12 @@ export const Employee = () => {
                         prefix={<PhoneOutlined />}
                         maxLength={9}
                     />
-                    <Input
+                    {/* <Input
                         placeholder="Адрес"
                         value={form.address}
                         onChange={(e) => setForm({ ...form, address: e.target.value })}
                         prefix={<HomeOutlined />}
-                    />
+                    /> */}
                     <Select
                         placeholder="Управление"
                         value={form.departmentId}
