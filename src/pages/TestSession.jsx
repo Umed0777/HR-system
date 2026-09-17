@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import {
   Button, Modal, Card, Typography, Tag, Spin, Row, Col, message,
   Progress, Radio, Input, Alert, Descriptions, Badge, Divider, Tooltip,
-  Avatar, Table, Statistic, Empty, List, Space,
+  Avatar, Table, Statistic, Empty, List, Space, Pagination,
 } from "antd";
 import {
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
@@ -11,6 +11,7 @@ import {
   FlagOutlined, UserOutlined, BookOutlined, HourglassOutlined,
   SaveOutlined, StarOutlined, FileDoneOutlined, HistoryOutlined,
   CrownOutlined, TeamOutlined, FileExcelOutlined, EyeOutlined, ReloadOutlined,
+  EyeInvisibleOutlined,
 } from "@ant-design/icons";
 import { useTestSessionStore } from "../store/useTestSession";
 import { useTestStore } from "../store/useTest";
@@ -215,7 +216,7 @@ const QuestionCard = ({
       <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 24 }}>
         {getQuestionText(question)}
       </div>
-      <Divider titlePlacement="left" style={{ fontSize: 14, margin: "16px 0" }}>
+      <Divider orientation="left" style={{ fontSize: 14, margin: "16px 0" }}>
         <Text type="secondary">{t[lang].yourAnswer}</Text>
       </Divider>
 
@@ -542,6 +543,13 @@ export const TestSession = ({ testData, onClose }) => {
   const { employees = [], fetchEmployee } = useEmployeeStore();
 
   const [lang, setLang] = useState(() => localStorage.getItem("testsession_lang") || "ru");
+
+  // ⭐ Скрытие/показ рейтинга (сохраняется в localStorage)
+  const [showRanking, setShowRanking] = useState(() => {
+    const saved = localStorage.getItem("testsession_show_ranking");
+    return saved === null ? true : saved === "true";
+  });
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [manualAnswer, setManualAnswer] = useState("");
@@ -558,7 +566,6 @@ export const TestSession = ({ testData, onClose }) => {
   const [sessionStartTimestamp, setSessionStartTimestamp] = useState(Date.now());
   const [dataLoaded, setDataLoaded] = useState(false);
   const [selectedTestDuration, setSelectedTestDuration] = useState(5);
-  const [showRanking, setShowRanking] = useState(true);
   const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
   const [sessionModalVisible, setSessionModalVisible] = useState(false);
   const [testResultModalVisible, setTestResultModalVisible] = useState(false);
@@ -566,6 +573,10 @@ export const TestSession = ({ testData, onClose }) => {
   const [isFinished, setIsFinished] = useState(false);
   const [extraEmployees, setExtraEmployees] = useState([]);
   const [departmentsLocal, setDepartmentsLocal] = useState([]);
+
+  // ⭐ ПАГИНАЦИЯ ДЛЯ ИСТОРИИ
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
 
   const scrollRef = useRef(null);
 
@@ -581,6 +592,16 @@ export const TestSession = ({ testData, onClose }) => {
       : 0;
     return { total, completed, inProgress, averageScore };
   }, [sessions]);
+
+  const paginatedSessions = useMemo(() => {
+    const start = (historyPage - 1) * historyPageSize;
+    return sessions.slice(start, start + historyPageSize);
+  }, [sessions, historyPage, historyPageSize]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(sessions.length / historyPageSize));
+    if (historyPage > maxPage) setHistoryPage(maxPage);
+  }, [sessions.length, historyPageSize, historyPage]);
 
   const getDepartmentName = useMemo(
     () => makeDepartmentResolver(departmentsLocal),
@@ -639,7 +660,7 @@ export const TestSession = ({ testData, onClose }) => {
     loadAllData();
   }, []);
 
-  // 🔥 ФОЛБЭК: догружаем сотрудников, которых нет в основном массиве
+  // ФОЛБЭК: догружаем сотрудников, которых нет в основном массиве
   useEffect(() => {
     if (!dataLoaded || !sessions.length) return;
     const knownIds = new Set([...employees, ...extraEmployees].map((e) => Number(e.id)));
@@ -911,10 +932,24 @@ export const TestSession = ({ testData, onClose }) => {
     loadSavedAnswerForQuestion(index);
   };
 
-  const handleRemainingChange = (remaining) => setRemainingSeconds(remaining);
+  // ⭐ Стабилизировано через useCallback, чтобы Timer не перезапускался
+  const handleRemainingChange = useCallback(
+    (remaining) => setRemainingSeconds(remaining),
+    []
+  );
+
   const handleRowClick = (record) => { setSelectedSessionForModal(record); setSessionModalVisible(true); };
   const answeredCount = answersHistory.filter((a) => a).length;
   const handleSetLang = (newLang) => { setLang(newLang); localStorage.setItem("testsession_lang", newLang); };
+
+  // ⭐ Тоггл скрытия/показа рейтинга
+  const toggleRanking = () => {
+    setShowRanking((prev) => {
+      const next = !prev;
+      localStorage.setItem("testsession_show_ranking", String(next));
+      return next;
+    });
+  };
 
   // ============================================================
   // ЭКСПОРТ В EXCEL — ОБЩИЙ ОТЧЁТ
@@ -999,60 +1034,63 @@ export const TestSession = ({ testData, onClose }) => {
       detailSheet.getColumn(12).width = 16;
       detailSheet.autoFilter = { from: 'A1', to: `L${sessions.length + 1}` };
 
-      const rankingSheet = workbook.addWorksheet('Рейтинг', { properties: { tabColor: { argb: 'FFFAAD14' } } });
-      const employeeStats = allEmployees
-        .map((emp) => {
-          const empSessions = sessions.filter(
-            (s) => Number(s.employeeId) === Number(emp.id) && getStatusNum(s.status) === 2 && s.score !== null
-          );
-          const completed = empSessions.length;
-          const avgScore = completed > 0 ? empSessions.reduce((sum, s) => sum + (s.score || 0), 0) / completed : 0;
-          const bestScore = completed > 0 ? Math.max(...empSessions.map((s) => s.score || 0)) : 0;
-          return { ...emp, completed, avgScore: Math.round(avgScore), bestScore };
-        })
-        .filter((emp) => emp.completed > 0)
-        .sort((a, b) => b.avgScore - a.avgScore);
+      // ⭐ Рейтинг в Excel экспортируется только если он показан
+      if (showRanking) {
+        const rankingSheet = workbook.addWorksheet('Рейтинг', { properties: { tabColor: { argb: 'FFFAAD14' } } });
+        const employeeStats = allEmployees
+          .map((emp) => {
+            const empSessions = sessions.filter(
+              (s) => Number(s.employeeId) === Number(emp.id) && getStatusNum(s.status) === 2 && s.score !== null
+            );
+            const completed = empSessions.length;
+            const avgScore = completed > 0 ? empSessions.reduce((sum, s) => sum + (s.score || 0), 0) / completed : 0;
+            const bestScore = completed > 0 ? Math.max(...empSessions.map((s) => s.score || 0)) : 0;
+            return { ...emp, completed, avgScore: Math.round(avgScore), bestScore };
+          })
+          .filter((emp) => emp.completed > 0)
+          .sort((a, b) => b.avgScore - a.avgScore);
 
-      if (employeeStats.length > 0) {
-        const rankHeader = rankingSheet.addRow(['Рейтинг сотрудников']);
-        rankingSheet.mergeCells('A1:F1');
-        rankHeader.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-        rankHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAAD14' } };
-        rankHeader.alignment = { horizontal: 'center', vertical: 'middle' };
-        rankingSheet.getRow(1).height = 36;
-        rankingSheet.addRow([]);
+        if (employeeStats.length > 0) {
+          const rankHeader = rankingSheet.addRow(['Рейтинг сотрудников']);
+          rankingSheet.mergeCells('A1:F1');
+          rankHeader.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+          rankHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAAD14' } };
+          rankHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+          rankingSheet.getRow(1).height = 36;
+          rankingSheet.addRow([]);
 
-        const rankCols = rankingSheet.addRow(['Место', 'Сотрудник', 'Отдел', 'Пройдено тестов', 'Средний балл', 'Лучший результат']);
-        rankCols.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        rankCols.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B2B' } };
-        rankCols.alignment = { horizontal: 'center', vertical: 'middle' };
-        rankCols.height = 28;
+          const rankCols = rankingSheet.addRow(['Место', 'Сотрудник', 'Отдел', 'Пройдено тестов', 'Средний балл', 'Лучший результат']);
+          rankCols.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          rankCols.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B2B' } };
+          rankCols.alignment = { horizontal: 'center', vertical: 'middle' };
+          rankCols.height = 28;
 
-        employeeStats.forEach((emp, idx) => {
-          const row = rankingSheet.addRow([
-            idx + 1,
-            getEmployeeFio(emp) || `ID: ${emp.id}`,
-            getDepartmentName(emp.departmentId) || '—',
-            emp.completed,
-            `${emp.avgScore}%`,
-            `${emp.bestScore}%`,
-          ]);
-          const placeCell = row.getCell(1);
-          if (idx === 0) placeCell.font = { color: { argb: 'FFFFD700' }, bold: true, size: 14 };
-          else if (idx === 1) placeCell.font = { color: { argb: 'FFC0C0C0' }, bold: true, size: 14 };
-          else if (idx === 2) placeCell.font = { color: { argb: 'FFCD7F32' }, bold: true, size: 14 };
-          row.alignment = { horizontal: 'center', vertical: 'middle' };
-          row.height = 24;
-        });
+          employeeStats.forEach((emp, idx) => {
+            const row = rankingSheet.addRow([
+              idx + 1,
+              getEmployeeFio(emp) || `ID: ${emp.id}`,
+              getDepartmentName(emp.departmentId) || '—',
+              emp.completed,
+              `${emp.avgScore}%`,
+              `${emp.bestScore}%`,
+            ]);
+            const placeCell = row.getCell(1);
+            if (idx === 0) placeCell.font = { color: { argb: 'FFFFD700' }, bold: true, size: 14 };
+            else if (idx === 1) placeCell.font = { color: { argb: 'FFC0C0C0' }, bold: true, size: 14 };
+            else if (idx === 2) placeCell.font = { color: { argb: 'FFCD7F32' }, bold: true, size: 14 };
+            row.alignment = { horizontal: 'center', vertical: 'middle' };
+            row.height = 24;
+          });
 
-        rankingSheet.getColumn(1).width = 10;
-        rankingSheet.getColumn(2).width = 30;
-        rankingSheet.getColumn(3).width = 28;
-        rankingSheet.getColumn(4).width = 18;
-        rankingSheet.getColumn(5).width = 18;
-        rankingSheet.getColumn(6).width = 20;
-      } else {
-        rankingSheet.addRow(['Нет данных для рейтинга']);
+          rankingSheet.getColumn(1).width = 10;
+          rankingSheet.getColumn(2).width = 30;
+          rankingSheet.getColumn(3).width = 28;
+          rankingSheet.getColumn(4).width = 18;
+          rankingSheet.getColumn(5).width = 18;
+          rankingSheet.getColumn(6).width = 20;
+        } else {
+          rankingSheet.addRow(['Нет данных для рейтинга']);
+        }
       }
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -1259,10 +1297,11 @@ export const TestSession = ({ testData, onClose }) => {
       inProgressSessions: "В процессе", averageScore: "Средний балл",
       noSessions: "Нет сессий тестирования", exportAll: "Экспорт всех",
       details: "Детали", ranking: "Рейтинг сотрудников",
-      showRanking: "Показать рейтинг", hideRanking: "Скрыть рейтинг",
       viewDetails: "Детали", history: "История тестирований",
       attempt: "Попытка", of: "из", retake: "Пройти снова",
       attemptsLeft: "Осталось попыток",
+      hideRanking: "Скрыть рейтинг",
+      showRanking: "Показать рейтинг",
     },
     tj: {
       title: "Тестировании кормандон", finish: "Анҷом додан", next: "Баъдӣ",
@@ -1279,10 +1318,11 @@ export const TestSession = ({ testData, onClose }) => {
       completedSessions: "Анҷомёфта", inProgressSessions: "Дар раванд",
       averageScore: "Балли миёна", noSessions: "Сессияҳои тестирование нестанд",
       exportAll: "Содироти ҳама", details: "Тафсилот",
-      ranking: "Рейтинги кормандон", showRanking: "Нишон додани рейтинг",
-      hideRanking: "Пинҳон кардани рейтинг", viewDetails: "Тафсилот",
+      ranking: "Рейтинги кормандон", viewDetails: "Тафсилот",
       history: "Таърихи тестирование", attempt: "Кӯшиш", of: "аз",
       retake: "Аз нав супоридан", attemptsLeft: "Кӯшишҳои боқимонда",
+      hideRanking: "Пинҳон кардани рейтинг",
+      showRanking: "Нишон додани рейтинг",
     },
   };
 
@@ -1300,6 +1340,29 @@ export const TestSession = ({ testData, onClose }) => {
 
   return (
     <div ref={scrollRef} style={{ padding: 30, background: "#f0f2f5", minHeight: "100vh" }}>
+      {/* ⭐ Красная пагинация */}
+      <style>{`
+        .red-pagination .ant-pagination-item-active {
+          background: #ff4b2b !important;
+          border-color: #ff4b2b !important;
+        }
+        .red-pagination .ant-pagination-item-active a {
+          color: #ffffff !important;
+          font-weight: 600 !important;
+        }
+        .red-pagination .ant-pagination-item:hover {
+          border-color: #ff4b2b !important;
+        }
+        .red-pagination .ant-pagination-item:hover a {
+          color: #ff4b2b !important;
+        }
+        .red-pagination .ant-pagination-prev:hover .ant-pagination-item-link,
+        .red-pagination .ant-pagination-next:hover .ant-pagination-item-link {
+          color: #ff4b2b !important;
+          border-color: #ff4b2b !important;
+        }
+      `}</style>
+
       <TestResultsModal
         visible={testResultModalVisible}
         result={testResultData}
@@ -1324,9 +1387,17 @@ export const TestSession = ({ testData, onClose }) => {
           <Space>
             <Button type={lang === "ru" ? "primary" : "default"} onClick={() => handleSetLang("ru")} style={lang === "ru" ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}>RU</Button>
             <Button type={lang === "tj" ? "primary" : "default"} onClick={() => handleSetLang("tj")} style={lang === "tj" ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}}>TJ</Button>
-            <Button icon={showRanking ? <StarOutlined /> : <TeamOutlined />} onClick={() => setShowRanking(!showRanking)}>
-              {showRanking ? t[lang].hideRanking : t[lang].showRanking}
-            </Button>
+
+            {/* ⭐ Кнопка скрытия/показа рейтинга */}
+            <Tooltip title={showRanking ? t[lang].hideRanking : t[lang].showRanking}>
+              <Button
+                icon={showRanking ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                onClick={toggleRanking}
+              >
+                {showRanking ? t[lang].hideRanking : t[lang].showRanking}
+              </Button>
+            </Tooltip>
+
             <Button icon={<FileExcelOutlined />} onClick={exportAllToExcel}>{t[lang].exportAll}</Button>
           </Space>
         </div>
@@ -1458,16 +1529,67 @@ export const TestSession = ({ testData, onClose }) => {
         </>
       )}
 
-      {showRanking && !isTestActive && (
+      {/* ⭐ Рейтинг показываем только если включён */}
+      {!isTestActive && showRanking && (
         <EmployeeRanking sessions={sessions} employees={allEmployees} tests={tests} lang={lang} getDepartmentName={getDepartmentName} />
       )}
 
       {(!isTestActive || sessionComplete) && (
         <Card
-          title={<div style={{ display: "flex", alignItems: "center", gap: 8 }}><HistoryOutlined /><span>{t[lang].history}</span></div>}
-          style={{ borderRadius: 12, marginTop: showRanking && !isTestActive ? 24 : 0 }}>
-          {!sessions || sessions.length === 0 ? (<Empty description={t[lang].noSessions} />) : (
-            <Table dataSource={sessions} columns={historyColumns} rowKey="id" pagination={false} scroll={{ x: 1400 }} loading={loading} />
+          title={
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <HistoryOutlined />
+              <span>{t[lang].history}</span>
+              {sessions.length > 0 && (
+                <Tag color="red" style={{ marginLeft: 8, borderRadius: 20 }}>
+                  {sessions.length}
+                </Tag>
+              )}
+            </div>
+          }
+          style={{ borderRadius: 12, marginTop: !isTestActive ? 24 : 0 }}
+        >
+          {!sessions || sessions.length === 0 ? (
+            <Empty description={t[lang].noSessions} />
+          ) : (
+            <>
+              <Table
+                dataSource={paginatedSessions}
+                columns={historyColumns}
+                rowKey="id"
+                pagination={false}
+                scroll={{ x: 1400 }}
+                loading={loading}
+              />
+              <div
+                style={{
+                  marginTop: 16,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <Pagination
+                  className="red-pagination"
+                  current={historyPage}
+                  pageSize={historyPageSize}
+                  total={sessions.length}
+                  showSizeChanger={false}
+                  showTotal={(total, range) =>
+                    `${range[0]}-${range[1]} из ${total} сессий`
+                  }
+                  onChange={(page, size) => {
+                    if (size !== historyPageSize) {
+                      setHistoryPageSize(size);
+                      setHistoryPage(1);
+                    } else {
+                      setHistoryPage(page);
+                    }
+                  }}
+                />
+              </div>
+            </>
           )}
         </Card>
       )}

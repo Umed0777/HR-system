@@ -53,11 +53,9 @@ export const HRSystemRoutes = () => {
 
   return (
     <Routes>
-      {/* PUBLIC */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* PROTECTED LAYOUT */}
       <Route
         path="/"
         element={

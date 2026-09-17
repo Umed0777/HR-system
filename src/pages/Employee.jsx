@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useEmployeeStore } from "../store/useEmployee";
 import { useDepartmentStore } from "../store/useDepartment";
 import { usePositionStore } from "../store/usePosition";
@@ -14,9 +14,6 @@ export const Employee = () => {
         addEmployee,
         editEmployee,
         removeEmployee,
-        totalRecords,
-        currentPage,
-        pageSize,
         loading
     } = useEmployeeStore();
 
@@ -27,6 +24,11 @@ export const Employee = () => {
     const [viewOpen, setViewOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [viewingEmployee, setViewingEmployee] = useState(null);
+
+    // ⭐ Локальное состояние пагинации
+    const [localPage, setLocalPage] = useState(1);
+    const [localPageSize, setLocalPageSize] = useState(10);
+
     const [form, setForm] = useState({
         firstName: "",
         lastName: "",
@@ -40,14 +42,26 @@ export const Employee = () => {
 
     useEffect(() => {
         fetchEmployee(1, 1000);
-        fetchDepartments(1,1000);
-        fetchSubDepartments(1,1000);
-        fetchPositions(1,1000);
+        fetchDepartments(1, 1000);
+        fetchSubDepartments(1, 1000);
+        fetchPositions(1, 1000);
     }, []);
+
+    // ⭐ Режем локально
+    const paginatedEmployees = useMemo(() => {
+        const list = Array.isArray(employees) ? employees : [];
+        const start = (localPage - 1) * localPageSize;
+        return list.slice(start, start + localPageSize);
+    }, [employees, localPage, localPageSize]);
 
     // Обработчик смены страницы
     const handlePageChange = (page, pageSize) => {
-        fetchEmployee(page, pageSize);
+        if (pageSize !== localPageSize) {
+            setLocalPageSize(pageSize);
+            setLocalPage(1);
+        } else {
+            setLocalPage(page);
+        }
     };
 
     // Открыть для редактирования
@@ -146,7 +160,6 @@ export const Employee = () => {
         { title: "Фамилия", dataIndex: "lastName", key: "lastName" },
         { title: "Email", dataIndex: "email", key: "email" },
         { title: "Телефон", dataIndex: "phone", key: "phone" },
-        // { title: "Адрес", dataIndex: "address", key: "address" },
         {
             title: "Управление",
             key: "department",
@@ -167,8 +180,8 @@ export const Employee = () => {
             key: "action",
             render: (_, record) => (
                 <Space>
-                    <Button 
-                        icon={<EditOutlined />} 
+                    <Button
+                        icon={<EditOutlined />}
                         onClick={(e) => handleEdit(e, record)}
                         size="middle"
                         type="primary"
@@ -176,9 +189,9 @@ export const Employee = () => {
                     >
                         Редактировать
                     </Button>
-                    <Button 
-                        danger 
-                        icon={<DeleteOutlined />} 
+                    <Button
+                        danger
+                        icon={<DeleteOutlined />}
                         onClick={(e) => handleDelete(e, record.id)}
                         size="middle"
                     >
@@ -199,7 +212,7 @@ export const Employee = () => {
             </div>
 
             <Table
-                dataSource={employees || []}
+                dataSource={paginatedEmployees}
                 columns={columns}
                 rowKey={(record) => record?.id}
                 onRow={(record) => ({
@@ -211,15 +224,14 @@ export const Employee = () => {
                 scroll={{ x: 1300 }}
             />
 
-            {/* Пагинация */}
+            {/* ⭐ Пагинация — работает локально */}
             <div style={{ marginTop: 16, textAlign: "right", display: 'flex', justifyContent: 'end' }}>
                 <Pagination
-                    current={currentPage}
-                    pageSize={pageSize}
-                    total={totalRecords}
+                    current={localPage}
+                    pageSize={localPageSize}
+                    total={employees.length}
                     onChange={handlePageChange}
                     showSizeChanger = {false}
-                    // showQuickJumper
                     showTotal={(total) => `Всего ${total} записей`}
                     pageSizeOptions={[5, 10, 20, 50]}
                 />
@@ -251,9 +263,6 @@ export const Employee = () => {
                         <Descriptions.Item label="Телефон">
                             <a href={`tel:${viewingEmployee.phone}`}>{viewingEmployee.phone || "-"}</a>
                         </Descriptions.Item>
-                        {/* <Descriptions.Item label="Адрес">
-                            {viewingEmployee.address || "-"}
-                        </Descriptions.Item> */}
                         <Descriptions.Item label="Управление">
                             <Tag color="green">{getDepartmentName(viewingEmployee.departmentId)}</Tag>
                         </Descriptions.Item>
@@ -267,7 +276,6 @@ export const Employee = () => {
                 )}
             </Modal>
 
-            {/* Модальное окно для редактирования/добавления */}
             <Modal
                 title={editing ? "Редактировать сотрудника" : "Добавить сотрудника"}
                 open={editOpen}
@@ -308,12 +316,6 @@ export const Employee = () => {
                         prefix={<PhoneOutlined />}
                         maxLength={9}
                     />
-                    {/* <Input
-                        placeholder="Адрес"
-                        value={form.address}
-                        onChange={(e) => setForm({ ...form, address: e.target.value })}
-                        prefix={<HomeOutlined />}
-                    /> */}
                     <Select
                         placeholder="Управление"
                         value={form.departmentId}

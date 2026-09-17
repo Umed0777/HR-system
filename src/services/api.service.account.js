@@ -47,3 +47,24 @@ export const registerAdmin = async(data) =>{
         throw error;
     }
 }
+export const getUsers = async (pageNumber = 1, pageSize = 10) => {
+  try {
+    const res = await API_URL.get("/api/User", {
+      params: {
+        pageNumber,
+        pageSize,
+      },
+    });
+
+    console.log("USERS RESPONSE:", res.data);
+
+    return res.data;
+  } catch (error) {
+    console.error(
+      "Ошибка получения пользователей:",
+      error.response?.data || error
+    );
+
+    throw error;
+  }
+};

@@ -21,7 +21,6 @@ import {
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
-import img from '../assets/image2.jpg';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -242,7 +241,7 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
 // ============================================================
 export const TestManager = ({ onStartTest }) => {
   const { tests = [], loading: testsLoading, fetchTests, addTest, editTest, removeTest } = useTestStore();
-  const { questions = [], fetchQuestions } = useQuestionStore();
+  const { questions = [], fetchQuestions, removeQuestion } = useQuestionStore();
   const { sessions = [], loading: sessionsLoading, fetchSessions, getStats } = useTestSessionStore();
   const { employees = [], fetchEmployee } = useEmployeeStore();
   const { testAssignments = [], fetchTestAssignments } = useTestAssignmentStore();
@@ -272,7 +271,6 @@ export const TestManager = ({ onStartTest }) => {
   const [selectedTest, setSelectedTest] = useState(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // 🔥 Состояния модалки "Начать тест"
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [selectedTestId, setSelectedTestId] = useState(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
@@ -282,7 +280,6 @@ export const TestManager = ({ onStartTest }) => {
   const [existingSession, setExistingSession] = useState(null);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
 
-  // 🔥 Роли
   const roles = useMemo(() => {
     try { return JSON.parse(localStorage.getItem("roles") || "[]"); } catch { return []; }
   }, []);
@@ -582,6 +579,18 @@ export const TestManager = ({ onStartTest }) => {
     setActiveTab("select");
   };
 
+  const handleDeleteQuestion = async (questionId) => {
+    try {
+      await removeQuestion(questionId);
+      setSelectedQuestionIds((prev) => prev.filter((id) => id !== questionId));
+      message.success("Вопрос удалён навсегда");
+      await fetchQuestions(1, 1000);
+    } catch (err) {
+      console.error("Delete question error:", err);
+      message.error("Ошибка удаления вопроса");
+    }
+  };
+
   // ==================== СОХРАНЕНИЕ ====================
   const handleSave = async () => {
     const currentTitle = lang === "ru" ? titleRu : titleTj;
@@ -771,9 +780,9 @@ export const TestManager = ({ onStartTest }) => {
 
       <Flex justify="space-between" align="center" style={{ marginBottom: 24, padding: "0 8px" }}>
         <div>
-          <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>📋 {t[lang].title}</Title>
+          <Title level={2} style={{ margin: 0, color: "#f00", fontWeight: 400 }}>📋 {t[lang].title}</Title>
           <Text type="secondary" style={{ fontSize: 14 }}>
-            Всего {testTests.length} {testTests.length === 1 ? "тест" : "тестов"} • {questions.length} вопросов • {sessions.length} сессий
+            Всего {testTests.length} {testTests.length === 1 ? "тест" : "тестов"}
           </Text>
         </div>
         <Space size="middle">
@@ -782,14 +791,12 @@ export const TestManager = ({ onStartTest }) => {
           <Button type={lang === "tj" ? "primary" : "default"} onClick={() => handleSetLang("tj")}
             style={lang === "tj" ? { background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 } : { borderRadius: 20 }}>TJ</Button>
 
-          {/* 🔥 Кнопка "Начать тест" — для всех */}
           <Button type="primary" onClick={() => setTestModalOpen(true)}
             icon={<PlayCircleOutlined />} size="large"
             style={{ background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 }}>
             {t[lang].startTest}
           </Button>
 
-          {/* 🔥 Кнопка "Создать тест" — только для Admin/SuperAdmin */}
           {isAdmin && (
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button type="primary" onClick={openCreateModal}
@@ -825,66 +832,179 @@ export const TestManager = ({ onStartTest }) => {
                 const isHovered = hoveredCard === test.id;
                 const isNew = newTestId === test.id;
                 const questionCount = test.questions?.length || 0;
+                const hasDescription = lang === "ru"
+                  ? test.descriptionRu || test.description
+                  : test.descriptionTj || test.description;
+
                 return (
                   <Col xs={24} md={12} lg={8} key={test.id}>
-                    <motion.div id={`test-${test.id}`}
+                    <motion.div
+                      id={`test-${test.id}`}
                       initial={{ opacity: 0, scale: 0.8, y: 50 }}
                       animate={{
                         opacity: 1, scale: 1, y: 0,
                         boxShadow: isNew ? "0 0 0 3px #ff4b2b, 0 0 0 6px rgba(255, 75, 43, 0.3)" : "none",
                       }}
                       transition={{ duration: 0.6, delay: index * 0.1, type: "spring", stiffness: 100 }}
-                      whileHover={{ y: -8 }}>
-                      {isNew && (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-                          transition={{ type: "spring", stiffness: 200 }}
-                          style={{ position: "absolute", top: -10, right: -10, zIndex: 10 }}>
-                          <Tag color="red" style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20 }}>NEW! 🎉</Tag>
-                        </motion.div>
-                      )}
+                      whileHover={{ y: -8 }}
+                    >
                       <Card
                         onClick={() => { if (isAdmin) openPreview(test); }}
                         onMouseEnter={() => setHoveredCard(test.id)}
                         onMouseLeave={() => setHoveredCard(null)}
                         style={{
                           borderRadius: 20,
-                          boxShadow: isHovered ? "0 12px 24px rgba(0, 0, 0, 0.12)" : "0 4px 12px rgba(0, 0, 0, 0.08)",
-                          transition: "all 0.3s ease", border: "none", overflow: "hidden",
+                          border: "none",
+                          overflow: "hidden",
                           cursor: isAdmin ? "pointer" : "default",
-                          backgroundImage: `url(${img})`, backgroundSize: "cover",
-                          backgroundPosition: "center", backgroundRepeat: "no-repeat",
+                          boxShadow: isHovered
+                            ? "0 16px 40px rgba(255, 75, 43, 0.18)"
+                            : "0 6px 20px rgba(0, 0, 0, 0.08)",
+                          transition: "all 0.3s ease",
+                          position: "relative",
+                          background: "#fff",
                         }}
-                        styles={{ body: { padding: 0, background: 'transparent' } }}>
-                        <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(0, 0, 0, 0.1)", background: "rgba(255, 255, 255, 0.9)" }}>
-                          <Flex align="center" gap={12} style={{ marginBottom: 12 }}>
-                            <Avatar style={{ background: "linear-gradient(135deg, #ff416c, #ff4b2b)" }} size={50}>
+                        styles={{ body: { padding: 0 } }}
+                      >
+                        {/* ═══ ВЕРХНИЙ БЛОК — красный градиент ═══ */}
+                        <div
+                          style={{
+                            background: "linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)",
+                            padding: "22px 24px",
+                            color: "#fff",
+                            position: "relative",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {/* Декоративные круги */}
+                          <div style={{
+                            position: "absolute", top: -50, right: -50,
+                            width: 150, height: 150, borderRadius: "50%",
+                            background: "rgba(255, 255, 255, 0.12)",
+                          }} />
+                          <div style={{
+                            position: "absolute", bottom: -60, right: 80,
+                            width: 100, height: 100, borderRadius: "50%",
+                            background: "rgba(255, 255, 255, 0.08)",
+                          }} />
+                          <div style={{
+                            position: "absolute", top: 40, left: -30,
+                            width: 70, height: 70, borderRadius: "50%",
+                            background: "rgba(255, 255, 255, 0.06)",
+                          }} />
+
+                          <Flex align="flex-start" gap={14} style={{ position: "relative", zIndex: 1 }}>
+                            <div style={{
+                              background: "rgba(255, 255, 255, 0.25)",
+                              borderRadius: 14,
+                              width: 52, height: 52,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              flexShrink: 0, fontSize: 24,
+                              border: "1px solid rgba(255, 255, 255, 0.3)",
+                              backdropFilter: "blur(6px)",
+                            }}>
                               <FileTextOutlined />
-                            </Avatar>
-                            <div style={{ flex: 1 }}>
-                              <Title level={4} style={{ margin: 0, color: "#1a1a1a", fontSize: 18 }}>
-                                {lang === "ru" ? test.titleRu || test.title : test.titleTj || test.title}
-                              </Title>
-                              <Flex gap={8} align="center" style={{ marginTop: 8 }}>
-                                <Tag icon={<ClockCircleOutlined />} color="blue" style={{ borderRadius: 20 }}>
+                            </div>
+
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <Text strong style={{
+                                color: "#fff",
+                                fontSize: 16,
+                                display: "block",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                textShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                              }}>
+                                {lang === "ru"
+                                  ? test.titleRu || test.title || "Без названия"
+                                  : test.titleTj || test.title || "Безунвон"}
+                              </Text>
+
+                              <div style={{ marginTop: 10 }}>
+                                <Tag
+                                  icon={<ClockCircleOutlined />}
+                                  style={{
+                                    background: "rgba(255, 255, 255, 0.25)",
+                                    color: "#fff",
+                                    border: "1px solid rgba(255, 255, 255, 0.35)",
+                                    borderRadius: 20,
+                                    padding: "3px 12px",
+                                    fontSize: 12,
+                                    fontWeight: 500,
+                                    backdropFilter: "blur(6px)",
+                                  }}
+                                >
                                   {questionCount} {t[lang].questionCount}
                                 </Tag>
-                              </Flex>
+                              </div>
                             </div>
                           </Flex>
-                          {(lang === "ru" ? test.descriptionRu || test.description : test.descriptionTj || test.description) && (
-                            <Text type="secondary" ellipsis={{ rows: 2 }}>
-                              {lang === "ru" ? test.descriptionRu || test.description : test.descriptionTj || test.description}
-                            </Text>
+
+                          {isNew && (
+                            <div style={{
+                              position: "absolute",
+                              top: 12, right: 12, zIndex: 3,
+                              background: "rgba(255, 255, 255, 0.95)",
+                              color: "#ff4b2b",
+                              fontSize: 10,
+                              fontWeight: 800,
+                              padding: "3px 10px",
+                              borderRadius: 10,
+                              letterSpacing: 0.5,
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                            }}>
+                              NEW 🎉
+                            </div>
                           )}
                         </div>
-                        <div style={{ padding: "16px 24px", background: "rgba(255, 255, 255, 0.9)" }}>
-                          {isAdmin && (
+
+                        {/* ═══ ОПИСАНИЕ ═══ */}
+                        {hasDescription && (
+                          <div style={{
+                            padding: "16px 22px 14px",
+                            background: "#fff",
+                            minHeight: 60,
+                          }}>
+                            <Text type="secondary" style={{
+                              fontSize: 13,
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                              lineHeight: 1.55,
+                            }}>
+                              {hasDescription}
+                            </Text>
+                          </div>
+                        )}
+
+                        {/* ═══ НИЖНИЙ БЛОК — кнопки ═══ */}
+                        {isAdmin && (
+                          <div style={{
+                            padding: "14px 22px",
+                            background: "#fafbff",
+                            borderTop: "1px solid #f0f2f5",
+                          }}>
                             <Flex justify="end">
                               <Space>
-                                <Button icon={<EditOutlined />}
-                                  onClick={(e) => { e.stopPropagation(); openEditModal(test); }}
-                                  style={{ borderRadius: 8 }}>{t[lang].edit}</Button>
-                                <Popconfirm title={t[lang].deleteConfirm}
+                                <Button
+                                  icon={<EditOutlined />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditModal(test);
+                                  }}
+                                  style={{
+                                    borderRadius: 8,
+                                    borderColor: "#ff4b2b",
+                                    color: "#ff4b2b",
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  {t[lang].edit}
+                                </Button>
+                                <Popconfirm
+                                  title={t[lang].deleteConfirm}
                                   onConfirm={async (e) => {
                                     e?.stopPropagation();
                                     await removeTest(test.id);
@@ -893,16 +1013,29 @@ export const TestManager = ({ onStartTest }) => {
                                     const newTotalPages = Math.max(1, Math.ceil(newTotal / pageSize));
                                     if (currentPage > newTotalPages) setCurrentPage(newTotalPages);
                                     await fetchTests(1, 1000);
-                                  }} okText="Да" cancelText="Нет">
-                                  <Button danger icon={<DeleteOutlined />}
-                                    onClick={(e) => e.stopPropagation()} style={{ borderRadius: 8 }}>
+                                  }}
+                                  okText="Да"
+                                  cancelText="Нет"
+                                >
+                                  <Button
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ borderRadius: 8, fontWeight: 500 }}
+                                  >
                                     {t[lang].delete}
                                   </Button>
                                 </Popconfirm>
                               </Space>
                             </Flex>
-                          )}
-                        </div>
+                          </div>
+                        )}
+
+                        {/* ═══ Тонкая полоска снизу ═══ */}
+                        <div style={{
+                          height: 3,
+                          background: "linear-gradient(90deg, #ff416c 0%, #ff4b2b 50%, #ff8c6b 100%)",
+                        }} />
                       </Card>
                     </motion.div>
                   </Col>
@@ -976,7 +1109,7 @@ export const TestManager = ({ onStartTest }) => {
             </div>
             <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <Text type="secondary" style={{ fontSize: 12 }}>{t[lang].presetTimes}</Text>
-              {[5, 10, 15, 20, 30, 45, 60].map((min) => (
+              {[5, 10, 15, 20, 30, 45, 60, 90].map((min) => (
                 <Button key={min} size="small"
                   type={selectedTestDuration === min ? "primary" : "default"}
                   onClick={() => setSelectedTestDuration(min)}
@@ -1288,19 +1421,61 @@ export const TestManager = ({ onStartTest }) => {
                                             )}
                                           </div>
 
-                                          {isSelected && (
-                                            <Flex vertical align="center" gap={6} style={{ flexShrink: 0, marginTop: 4 }}>
+                                          <Flex vertical align="center" gap={6} style={{ flexShrink: 0, marginTop: 4 }}>
+                                            {isSelected && (
                                               <div style={{
                                                 background: "#ff4b2b", color: "white", borderRadius: "50%",
                                                 width: 28, height: 28, display: "flex", alignItems: "center",
                                                 justifyContent: "center",
                                                 boxShadow: "0 2px 8px rgba(255, 75, 43, 0.3)",
                                               }}><CheckOutlined /></div>
-                                              <Button type="text" danger size="small" icon={<DeleteOutlined />}
-                                                title="Удалить вопрос из теста"
-                                                onClick={(e) => { e.stopPropagation(); toggleQuestionSelection(question.id); }} />
-                                            </Flex>
-                                          )}
+                                            )}
+
+                                            {isSelected && (
+                                              <Popconfirm
+                                                title="Убрать из теста?"
+                                                description="Вопрос останется в базе данных"
+                                                onConfirm={(e) => {
+                                                  e?.stopPropagation();
+                                                  toggleQuestionSelection(question.id);
+                                                }}
+                                                onCancel={(e) => e?.stopPropagation()}
+                                                okText="Да"
+                                                cancelText="Нет"
+                                              >
+                                                <Button
+                                                  type="text"
+                                                  size="small"
+                                                  icon={<MinusOutlined />}
+                                                  title="Убрать из теста"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  style={{ color: "#faad14" }}
+                                                />
+                                              </Popconfirm>
+                                            )}
+
+                                            <Popconfirm
+                                              title="Удалить вопрос навсегда?"
+                                              description="Вопрос исчезнет из базы данных. Действие нельзя отменить!"
+                                              onConfirm={(e) => {
+                                                e?.stopPropagation();
+                                                handleDeleteQuestion(question.id);
+                                              }}
+                                              onCancel={(e) => e?.stopPropagation()}
+                                              okText="Да, удалить"
+                                              cancelText="Отмена"
+                                              okButtonProps={{ danger: true }}
+                                            >
+                                              <Button
+                                                type="text"
+                                                danger
+                                                size="small"
+                                                icon={<DeleteOutlined />}
+                                                title="Удалить вопрос навсегда"
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                            </Popconfirm>
+                                          </Flex>
                                         </Flex>
                                       </Card>
                                     </motion.div>
@@ -1311,19 +1486,21 @@ export const TestManager = ({ onStartTest }) => {
                           </div>
                         )}
 
-                        {displayQuestions.length > 0 && (
-                          <div style={{ marginTop: 24, padding: "16px 20px", background: "#f8f9fa", borderRadius: 12 }}>
-                            <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
-                              <Text strong style={{ fontSize: 15 }}>
-                                <TrophyOutlined style={{ marginRight: 8, color: "#ff4b2b" }} />
-                                {t[lang].selected}: {selectedQuestionIds.length} {t[lang].questionsSelected}
-                              </Text>
-                              <div style={{ width: 250 }}>
-                                <Progress
-                                  percent={Math.round((selectedQuestionIds.length / Math.max(1, (editingItem ? questions.length : availableQuestions.length))) * 100)}
-                                  strokeColor="#ff4b2b" size="small" showInfo={false} />
-                              </div>
-                            </Flex>
+                        {selectedQuestionIds.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 20,
+                              padding: "10px 16px",
+                              background: "#fff5f5",
+                              borderRadius: 10,
+                              border: "1px solid #ffd6d6",
+                              textAlign: "center",
+                            }}
+                          >
+                            <Text strong style={{ fontSize: 14, color: "#ff4b2b" }}>
+                              <TrophyOutlined style={{ marginRight: 8 }} />
+                              {t[lang].selected}: {selectedQuestionIds.length} {t[lang].questionsSelected}
+                            </Text>
                           </div>
                         )}
                       </TabPane>
@@ -1380,7 +1557,7 @@ export const TestManager = ({ onStartTest }) => {
                                   <Text style={{ fontSize: 14 }}>{getQuestionText(record)}</Text>
                                   <div style={{ marginTop: 4 }}>
                                     <Tag color="green" style={{ fontSize: 12 }}>
-                                      ✅ {t[lang].manualAnswer}: {getCorrectAnswerText(record)}
+                                       {t[lang].manualAnswer}: {getCorrectAnswerText(record)}
                                     </Tag>
                                   </div>
                                 </div>
@@ -1409,7 +1586,7 @@ export const TestManager = ({ onStartTest }) => {
               )}
             </AnimatePresence>
 
-            <div style={{ marginTop: 30, display: "flex", justifyContent: "space-between", borderTop: "1px solid #f0f0f0", paddingTop: 20 }}>
+            <div style={{ marginTop: 30, display: "flex", justifyContent: "space-between", paddingTop: 20 }}>
               <Button onClick={() => setOpen(false)} style={{ borderRadius: 10 }}>{t[lang].cancel}</Button>
               <Space>
                 {currentStep > 0 && <Button onClick={handleBack} style={{ borderRadius: 10 }}>{t[lang].back}</Button>}
@@ -1431,7 +1608,7 @@ export const TestManager = ({ onStartTest }) => {
         </div>
       </Modal>
 
-      {/* ==================== МОДАЛКА ПРЕДПРОСМОТРА (только Admin/SuperAdmin) ==================== */}
+      {/* ==================== МОДАЛКА ПРЕДПРОСМОТРА ==================== */}
       <Modal open={previewOpen} footer={null} onCancel={() => setPreviewOpen(false)} width={1200}
         title={<div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 20px', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 18, fontWeight: 600 }}>
