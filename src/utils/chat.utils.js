@@ -1,0 +1,52 @@
+export function formatChatTime(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) {
+    return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Вчера";
+  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+}
+
+export function getPeer(chat, currentUsername) {
+  if (chat.type !== "direct") return null;
+  return chat.members?.find((m) => m.user?.username !== currentUsername)?.user;
+}
+
+export function filterChatsByName(chats, search) {
+  return chats.filter((chat) =>
+    chat.name?.toLowerCase().includes(search.toLowerCase())
+  );
+}
+
+export function getExistingPeerUsernames(chats, currentUsername) {
+  return new Set(
+    chats
+      .map((chat) => getPeer(chat, currentUsername)?.username)
+      .filter(Boolean)
+  );
+}
+
+export function filterNewUsers(userResults, existingUsernames) {
+  return userResults.filter((u) => !existingUsernames.has(u.username));
+}
+
+export function formatMessageTime(isoString) {
+  if (!isoString) return "";
+  return new Date(isoString).toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+
+export function getMessagePreview(message) {
+  if (!message) return "Нет сообщений";
+  if (message.is_deleted) return "Сообщение удалено";
+  if (message.content) return message.content;
+  return "📎 Вложение";
+}
