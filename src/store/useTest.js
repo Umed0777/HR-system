@@ -14,33 +14,77 @@ export const useTestStore = create((set) => ({
   error: null,
   totalRecords: 0,
 
-  fetchTests: async (pageNumber = 1, pageSize = 10) => {
-    set({ loading: true, error: null });
-    try {
-      const res = await getTests(pageNumber, pageSize);
-      console.log("Fetched tests response:", res);
-      
-      let testsData = [];
-      if (res.data && Array.isArray(res.data)) {
-        testsData = res.data;
-      } else if (res.data && res.data.data && Array.isArray(res.data.data)) {
-        testsData = res.data.data;
-      } else if (Array.isArray(res)) {
-        testsData = res;
-      }
-      
-      set({
-        tests: testsData,
-        loading: false,
-      });
-    } catch (err) {
-      console.error("Fetch tests error:", err);
-      set({
-        error: err.message,
-        loading: false,
-      });
+ fetchTests: async (pageNumber = 1, pageSize = 100) => {
+  set({ loading: true, error: null });
+
+  try {
+    const res = await getTests(pageNumber, pageSize);
+
+    console.log("========== TESTS API ==========");
+    console.log("FULL RESPONSE:", res);
+    console.log("RESPONSE DATA:", res?.data);
+    console.log("================================");
+
+    const responseData = res?.data;
+
+    let testsData = [];
+    let total = 0;
+
+    if (Array.isArray(responseData)) {
+      testsData = responseData;
+      total = responseData.length;
     }
-  },
+
+    else if (Array.isArray(responseData?.data)) {
+      testsData = responseData.data;
+      total =
+        responseData.totalRecords ??
+        responseData.totalCount ??
+        responseData.data.length;
+    }
+
+    else if (Array.isArray(responseData?.items)) {
+      testsData = responseData.items;
+      total =
+        responseData.totalRecords ??
+        responseData.totalCount ??
+        responseData.items.length;
+    }
+
+    else if (Array.isArray(responseData?.records)) {
+      testsData = responseData.records;
+      total =
+        responseData.totalRecords ??
+        responseData.totalCount ??
+        responseData.records.length;
+    }
+
+
+    else if (Array.isArray(res)) {
+      testsData = res;
+      total = res.length;
+    }
+
+    console.log("TESTS ARRAY:", testsData);
+    console.log("TOTAL:", total);
+
+    set({
+      tests: testsData,
+      totalRecords: total,
+      loading: false,
+    });
+
+  } catch (err) {
+    console.error("Fetch tests error:", err);
+
+    set({
+      tests: [],
+      totalRecords: 0,
+      error: err.response?.data?.message || err.message,
+      loading: false,
+    });
+  }
+},
 
   fetchTestById: async (id) => {
     set({ loading: true, error: null });
@@ -62,19 +106,34 @@ export const useTestStore = create((set) => ({
     }
   },
 
-  addTest: async (data) => {
-    try {
-      const res = await createTest(data);
-      set((state) => ({
-        tests: [...state.tests, res.data?.data || res.data],
-      }));
-      return res.data?.data || res.data;
-    } catch (err) {
-      console.error("Add test error:", err.response?.data || err.message);
-      throw err;
-    }
-  },
+ addTest: async (data) => {
+  try {
+    const res = await createTest(data);
 
+    console.log("CREATE TEST RESPONSE:", res);
+
+    const newTest =
+      res?.data?.data ||
+      res?.data ||
+      res;
+
+    console.log("NEW TEST:", newTest);
+
+    set((state) => ({
+      tests: [...state.tests, newTest],
+    }));
+
+    return newTest;
+
+  } catch (err) {
+    console.error(
+      "Add test error:",
+      err.response?.data || err.message
+    );
+
+    throw err;
+  }
+},
   editTest: async (id, data) => {
     try {
       const res = await updateTest(id, data);

@@ -10,47 +10,25 @@ export const useEmployeeStore = create((set, get) => ({
     currentPage: 1,
     pageSize: 10,
 
-    fetchEmployee: async (pageNumber = 1, pageSize = 10) => {
-        set({ loading: true });
+     fetchEmployee: async (page = 1, size = 10) => {
+    set({ loading: true });
+    try {
+      const res = await getEmployee(page, size);
+      const total =
+        res.totalRecords ?? res.totalCount ?? res.total ?? res.data?.length ?? 0;
 
-        try {
-            const response = await getEmployee(pageNumber, pageSize);
-            
-            // Сохраняем текущую страницу и размер страницы
-            set({ 
-                currentPage: pageNumber,
-                pageSize: pageSize,
-                loading: false,
-            });
-
-            // Проверяем структуру ответа от API
-            // Если response.data существует и является массивом
-            let employeesData = [];
-            let total = 0;
-
-            if (Array.isArray(response)) {
-                employeesData = response;
-                total = response.length;
-            } else if (response && response.data && Array.isArray(response.data)) {
-                employeesData = response.data;
-                total = response.totalRecords || response.data.length;
-            } else if (response && response.items) {
-                employeesData = response.items;
-                total = response.totalCount || response.items.length;
-            } else {
-                employeesData = [];
-                total = 0;
-            }
-
-            set({
-                employees: employeesData,
-                totalRecords: total,
-                loading: false,
-            });
-        } catch (err) {
-            set({ error: err.message, loading: false });
-        }
-    },
+      set({
+        employees: res.data ?? [],
+        totalRecords: total,
+        currentPage: page,
+        pageSize: size,
+        loading: false,
+      });
+    } catch (e) {
+      set({ loading: false });
+      throw e;
+    }
+  },
 
     fetchEmployeeById: async (id) => {
         set({ loading: true });

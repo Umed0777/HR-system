@@ -1,88 +1,164 @@
-// components/SurveyManager.jsx – ПОЛНАЯ РАБОЧАЯ ВЕРСИЯ (с модальным окном)
-import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import axios from "axios";
 import { useTestStore } from "../store/useTest";
 import { useQuestionStore } from "../store/useQuestion";
 import { useEmployeeStore } from "../store/useEmployee";
+import { useTestAssignmentStore } from "../store/useTestAssignment";
 import { useSubDepartmentStore } from "../store/useSubdepartment";
 import {
-  Button,
-  Modal,
-  Input,
-  Space,
-  Card,
-  Tabs,
-  Typography,
-  Popconfirm,
-  Row,
-  Col,
-  message,
-  Tag,
-  Spin,
-  Table,
-  Flex,
-  Avatar,
-  Empty,
-  Steps,
-  Alert,
-  Progress,
-  Pagination,
-  Checkbox,
-  Badge,
-  Select,
-  Divider,
-  Radio,
-  Descriptions,
-  Statistic,
+  Button, Modal, Input, Space, Card, Tabs, Typography, Popconfirm,
+  Row, Col, message, Tag, Spin, Table, Flex, Avatar, Empty, Steps,
+  Alert, Progress, Pagination, Checkbox, Badge, Select, Radio, Divider,
   Tooltip,
 } from "antd";
 import {
-  DeleteOutlined,
-  EditOutlined,
-  FileTextOutlined,
-  RocketOutlined,
-  QuestionCircleOutlined,
-  CheckCircleOutlined,
-  ArrowRightOutlined,
-  ClockCircleOutlined,
-  TrophyOutlined,
-  PlusOutlined,
-  MinusOutlined,
-  CheckOutlined,
-  SearchOutlined,
-  FilterOutlined,
-  ClearOutlined,
-  SaveOutlined,
-  StarOutlined,
-  UserOutlined,
-  PlayCircleOutlined,
-  FormOutlined,
-  BarChartOutlined,
-  SendOutlined,
-  TeamOutlined,
-  EyeOutlined,
-  ApartmentOutlined,
-  HourglassOutlined,
-  LeftOutlined,
+  DeleteOutlined, EditOutlined, FileTextOutlined, RocketOutlined,
+  QuestionCircleOutlined, CheckCircleOutlined, ArrowRightOutlined,
+  ClockCircleOutlined, TrophyOutlined, PlusOutlined, MinusOutlined,
+  SearchOutlined, FilterOutlined, ClearOutlined, SaveOutlined,
+  StarOutlined, UserOutlined, ApartmentOutlined, PlayCircleOutlined,
+  HourglassOutlined, FormOutlined, SendOutlined, LeftOutlined,
   RightOutlined,
-  ReloadOutlined,
-  WarningOutlined,
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
+import Confetti from "react-confetti";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TabPane } = Tabs;
 const { TextArea } = Input;
 
-// ============================================================
-// 1. КОМПОНЕНТ СОЗДАНИЯ ВОПРОСА
-// ============================================================
-const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
-  const { addQuestion } = useQuestionStore();
+const API_BASE = "http://10.65.10.22:8525/api";
 
+// ============================================================
+// ХЕЛПЕРЫ
+// ============================================================
+const getNumericType = (type) => {
+  if (type === 1 || type === "MultipleChoice" || type === "Test") return 1;
+  if (type === 2 || type === "OpenEnded" || type === "Manual") return 2;
+  if (type === 3 || type === "Rating") return 3;
+  if (typeof type === "string") {
+    const l = type.toLowerCase();
+    if (l.startsWith("open")) return 2;
+    if (l.startsWith("rat")) return 3;
+  }
+  return 1;
+};
+
+const getApiTypeString = (nType) => {
+  if (nType === 2) return "OpenEnded";
+  if (nType === 3) return "Rating";
+  return "MultipleChoice";
+};
+
+const isSurvey = (t) => {
+  if (!t) return false;
+  const v = t.testType ?? t.test_type ?? t.categoryType;
+  if (v === undefined || v === null || v === "") return false;
+  const s = String(v).trim().toLowerCase();
+  return s === "quiz" || s === "survey" || s === "опрос";
+};
+
+const extractItems = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw.data)) return raw.data;
+  if (Array.isArray(raw.items)) return raw.items;
+  if (Array.isArray(raw.results)) return raw.results;
+  if (Array.isArray(raw.$values)) return raw.$values;
+  if (raw.data && Array.isArray(raw.data.items)) return raw.data.items;
+  if (raw.data && Array.isArray(raw.data.$values)) return raw.data.$values;
+  if (raw.data && Array.isArray(raw.data.data)) return raw.data.data;
+  return [];
+};
+
+const normalizeQuestion = (q) => {
+  if (!q) return q;
+  const content = (q.content || q.contentRu || q.contentTj || "").trim();
+  return {
+    ...q,
+    content,
+    contentRu: q.contentRu || content,
+    contentTj: q.contentTj || content,
+    type: getNumericType(q.type),
+    isSurvey:
+      q.isSurvey === undefined || q.isSurvey === null ? null : !!q.isSurvey,
+    options: Array.isArray(q.options)
+      ? q.options.map((o) => ({
+          ...o,
+          text: o.text || o.textRu || o.textTj || "",
+          textRu: o.textRu || o.text || o.textTj || "",
+          textTj: o.textTj || o.text || o.textRu || "",
+        }))
+      : [],
+  };
+};
+
+const getQTextSafe = (q, lang = "ru") => {
+  if (!q) return "—";
+  const text =
+    lang === "ru"
+      ? q.contentRu || q.content || q.contentTj
+      : q.contentTj || q.content || q.contentRu;
+  return text && text.trim() ? text : "(без текста)";
+};
+
+const getOptTextSafe = (o, lang = "ru") => {
+  if (!o) return "—";
+  const text =
+    lang === "ru"
+      ? o.textRu || o.text || o.textTj
+      : o.textTj || o.text || o.textRu;
+  return text && text.trim() ? text : "—";
+};
+
+// ============================================================
+// ⭐ ЗАГРУЗКА ТОЛЬКО ОПРОСНЫХ ВОПРОСОВ (OpenEnded + Rating)
+// ============================================================
+const loadSurveyQuestionsFromApi = async (language = "Ru") => {
+  try {
+    const [openEndedRes, ratingRes] = await Promise.all([
+      axios.get(`${API_BASE}/Question`, {
+        params: {
+          PageNumber: 1,
+          PageSize: 1000,
+          Type: "OpenEnded",
+          language,
+        },
+      }),
+      axios.get(`${API_BASE}/Question`, {
+        params: {
+          PageNumber: 1,
+          PageSize: 1000,
+          Type: "Rating",
+          language,
+        },
+      }).catch(() => ({ data: { data: [] } })), // на случай если Rating нет
+    ]);
+
+    const openEnded = extractItems(openEndedRes.data);
+    const ratings = extractItems(ratingRes.data);
+
+    console.log("📥 OpenEnded:", openEnded.length);
+    console.log("📥 Rating:", ratings.length);
+
+    return [...openEnded, ...ratings].map(normalizeQuestion);
+  } catch (err) {
+    console.error("❌ loadSurveyQuestionsFromApi:", err);
+    return [];
+  }
+};
+
+// ============================================================
+// QuestionCreator
+// ⭐ Тест    → isSurvey: false
+// ⭐ Ручной  → isSurvey: true
+// ⭐ Рейтинг → isSurvey: true
+// ============================================================
+const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
+  const { addQuestion } = useQuestionStore();
   const [content, setContent] = useState("");
-  const [type, setType] = useState(1);
+  const [type, setType] = useState(2);
   const [options, setOptions] = useState([]);
   const [manualAnswer, setManualAnswer] = useState("");
   const [ratingAnswer, setRatingAnswer] = useState(null);
@@ -91,104 +167,76 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
   const letters = ["A", "B", "C", "D", "E", "F"];
 
   const addOption = () => {
-    if (options.length >= 6) {
-      message.warning("Максимум 6 вариантов");
-      return;
-    }
-    setOptions([...options, { text: "", isCorrect: false }]);
+    if (options.length >= 6) return message.warning("Максимум 6 вариантов");
+    setOptions([...options, { text: "" }]);
   };
-
-  const updateOption = (i, value) => {
+  const updateOption = (i, v) => {
     const arr = [...options];
-    arr[i].text = value;
+    arr[i].text = v;
     setOptions(arr);
   };
+  const deleteOption = (i) => setOptions(options.filter((_, idx) => idx !== i));
 
-  const setCorrectOption = (index) => {
-    setOptions(options.map((o, i) => ({ ...o, isCorrect: i === index })));
-  };
+  const handleSave = async () => {
+    if (!content.trim()) return message.warning("Введите текст вопроса");
 
-  const deleteOption = (index) => {
-    const newOptions = options.filter((_, i) => i !== index);
-    setOptions(newOptions);
-  };
-
-  const handleSaveQuestion = async () => {
     let payload;
-
-    if (type === 2) {
-      if (!manualAnswer) {
-        message.warning("Пожалуйста, введите ответ");
-        return;
-      }
-      payload = {
-        contentRu: content,
-        contentTj: content,
-        type: 2,
-        options: [
-          {
-            textRu: manualAnswer,
-            textTj: manualAnswer,
-            isCorrect: true,
-          },
-        ],
-      };
-    } else if (type === 3) {
-      if (!ratingAnswer) {
-        message.warning("Пожалуйста, выберите рейтинг");
-        return;
-      }
-      payload = {
-        contentRu: content,
-        contentTj: content,
-        type: 3,
-        optionId: ratingAnswer,
-        options: [],
-      };
-    } else {
-      if (!content) {
-        message.warning("Пожалуйста, введите вопрос");
-        return;
-      }
-      if (options.length === 0) {
-        message.warning("Пожалуйста, добавьте хотя бы один вариант ответа");
-        return;
-      }
-      const hasCorrect = options.some((o) => o.isCorrect);
-      if (!hasCorrect) {
-        message.warning("Пожалуйста, выберите правильный вариант ответа");
-        return;
-      }
+    if (type === 1) {
+      if (!options.length) return message.warning("Добавьте варианты");
+      if (options.some((o) => !o.text.trim()))
+        return message.warning("Заполните все варианты");
 
       payload = {
         contentRu: content,
         contentTj: content,
-        type: 1,
+        type: "MultipleChoice",
+        questionType: "MultipleChoice",
+        isSurvey: false,
         options: options.map((o) => ({
           textRu: o.text,
           textTj: o.text,
-          isCorrect: o.isCorrect,
+          isCorrect: false,
         })),
+      };
+    } else if (type === 2) {
+      payload = {
+        contentRu: content,
+        contentTj: content,
+        type: "OpenEnded",
+        questionType: "OpenEnded",
+        isSurvey: true,
+        testType: "Quiz",
+        options: manualAnswer
+          ? [{ textRu: manualAnswer, textTj: manualAnswer, isCorrect: true }]
+          : [],
+      };
+    } else {
+      if (!ratingAnswer) return message.warning("Выберите рейтинг");
+      payload = {
+        contentRu: content,
+        contentTj: content,
+        type: "Rating",
+        questionType: "Rating",
+        isSurvey: true,
+        testType: "Quiz",
+        optionId: ratingAnswer,
+        options: [],
       };
     }
 
     setCreating(true);
     try {
-      const response = await addQuestion(payload);
-      message.success("Вопрос успешно создан! 🎉");
-
+      const res = await addQuestion(payload);
+      message.success("Вопрос создан! 🎉");
       setContent("");
       setOptions([]);
       setManualAnswer("");
       setRatingAnswer(null);
-      setType(1);
-
-      if (onQuestionCreated && response) {
-        onQuestionCreated(response);
-      }
+      setType(2);
+      if (onQuestionCreated) onQuestionCreated(res);
     } catch (err) {
-      console.error("Error creating question:", err);
-      message.error("Ошибка при создании вопроса");
+      console.error(err);
+      message.error(err?.response?.data?.message || "Ошибка при создании");
     } finally {
       setCreating(false);
     }
@@ -197,30 +245,30 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
   return (
     <div style={{ padding: "16px 0" }}>
       <Alert
-        message="Создание нового вопроса для опроса"
-        description="Заполните поля и сохраните вопрос. Он будет доступен для добавления в опрос."
+        message="Создание нового вопроса"
+        description="«Ручной» и «Рейтинг» попадут в опросы. «Тест» идёт в тесты и не появится в опросах."
         type="info"
         showIcon
         style={{ marginBottom: 16, borderRadius: 12 }}
       />
 
       <div style={{ marginBottom: 16 }}>
-        <Text strong style={{ fontSize: 15, display: "block", marginBottom: 8 }}>
+        <Text strong style={{ display: "block", marginBottom: 8 }}>
           {t.question}:
         </Text>
-        <Input.TextArea
-          placeholder={t.question}
+        <TextArea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={3}
           size="large"
+          placeholder={t.question}
           style={{ borderRadius: 10 }}
         />
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <Text strong style={{ fontSize: 15, display: "block", marginBottom: 8 }}>
-          Тип вопроса:
+        <Text strong style={{ display: "block", marginBottom: 8 }}>
+          Тип:
         </Text>
         <Radio.Group
           value={type}
@@ -231,9 +279,9 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
             setRatingAnswer(null);
           }}
         >
-          <Radio value={1}>{t.test}</Radio>
           <Radio value={2}>{t.manual}</Radio>
           <Radio value={3}>{t.rating}</Radio>
+          <Radio value={1}>{t.test}</Radio>
         </Radio.Group>
       </div>
 
@@ -249,41 +297,36 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
           >
             {t.add}
           </Button>
-
           <AnimatePresence>
             {options.map((o, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: -100 }}
-                transition={{ duration: 0.3 }}
-              >
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -100 }}>
                 <Card
                   size="small"
                   style={{ marginBottom: 10, borderRadius: 10 }}
                   extra={
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => deleteOption(i)}
-                    >
+                    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteOption(i)}>
                       Удалить
                     </Button>
                   }
                 >
                   <Row align="middle" gutter={10}>
                     <Col>
-                      <Radio checked={o.isCorrect} onChange={() => setCorrectOption(i)}>
-                        {t.correct} ({letters[i]})
-                      </Radio>
+                      <div
+                        style={{
+                          width: 28, height: 28, borderRadius: "50%",
+                          background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
+                          color: "#fff", display: "flex", alignItems: "center",
+                          justifyContent: "center", fontWeight: "bold", fontSize: 13,
+                        }}
+                      >
+                        {letters[i]}
+                      </div>
                     </Col>
                     <Col flex="auto">
                       <Input
-                        placeholder={`${t.variant} ${letters[i]}`}
                         value={o.text}
                         onChange={(e) => updateOption(i, e.target.value)}
+                        placeholder={`${t.variant} ${letters[i]}`}
                         size="large"
                       />
                     </Col>
@@ -298,13 +341,13 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
       {type === 2 && (
         <div>
           <Text strong style={{ display: "block", marginBottom: 8 }}>
-            {t.correctAnswer}:
+            Эталонный ответ (необязательно):
           </Text>
           <Input
-            placeholder={t.answer}
             value={manualAnswer}
             onChange={(e) => setManualAnswer(e.target.value)}
             size="large"
+            placeholder={t.answer}
             style={{ borderRadius: 10 }}
           />
         </div>
@@ -315,55 +358,36 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
           <Text strong style={{ display: "block", marginBottom: 8 }}>
             {t.selectRating}
           </Text>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
               <div
                 key={num}
                 onClick={() => setRatingAnswer(num)}
                 style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  width: 44, height: 44, borderRadius: "50%", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
                   fontWeight: "bold",
-                  fontSize: 15,
-                  transition: "0.3s",
-                  background: ratingAnswer === num ? "linear-gradient(135deg, #1890ff, #096dd9)" : "rgba(255,255,255,0.9)",
+                  background: ratingAnswer === num ? "linear-gradient(135deg, #ff416c, #ff4b2b)" : "#fff",
                   color: ratingAnswer === num ? "#fff" : "#333",
-                  border: ratingAnswer === num ? "3px solid #bae7ff" : "1px solid #e8e8e8",
-                  boxShadow: ratingAnswer === num ? "0 8px 20px rgba(24, 144, 255, 0.35)" : "0 2px 6px rgba(0,0,0,0.08)",
+                  border: ratingAnswer === num ? "3px solid #ffd6d6" : "1px solid #e8e8e8",
                 }}
               >
                 {num}
               </div>
             ))}
           </div>
-          {ratingAnswer && (
-            <div style={{ marginTop: 12 }}>
-              <Tag color="orange" style={{ fontSize: 14, padding: "4px 12px" }}>
-                {t.rating}: {ratingAnswer}/10
-              </Tag>
-            </div>
-          )}
         </div>
       )}
 
       <Button
         type="primary"
-        onClick={handleSaveQuestion}
+        onClick={handleSave}
         loading={creating}
-        style={{
-          marginTop: 16,
-          background: "linear-gradient(135deg, #1890ff, #096dd9)",
-          border: "none",
-          borderRadius: 10,
-          width: "100%",
-          height: 44,
-        }}
         icon={<SaveOutlined />}
+        style={{
+          marginTop: 16, width: "100%", height: 44, borderRadius: 10,
+          background: "linear-gradient(135deg, #ff416c, #ff4b2b)", border: "none",
+        }}
       >
         {creating ? "Сохранение..." : "Создать вопрос"}
       </Button>
@@ -372,7 +396,7 @@ const SurveyQuestionCreator = ({ onQuestionCreated, lang, t }) => {
 };
 
 // ============================================================
-// 2. КОМПОНЕНТ ПРОХОЖДЕНИЯ ОПРОСА (с сохранением состояния)
+// SurveyTaking
 // ============================================================
 const SurveyTaking = ({
   survey,
@@ -381,323 +405,170 @@ const SurveyTaking = ({
   onClose,
   employeeId,
   lang,
-  t,
   durationMinutes = 5,
 }) => {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
-  const [startTime, setStartTime] = useState(Date.now());
+  const [startTime] = useState(Date.now());
   const [timeLeft, setTimeLeft] = useState(durationMinutes * 60);
   const [timerActive, setTimerActive] = useState(true);
-  const [restored, setRestored] = useState(false);
 
-  const STORAGE_KEY = `active_survey_${survey?.id || "unknown"}_${employeeId || "unknown"}`;
-
-  useEffect(() => {
-    if (!survey || !employeeId) return;
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const state = JSON.parse(saved);
-        if (state.surveyId === survey.id && state.employeeId === employeeId) {
-          setCurrentQuestionIndex(state.currentQuestionIndex || 0);
-          setAnswers(state.answers || {});
-          const remaining = state.timeLeft !== undefined ? state.timeLeft : durationMinutes * 60;
-          setTimeLeft(remaining);
-          setTimerActive(state.timerActive !== undefined ? state.timerActive : true);
-          setStartTime(Date.now() - (durationMinutes * 60 - remaining) * 1000);
-          setRestored(true);
-          if (remaining <= 0) {
-            handleComplete();
-          }
-          return;
-        }
-      } catch (e) {
-        console.warn("Failed to restore survey state", e);
-      }
-    }
-    setCurrentQuestionIndex(0);
-    setAnswers({});
-    setTimeLeft(durationMinutes * 60);
-    setTimerActive(true);
-    setStartTime(Date.now());
-    setRestored(true);
-  }, [survey, employeeId, durationMinutes]);
-
-  useEffect(() => {
-    if (!restored || !survey || !employeeId || isCompleted) return;
-    const state = {
-      surveyId: survey.id,
-      employeeId: employeeId,
-      currentQuestionIndex,
-      answers,
-      timeLeft,
-      timerActive,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [currentQuestionIndex, answers, timeLeft, timerActive, survey, employeeId, restored, isCompleted]);
+  const total = questions.length;
 
   useEffect(() => {
     if (!timerActive || timeLeft <= 0 || isCompleted) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
+    const timer = setInterval(() => {
+      setTimeLeft((p) => {
+        if (p <= 1) {
+          clearInterval(timer);
           setTimerActive(false);
-          message.warning("Время на прохождение опроса истекло!");
-          handleComplete();
+          handleComplete(true);
           return 0;
         }
-        return prev - 1;
+        return p - 1;
       });
     }, 1000);
-    return () => clearInterval(interval);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line
   }, [timerActive, isCompleted]);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+  const currentQuestion = questions[idx];
+  const answered = Object.keys(answers).length;
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const totalQuestions = questions.length;
-  const answeredCount = Object.keys(answers).length;
+  const handleAnswer = (qid, val) => setAnswers((p) => ({ ...p, [qid]: val }));
+  const next = () => idx < total - 1 && setIdx(idx + 1);
+  const prev = () => idx > 0 && setIdx(idx - 1);
 
-  const getQuestionText = (q) => {
-    if (!q) return "—";
-    return lang === "ru" ? q.contentRu || q.content : q.contentTj || q.content;
-  };
-
-  const getOptionText = (option) => {
-    if (!option) return "—";
-    return lang === "ru" ? option.textRu || option.text : option.textTj || option.text;
-  };
-
-  const handleAnswer = (questionId, value) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: value,
-    }));
-  };
-
-  const handleNext = () => {
-    if (currentQuestionIndex < totalQuestions - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1);
-    }
-  };
-
-  const goToQuestion = (index) => {
-    if (index >= 0 && index < totalQuestions) {
-      setCurrentQuestionIndex(index);
-    }
-  };
-
-  const handleComplete = async () => {
-    if (answeredCount < totalQuestions && timeLeft > 0) {
-      const unanswered = totalQuestions - answeredCount;
-      message.warning(`Пожалуйста, ответьте на все вопросы. Осталось ${unanswered} вопросов.`);
+  const handleComplete = async (force = false) => {
+    if (!force && answered < total && timeLeft > 0) {
+      message.warning(`Ответьте на все вопросы. Осталось ${total - answered}`);
       return;
     }
-
     setIsSubmitting(true);
-
     try {
       const result = {
         surveyId: survey.id,
-        employeeId: employeeId,
-        answers: Object.entries(answers).map(([questionId, value]) => ({
-          questionId: parseInt(questionId),
-          answer: value,
+        employeeId,
+        answers: Object.entries(answers).map(([qid, v]) => ({
+          questionId: Number.isNaN(Number(qid)) ? qid : Number(qid),
+          answer: v,
         })),
         completedAt: new Date().toISOString(),
         timeSpent: Math.floor((Date.now() - startTime) / 1000),
-        isCompleted: answeredCount === totalQuestions,
+        isCompleted: answered === total,
       };
-
-      const savedResults = JSON.parse(localStorage.getItem("survey_results") || "[]");
-      const existingIndex = savedResults.findIndex(
-        (r) => r.surveyId === result.surveyId && r.employeeId === result.employeeId
+      const all = JSON.parse(localStorage.getItem("survey_results") || "[]");
+      const i = all.findIndex(
+        (r) =>
+          String(r.surveyId) === String(result.surveyId) &&
+          String(r.employeeId) === String(result.employeeId)
       );
-      if (existingIndex !== -1) {
-        savedResults[existingIndex] = { ...savedResults[existingIndex], ...result };
-      } else {
-        savedResults.push(result);
-      }
-      localStorage.setItem("survey_results", JSON.stringify(savedResults));
-      localStorage.removeItem(STORAGE_KEY);
-
-      if (answeredCount === totalQuestions) {
-        message.success("Опрос успешно завершен! Спасибо за участие.");
-      } else {
-        message.warning(`Опрос завершен. Отвечено на ${answeredCount} из ${totalQuestions} вопросов.`);
-      }
+      if (i !== -1) all[i] = { ...all[i], ...result };
+      else all.push(result);
+      localStorage.setItem("survey_results", JSON.stringify(all));
 
       setIsCompleted(true);
-      if (onComplete) {
-        onComplete(result);
-      }
-
-      setTimeout(() => {
-        if (onClose) {
-          onClose();
-        }
-      }, 2000);
-    } catch (error) {
-      console.error("Error completing survey:", error);
-      message.error("Ошибка при завершении опроса");
+      message.success("Опрос завершён!");
+      if (onComplete) onComplete(result);
+      setTimeout(() => onClose && onClose(), 1500);
+    } catch (e) {
+      message.error("Ошибка завершения");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!currentQuestion) {
-    return (
-      <div style={{ textAlign: "center", padding: 40 }}>
-        <Empty description="Вопросы не найдены" />
-      </div>
-    );
-  }
+  const formatTime = (s) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  if (!currentQuestion) return <Empty description="Вопросы не найдены" />;
 
   if (isCompleted) {
     return (
       <div style={{ textAlign: "center", padding: 60 }}>
-        <div style={{ fontSize: 64, marginBottom: 20 }}>🎉</div>
-        <Title level={2}>Спасибо за участие в опросе!</Title>
-        <Text type="secondary">Ваши ответы успешно сохранены.</Text>
-        <div style={{ marginTop: 20 }}>
-          <Button type="primary" onClick={onClose}>
-            Закрыть
-          </Button>
-        </div>
+        <div style={{ fontSize: 64 }}>🎉</div>
+        <Title level={2}>Спасибо за участие!</Title>
+        <Button type="primary" onClick={onClose} style={{ marginTop: 20 }}>
+          Закрыть
+        </Button>
       </div>
     );
   }
 
-  const isTimeAlmostUp = timeLeft < 60;
-  const isTimeUp = timeLeft <= 0;
+  const ctype = getNumericType(currentQuestion?.type);
+  const timeUp = timeLeft <= 0;
+  const timeAlmost = timeLeft < 60;
 
   return (
     <div>
       <div
         style={{
-          marginBottom: 16,
-          padding: "10px 16px",
-          background: isTimeUp ? "#ff4d4f" : isTimeAlmostUp ? "#fff7e6" : "#f0f7ff",
+          marginBottom: 16, padding: "10px 16px",
+          background: timeUp ? "#ff4d4f" : timeAlmost ? "#fff7e6" : "#fff5f5",
           borderRadius: 12,
-          border: isTimeUp ? "2px solid #ff4d4f" : isTimeAlmostUp ? "1px solid #ffa940" : "1px solid #1890ff",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          border: timeUp ? "2px solid #ff4d4f" : timeAlmost ? "1px solid #ffa940" : "1px solid #ff4b2b",
+          display: "flex", justifyContent: "space-between",
         }}
       >
-        <div>
-          <ClockCircleOutlined
-            style={{
-              color: isTimeUp ? "#fff" : isTimeAlmostUp ? "#faad14" : "#1890ff",
-              marginRight: 8,
-            }}
-          />
-          <Text
-            style={{
-              color: isTimeUp ? "#fff" : isTimeAlmostUp ? "#d48806" : "#1890ff",
-              fontWeight: 500,
-            }}
-          >
-            {t.timeRemaining || "Осталось времени:"}
-          </Text>
-        </div>
-        <Text
-          style={{
-            fontSize: 20,
-            fontWeight: 700,
-            color: isTimeUp ? "#fff" : isTimeAlmostUp ? "#d48806" : "#1890ff",
-          }}
-        >
+        <Text style={{ color: timeUp ? "#fff" : "#ff4b2b", fontWeight: 500 }}>
+          <ClockCircleOutlined /> Осталось:
+        </Text>
+        <Text style={{ fontSize: 20, fontWeight: 700, color: timeUp ? "#fff" : "#ff4b2b" }}>
           {formatTime(timeLeft)}
         </Text>
       </div>
 
-      <div style={{ marginBottom: 24 }}>
-        <Flex justify="space-between" align="center">
-          <Text strong style={{ fontSize: 16 }}>
-            Вопрос {currentQuestionIndex + 1} из {totalQuestions}
-          </Text>
-          <Text type="secondary">
-            Отвечено: {answeredCount} из {totalQuestions}
-          </Text>
-        </Flex>
-        <Progress
-          percent={Math.round((answeredCount / totalQuestions) * 100)}
-          strokeColor={isTimeAlmostUp ? "#faad14" : "#1890ff"}
-          trailColor="#f0f0f0"
-          style={{ marginTop: 8 }}
-          showInfo={false}
-        />
-      </div>
+      <Flex justify="space-between" style={{ marginBottom: 8 }}>
+        <Text strong>
+          Вопрос {idx + 1} из {total}
+        </Text>
+        <Text type="secondary">
+          Отвечено: {answered} / {total}
+        </Text>
+      </Flex>
+      <Progress
+        percent={Math.round((answered / total) * 100)}
+        showInfo={false}
+        strokeColor={timeAlmost ? "#faad14" : "#ff4b2b"}
+        style={{ marginBottom: 16 }}
+      />
 
-      <Card style={{ borderRadius: 16, marginBottom: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+      <Card style={{ borderRadius: 16, marginBottom: 16 }}>
         <div style={{ marginBottom: 12 }}>
-          <Tag color="blue" style={{ borderRadius: 20, fontSize: 12, padding: "2px 14px" }}>
-            Вопрос {currentQuestionIndex + 1}
-          </Tag>
-          {currentQuestion?.type === 1 && (
-            <Tag color="green" style={{ borderRadius: 20, fontSize: 12, marginLeft: 8 }}>
-              Тест
-            </Tag>
-          )}
-          {currentQuestion?.type === 2 && (
-            <Tag color="purple" style={{ borderRadius: 20, fontSize: 12, marginLeft: 8 }}>
-              Ручной
-            </Tag>
-          )}
-          {currentQuestion?.type === 3 && (
-            <Tag color="orange" style={{ borderRadius: 20, fontSize: 12, marginLeft: 8 }}>
-              Рейтинг
-            </Tag>
-          )}
+          <Tag color="blue">Вопрос {idx + 1}</Tag>
+          {ctype === 1 && <Tag color="green">Тест</Tag>}
+          {ctype === 2 && <Tag color="purple">Ручной</Tag>}
+          {ctype === 3 && <Tag color="orange">Рейтинг</Tag>}
         </div>
-
-        <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 24, lineHeight: 1.6 }}>
-          {getQuestionText(currentQuestion)}
+        <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 20, lineHeight: 1.6 }}>
+          {getQTextSafe(currentQuestion, lang)}
         </div>
+        <Divider>Ваш ответ</Divider>
 
-        <Divider orientation="left" style={{ fontSize: 13, margin: "16px 0" }}>
-          <Text type="secondary">Ваш ответ</Text>
-        </Divider>
-
-        {currentQuestion?.type === 1 && (
+        {ctype === 1 && (
           <Radio.Group
             value={answers[currentQuestion.id]}
             onChange={(e) => handleAnswer(currentQuestion.id, e.target.value)}
             style={{ width: "100%" }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {currentQuestion?.options?.map((option, idx) => {
-                const isSelected = answers[currentQuestion.id] === (option.id || idx);
+              {(currentQuestion.options || []).map((o, i) => {
+                const sel = answers[currentQuestion.id] === (o.id || i);
                 return (
                   <div
-                    key={option.id || idx}
+                    key={o.id || i}
+                    onClick={() => handleAnswer(currentQuestion.id, o.id || i)}
                     style={{
-                      padding: "14px 16px",
-                      borderRadius: 10,
-                      backgroundColor: isSelected ? "#e6f7ff" : "#fafafa",
-                      border: isSelected ? "2px solid #1890ff" : "1px solid #e8e8e8",
+                      padding: "14px 16px", borderRadius: 10,
+                      background: sel ? "#fff5f5" : "#fafafa",
+                      border: sel ? "2px solid #ff4b2b" : "1px solid #e8e8e8",
                       cursor: "pointer",
-                      transition: "all 0.3s",
                     }}
-                    onClick={() => handleAnswer(currentQuestion.id, option.id || idx)}
                   >
-                    <Radio value={option.id || idx}>
-                      <Text style={{ fontSize: 15 }}>{getOptionText(option)}</Text>
+                    <Radio value={o.id || i}>
+                      <Text style={{ fontSize: 15 }}>{getOptTextSafe(o, lang)}</Text>
                     </Radio>
                   </div>
                 );
@@ -706,130 +577,83 @@ const SurveyTaking = ({
           </Radio.Group>
         )}
 
-        {currentQuestion?.type === 2 && (
+        {ctype === 2 && (
           <TextArea
-            placeholder="Введите ваш ответ..."
             value={answers[currentQuestion.id] || ""}
             onChange={(e) => handleAnswer(currentQuestion.id, e.target.value)}
             rows={4}
             size="large"
-            style={{ fontSize: 15, borderRadius: 10 }}
+            placeholder="Введите ваш ответ..."
+            style={{ borderRadius: 10 }}
           />
         )}
 
-        {currentQuestion?.type === 3 && (
-          <div>
-            <Text type="secondary" style={{ display: "block", marginBottom: 10 }}>
-              Выберите рейтинг (1-10):
-            </Text>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-                const active = answers[currentQuestion.id] === num;
-                return (
-                  <div
-                    key={num}
-                    onClick={() => handleAnswer(currentQuestion.id, num)}
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: "bold",
-                      fontSize: 16,
-                      transition: "0.3s",
-                      background: active ? "linear-gradient(135deg, #1890ff, #096dd9)" : "#f5f5f5",
-                      color: active ? "#fff" : "#333",
-                      border: active ? "3px solid #bae7ff" : "1px solid #d9d9d9",
-                      boxShadow: active ? "0 4px 16px rgba(24, 144, 255, 0.3)" : "none",
-                    }}
-                  >
-                    {num}
-                  </div>
-                );
-              })}
-            </div>
+        {ctype === 3 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+              const active = answers[currentQuestion.id] === num;
+              return (
+                <div
+                  key={num}
+                  onClick={() => handleAnswer(currentQuestion.id, num)}
+                  style={{
+                    width: 48, height: 48, borderRadius: "50%", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontWeight: "bold", fontSize: 16,
+                    background: active ? "linear-gradient(135deg, #ff416c, #ff4b2b)" : "#f5f5f5",
+                    color: active ? "#fff" : "#333",
+                    border: active ? "3px solid #ffd6d6" : "1px solid #d9d9d9",
+                  }}
+                >
+                  {num}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
 
-      <div style={{ display: "flex", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
-        <Button
-          icon={<LeftOutlined />}
-          onClick={handlePrevious}
-          disabled={currentQuestionIndex === 0}
-          size="large"
-          style={{ borderRadius: 10, minWidth: 100 }}
-        >
+      <Flex justify="space-between">
+        <Button icon={<LeftOutlined />} onClick={prev} disabled={idx === 0} size="large">
           Назад
         </Button>
-
-        {currentQuestionIndex === totalQuestions - 1 || isTimeUp ? (
+        {idx === total - 1 || timeUp ? (
           <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleComplete}
-            loading={isSubmitting}
-            size="large"
-            style={{
-              background: isTimeUp ? "#ff4d4f" : "#52c41a",
-              borderColor: isTimeUp ? "#ff4d4f" : "#52c41a",
-              borderRadius: 10,
-              minWidth: 120,
-              fontWeight: 500,
-            }}
+            type="primary" icon={<SendOutlined />} onClick={() => handleComplete()}
+            loading={isSubmitting} size="large"
+            style={{ background: timeUp ? "#ff4d4f" : "#52c41a", borderColor: "transparent" }}
           >
-            {isTimeUp ? "Завершить (время истекло)" : "Завершить"}
+            {timeUp ? "Завершить (время)" : "Завершить"}
           </Button>
         ) : (
-          <Button
-            type="primary"
-            icon={<RightOutlined />}
-            onClick={handleNext}
-            size="large"
-            style={{
-              background: "#1890ff",
-              borderColor: "#1890ff",
-              borderRadius: 10,
-              minWidth: 120,
-              fontWeight: 500,
-            }}
-          >
+          <Button type="primary" icon={<RightOutlined />} onClick={next} size="large" style={{ background: "#ff4b2b" }}>
             Далее
           </Button>
         )}
-      </div>
+      </Flex>
 
       <div style={{ marginTop: 24 }}>
         <Text type="secondary" style={{ display: "block", marginBottom: 10, fontSize: 13 }}>
-          Быстрая навигация:
+          Навигация:
         </Text>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {questions.map((q, idx) => {
-            const isAnswered = answers[q.id] !== undefined;
-            const isCurrent = idx === currentQuestionIndex;
-
+          {questions.map((q, i) => {
+            const isA = answers[q.id] !== undefined;
+            const isC = i === idx;
             return (
               <Button
-                key={q.id}
+                key={q.id || i}
                 size="small"
-                type={isCurrent ? "primary" : "default"}
+                type={isC ? "primary" : "default"}
                 style={{
-                  backgroundColor: isAnswered && !isCurrent ? "#52c41a" : undefined,
-                  color: isAnswered && !isCurrent ? "white" : undefined,
-                  borderColor: isCurrent ? "#1890ff" : undefined,
-                  width: 32,
-                  height: 32,
-                  padding: 0,
-                  borderRadius: 8,
-                  fontWeight: isCurrent ? 600 : 400,
+                  background: isA && !isC ? "#52c41a" : isC ? "#ff4b2b" : undefined,
+                  borderColor: isC ? "#ff4b2b" : undefined,
+                  color: isA && !isC ? "#fff" : undefined,
+                  width: 32, height: 32, padding: 0, borderRadius: 8,
                 }}
-                onClick={() => goToQuestion(idx)}
+                onClick={() => setIdx(i)}
               >
-                {idx + 1}
-                {isAnswered && <CheckCircleOutlined style={{ fontSize: 8, marginLeft: 1 }} />}
+                {i + 1}
               </Button>
             );
           })}
@@ -840,626 +664,228 @@ const SurveyTaking = ({
 };
 
 // ============================================================
-// 3. МОДАЛЬНОЕ ОКНО РЕЗУЛЬТАТОВ ПОСЛЕ ЗАВЕРШЕНИЯ ОПРОСА
-// ============================================================
-const SurveyResultsModal = ({ visible, result, onClose, lang }) => {
-  const t = {
-    ru: {
-      surveyResults: "Результаты опроса",
-      employee: "Сотрудник",
-      surveyName: "Опрос",
-      answeredQuestions: "Отвечено вопросов",
-      totalQuestions: "Всего вопросов",
-      timeSpent: "Затраченное время",
-      status: "Статус",
-      completed: "Завершен ✅",
-      notCompleted: "Не завершен ❌",
-      close: "Закрыть",
-      congratulations: "Спасибо за участие! 🎉",
-      notCompletedMessage: "Вы не ответили на все вопросы",
-      completionRate: "Процент завершения",
-      answers: "Ответы",
-      rating: "Рейтинг",
-      textAnswer: "Текстовый ответ",
-      question: "Вопрос",
-      answer: "Ответ",
-    },
-    tj: {
-      surveyResults: "Натиҷаҳои пурсиш",
-      employee: "Корманд",
-      surveyName: "Пурсиш",
-      answeredQuestions: "Саволҳои ҷавобдодашуда",
-      totalQuestions: "Ҳамагӣ саволҳо",
-      timeSpent: "Вақти сарфшуда",
-      status: "Ҳолат",
-      completed: "Анҷомёфта ✅",
-      notCompleted: "Анҷом наёфта ❌",
-      close: "Пӯшидан",
-      congratulations: "Ташаккур барои иштирок! 🎉",
-      notCompletedMessage: "Шумо ба ҳамаи саволҳо ҷавоб надодаед",
-      completionRate: "Фоизи анҷом",
-      answers: "Ҷавобҳо",
-      rating: "Баҳо",
-      textAnswer: "Ҷавоби матнӣ",
-      question: "Савол",
-      answer: "Ҷавоб",
-    },
-  };
-
-  if (!result) return null;
-
-  const isCompleted = result.isCompleted !== false;
-  const answeredCount = result.answers?.length || 0;
-  const totalQuestions = result.totalQuestions || 0;
-  const completionPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
-
-  const getQuestionText = (questionId, questions) => {
-    const q = questions?.find((q) => q.id === questionId);
-    if (!q) return "—";
-    return lang === "ru" ? q.contentRu || q.content : q.contentTj || q.content;
-  };
-
-  const getAnswerText = (answer, questions) => {
-    const q = questions?.find((q) => q.id === answer.questionId);
-    if (!q) return String(answer.answer);
-
-    if (q.type === 1) {
-      const option = q.options?.find((o) => o.id === answer.answer || o.text === answer.answer);
-      if (lang === "ru") {
-        return option?.textRu || option?.text || String(answer.answer);
-      }
-      return option?.textTj || option?.text || String(answer.answer);
-    }
-
-    if (q.type === 3) {
-      return `⭐ ${answer.answer}/10`;
-    }
-
-    return String(answer.answer);
-  };
-
-  return (
-    <Modal
-      title={
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {isCompleted ? (
-            <TrophyOutlined style={{ color: "#1890ff", fontSize: 28 }} />
-          ) : (
-            <WarningOutlined style={{ color: "#faad14", fontSize: 28 }} />
-          )}
-          <span style={{ fontSize: 20, fontWeight: 600 }}>{t[lang].surveyResults}</span>
-        </div>
-      }
-      open={visible}
-      onCancel={onClose}
-      footer={[
-        <Button
-          key="close"
-          type="primary"
-          onClick={onClose}
-          style={{
-            background: isCompleted ? "#1890ff" : "#faad14",
-            borderColor: isCompleted ? "#1890ff" : "#faad14",
-            borderRadius: 12,
-            padding: "0 32px",
-            height: 44,
-            fontWeight: 600,
-          }}
-        >
-          {t[lang].close}
-        </Button>,
-      ]}
-      width={600}
-      centered
-      styles={{
-        header: { borderBottom: "1px solid #f0f0f0", paddingBottom: 16 },
-        body: { paddingTop: 24, paddingBottom: 16, maxHeight: "70vh", overflowY: "auto" },
-      }}
-    >
-      <div>
-        {isCompleted && (
-          <div style={{ textAlign: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 56, animation: "bounce 1s infinite" }}>🎉</div>
-          </div>
-        )}
-
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <Progress
-            type="circle"
-            percent={completionPercent}
-            format={(percent) => (
-              <div>
-                <div style={{ fontSize: 30, fontWeight: "bold", lineHeight: 1 }}>{percent}%</div>
-                <div style={{ fontSize: 13, color: "#8c8c8c", marginTop: 4 }}>
-                  {t[lang].completionRate}
-                </div>
-              </div>
-            )}
-            strokeColor={isCompleted ? "#1890ff" : "#faad14"}
-            trailColor="#f0f0f0"
-            width={150}
-          />
-        </div>
-
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              color: isCompleted ? "#1890ff" : "#faad14",
-            }}
-          >
-            {isCompleted ? t[lang].congratulations : t[lang].notCompletedMessage}
-          </Text>
-        </div>
-
-        <div
-          style={{
-            background: "#f8f9fa",
-            borderRadius: 12,
-            padding: "16px 20px",
-            marginBottom: 16,
-          }}
-        >
-          <Row gutter={[16, 8]}>
-            <Col span={24}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Text type="secondary">{t[lang].employee}:</Text>
-                <Text strong>{result.employeeName || "—"}</Text>
-              </div>
-            </Col>
-            <Col span={24}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Text type="secondary">{t[lang].surveyName}:</Text>
-                <Text strong>{result.surveyName || "—"}</Text>
-              </div>
-            </Col>
-          </Row>
-        </div>
-
-        <Row gutter={[12, 12]}>
-          <Col span={12}>
-            <div
-              style={{
-                background: "#e6f7ff",
-                borderRadius: 10,
-                padding: "14px 16px",
-                textAlign: "center",
-                border: "1px solid #91d5ff",
-                height: "100%",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#8c8c8c" }}>{t[lang].answeredQuestions}</div>
-              <div style={{ fontSize: 24, fontWeight: "bold", color: "#1890ff" }}>{answeredCount}</div>
-            </div>
-          </Col>
-          <Col span={12}>
-            <div
-              style={{
-                background: "#f6ffed",
-                borderRadius: 10,
-                padding: "14px 16px",
-                textAlign: "center",
-                border: "1px solid #b7eb8f",
-                height: "100%",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#8c8c8c" }}>{t[lang].totalQuestions}</div>
-              <div style={{ fontSize: 24, fontWeight: "bold", color: "#52c41a" }}>{totalQuestions}</div>
-            </div>
-          </Col>
-        </Row>
-
-        {result.timeSpent && (
-          <div
-            style={{
-              marginTop: 16,
-              textAlign: "center",
-              padding: "10px 16px",
-              background: "#fff7e6",
-              borderRadius: 10,
-              border: "1px solid #ffd591",
-            }}
-          >
-            <Text type="secondary">
-              <ClockCircleOutlined style={{ marginRight: 8 }} />
-              {t[lang].timeSpent}: {result.timeSpent}
-            </Text>
-          </div>
-        )}
-
-        {result.answers && result.answers.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <Divider orientation="left">
-              <Text strong>{t[lang].answers}</Text>
-            </Divider>
-            <div style={{ maxHeight: 200, overflowY: "auto" }}>
-              {result.answers.map((answer, idx) => {
-                const questions = result.questions || [];
-                const q = questions.find((q) => q.id === answer.questionId);
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: "10px 14px",
-                      marginBottom: 8,
-                      background: "#fafafa",
-                      borderRadius: 8,
-                      border: "1px solid #f0f0f0",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                      <Tag color="blue" style={{ borderRadius: 50, minWidth: 24, textAlign: "center" }}>
-                        {idx + 1}
-                      </Tag>
-                      <div style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: 500 }}>
-                          {getQuestionText(answer.questionId, questions)}
-                        </Text>
-                        <div style={{ marginTop: 4 }}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {t[lang].answer}:{" "}
-                          </Text>
-                          <Text style={{ fontSize: 13 }}>{getAnswerText(answer, questions)}</Text>
-                          {q?.type === 3 && (
-                            <Tag color="orange" style={{ marginLeft: 8 }}>
-                              <StarOutlined /> {t[lang].rating}
-                            </Tag>
-                          )}
-                          {q?.type === 2 && (
-                            <Tag color="purple" style={{ marginLeft: 8 }}>
-                              {t[lang].textAnswer}
-                            </Tag>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {!isCompleted && (
-          <div style={{ marginTop: 16 }}>
-            <Alert
-              message={t[lang].notCompletedMessage}
-              description="Пожалуйста, ответьте на все вопросы в следующий раз."
-              type="warning"
-              showIcon
-              style={{ borderRadius: 10 }}
-            />
-          </div>
-        )}
-      </div>
-
-      <style>
-        {`
-          @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-12px); }
-          }
-        `}
-      </style>
-    </Modal>
-  );
-};
-
-// ============================================================
-// 4. КОМПОНЕНТ ДЛЯ ПРОСМОТРА ВСЕХ РЕЗУЛЬТАТОВ (в модальном окне)
-// ============================================================
-const SurveyResults = ({ survey, questions, results, employees, lang, t }) => {
-  const getEmployeeName = (employeeId) => {
-    const emp = employees.find((e) => e.id === employeeId);
-    return emp ? `${emp.firstName} ${emp.lastName}` : `ID: ${employeeId}`;
-  };
-
-  const columns = [
-    {
-      title: "Сотрудник",
-      key: "employee",
-      render: (_, record) => getEmployeeName(record.employeeId),
-    },
-    {
-      title: "Отвечено",
-      key: "answered",
-      render: (_, record) => {
-        const count = record.answers?.length || 0;
-        const total = record.totalQuestions || 0;
-        return `${count} / ${total}`;
-      },
-    },
-    {
-      title: "Статус",
-      key: "status",
-      render: (_, record) =>
-        record.isCompleted !== false ? (
-          <Tag color="success">Завершен</Tag>
-        ) : (
-          <Tag color="warning">Не завершен</Tag>
-        ),
-    },
-    {
-      title: "Время",
-      dataIndex: "timeSpent",
-      render: (time) => time || "—",
-    },
-    {
-      title: "Дата",
-      dataIndex: "completedAt",
-      render: (date) => (date ? new Date(date).toLocaleString() : "—"),
-    },
-  ];
-
-  return (
-    <div>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={8}>
-          <Card>
-            <Statistic title="Участников" value={results.length} prefix={<UserOutlined />} />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="Средний % завершения"
-              value={
-                results.length > 0
-                  ? Math.round(
-                      results.reduce((acc, r) => {
-                        const answered = r.answers?.length || 0;
-                        const total = r.totalQuestions || 0;
-                        return acc + (total > 0 ? (answered / total) * 100 : 0);
-                      }, 0) / results.length
-                    )
-                  : 0
-              }
-              suffix="%"
-            />
-          </Card>
-        </Col>
-      </Row>
-      <Table dataSource={results} columns={columns} rowKey="id" pagination={{ pageSize: 5 }} />
-    </div>
-  );
-};
-
-// ============================================================
-// 5. ОСНОВНОЙ КОМПОНЕНТ SurveyManager
+// SurveyManager
 // ============================================================
 export const SurveyManager = ({ onStartSurvey }) => {
-  const navigate = useNavigate();
+  const { tests = [], loading: testsLoading, fetchTests, addTest, editTest, removeTest } = useTestStore();
+  const { removeQuestion } = useQuestionStore();
+  const { employees = [], fetchEmployee } = useEmployeeStore();
+  const { testAssignments = [], fetchTestAssignments } = useTestAssignmentStore();
+  const { subdepartments = [], fetchSubDepartments } = useSubDepartmentStore();
 
-  const {
-    tests = [],
-    loading: testsLoading,
-    fetchTests,
-    addTest,
-    editTest,
-    removeTest,
-    totalRecords,
-  } = useTestStore();
+  const [lang, setLang] = useState(() => localStorage.getItem("survey_manager_lang") || "ru");
 
-  const {
-    questions = [],
-    fetchQuestions,
-    loading: questionsLoading,
-  } = useQuestionStore();
-
-  const {
-    employees = [],
-    fetchEmployee,
-  } = useEmployeeStore();
-
-  const {
-    subdepartments = [],
-    fetchSubDepartments,
-  } = useSubDepartmentStore();
-
-  const [lang, setLang] = useState(() => {
-    const savedLang = localStorage.getItem("survey_manager_lang");
-    return savedLang || "ru";
-  });
+  // ⭐ ЛОКАЛЬНЫЙ СТЕЙТ ОПРОСНЫХ ВОПРОСОВ (OpenEnded + Rating)
+  const [surveyQuestions, setSurveyQuestions] = useState([]);
+  const [surveyQuestionsLoading, setSurveyQuestionsLoading] = useState(false);
 
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [currentStep, setCurrentStep] = useState(0);
+  const [step, setStep] = useState(0);
+  const [showConfetti, setShowConfetti] = useState(false);
   const [newSurveyId, setNewSurveyId] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [selectedQuestionIds, setSelectedQuestionIds] = useState([]);
+  const [selectedQIds, setSelectedQIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [activeTab, setActiveTab] = useState("select");
-
   const [titleRu, setTitleRu] = useState("");
   const [titleTj, setTitleTj] = useState("");
-  const [descriptionRu, setDescriptionRu] = useState("");
-  const [descriptionTj, setDescriptionTj] = useState("");
-
-  const [surveyTakingOpen, setSurveyTakingOpen] = useState(false);
-  const [selectedSurveyForTaking, setSelectedSurveyForTaking] = useState(null);
-  const [selectedEmployeeIdForTaking, setSelectedEmployeeIdForTaking] = useState(null);
-  const [employeeModalVisible, setEmployeeModalVisible] = useState(false);
-  const [tempEmployeeId, setTempEmployeeId] = useState(null);
-
-  const [resultsOpen, setResultsOpen] = useState(false);
-  const [selectedSurveyForResults, setSelectedSurveyForResults] = useState(null);
-  const [surveyResults, setSurveyResults] = useState([]);
-
+  const [descRu, setDescRu] = useState("");
+  const [descTj, setDescTj] = useState("");
   const [hoveredCard, setHoveredCard] = useState(null);
-  const [dataLoaded, setDataLoaded] = useState(false);
+
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(9);
 
-  const [startSurveyModalOpen, setStartSurveyModalOpen] = useState(false);
-  const [selectedSurveyId, setSelectedSurveyId] = useState(null);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
-  const [selectedSubDepartmentId, setSelectedSubDepartmentId] = useState(null);
-  const [selectedSurveyDuration, setSelectedSurveyDuration] = useState(5);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedSurvey, setSelectedSurvey] = useState(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  const [surveyResultModalVisible, setSurveyResultModalVisible] = useState(false);
-  const [surveyResultData, setSurveyResultData] = useState(null);
+  const [startOpen, setStartOpen] = useState(false);
+  const [selSurveyId, setSelSurveyId] = useState(null);
+  const [selEmpId, setSelEmpId] = useState(null);
+  const [selSubDeptId, setSelSubDeptId] = useState(null);
+  const [selDuration, setSelDuration] = useState(5);
 
-  // ==============================================================
-  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-  // ==============================================================
-  const refreshData = useCallback(async () => {
+  const [takingOpen, setTakingOpen] = useState(false);
+  const [takingSurvey, setTakingSurvey] = useState(null);
+  const [takingEmpId, setTakingEmpId] = useState(null);
+
+  const roles = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem("roles") || "[]"); }
+    catch { return []; }
+  }, []);
+  const isAdmin = roles.includes("Admin") || roles.includes("SuperAdmin");
+
+  const surveyItems = useMemo(() => (tests || []).filter(isSurvey), [tests]);
+
+  // ⭐ Загрузка только опросных вопросов
+  const loadSurveyQuestions = useCallback(async () => {
+    setSurveyQuestionsLoading(true);
     try {
-      await Promise.all([fetchTests(), fetchQuestions(1, 1000), fetchEmployee(), fetchSubDepartments()]);
-      const savedResults = JSON.parse(localStorage.getItem("survey_results") || "[]");
-      setSurveyResults(savedResults);
-    } catch (error) {
-      console.error("Ошибка при обновлении данных:", error);
+      const list = await loadSurveyQuestionsFromApi("Ru");
+      setSurveyQuestions(list);
+      console.log("✅ Опросных вопросов загружено:", list.length);
+    } catch (e) {
+      console.error("loadSurveyQuestions error:", e);
+      message.error("Ошибка загрузки вопросов");
+    } finally {
+      setSurveyQuestionsLoading(false);
     }
-  }, [fetchTests, fetchQuestions, fetchEmployee, fetchSubDepartments]);
+  }, []);
 
-  const groupedEmployees = employees.reduce((groups, employee) => {
-    const department = employee.department || "Без отдела";
-    if (!groups[department]) groups[department] = [];
-    groups[department].push(employee);
-    return groups;
-  }, {});
+  // ⭐ ID всех вопросов, которые уже входят в опросы
+  const surveyQuestionIds = useMemo(() => {
+    const ids = new Set();
+    surveyItems.forEach((s) => {
+      s.questions?.forEach((q) => {
+        const id = q.id || q.questionId;
+        if (id) ids.add(String(id));
+      });
+    });
+    return ids;
+  }, [surveyItems]);
+
+  const totalCount = surveyItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedSurveys = surveyItems.slice(startIndex, startIndex + pageSize);
+
+  const getQuestionText = useCallback((q) => getQTextSafe(q, lang), [lang]);
+
+  const getTypeLabel = useCallback(
+    (type) => {
+      const n = getNumericType(type);
+      if (n === 1)
+        return { label: lang === "ru" ? "Тест" : "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
+      if (n === 2)
+        return { label: lang === "ru" ? "Ручной" : "Дастӣ", color: "#722ed1", icon: <FormOutlined /> };
+      if (n === 3)
+        return { label: lang === "ru" ? "Рейтинг" : "Баҳо", color: "#faad14", icon: <StarOutlined /> };
+      return { label: "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
+    },
+    [lang]
+  );
+
+  const getUsedQuestionIds = useCallback(
+    (excludeId = null) => {
+      const usedIds = new Set();
+      surveyItems.forEach((s) => {
+        if (excludeId && Number(s.id) === Number(excludeId)) return;
+        if (s.questions?.length > 0) {
+          s.questions.forEach((q) => {
+            const qId = q.id || q.questionId;
+            if (qId) usedIds.add(qId);
+          });
+        }
+      });
+      return usedIds;
+    },
+    [surveyItems]
+  );
+
+  // ⭐ Из загруженных опросных вопросов убираем уже используемые
+  const getAvailableQuestions = useCallback(
+    (excludeId = null) => {
+      const usedIds = getUsedQuestionIds(excludeId);
+      return surveyQuestions.filter((q) => {
+        if (q.id == null) return false;
+        if (usedIds.has(q.id)) return false;
+        return true;
+      });
+    },
+    [surveyQuestions, getUsedQuestionIds]
+  );
 
   const getEmployeeSubDepartment = useCallback(
     (employeeId) => {
-      const employee = employees.find((e) => e.id === employeeId);
-      return employee?.subDepartmentId || null;
+      const e = employees.find((x) => x.id === employeeId);
+      if (e?.subDepartmentId) return e.subDepartmentId;
+      const a = testAssignments.find((x) => x.employeeId === employeeId);
+      if (a?.subDepartmentId) return a.subDepartmentId;
+      return null;
     },
-    [employees]
+    [employees, testAssignments]
   );
 
   const getSubDepartmentName = useCallback(
     (id) => {
       if (!id) return "—";
-      const sub = subdepartments.find((s) => Number(s.id) === Number(id));
-      return sub?.name || `Отделение ${id}`;
+      const s = subdepartments.find((x) => Number(x.id) === Number(id));
+      return s?.name || `Отделение ${id}`;
     },
     [subdepartments]
   );
 
-  const getQuestionText = useCallback(
-    (question) => {
-      if (!question) return "—";
-      if (lang === "ru") {
-        return question.contentRu || question.content || "—";
-      }
-      return question.contentTj || question.content || "—";
-    },
-    [lang]
+  const groupedEmployees = useMemo(
+    () =>
+      employees.reduce((g, e) => {
+        const d = e.department || "Без отдела";
+        if (!g[d]) g[d] = [];
+        g[d].push(e);
+        return g;
+      }, {}),
+    [employees]
   );
 
-  const getTypeLabel = useCallback(
-    (type) => {
-      if (type === 1) return { label: lang === "ru" ? "Тест" : "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
-      if (type === 2) return { label: lang === "ru" ? "Ручной" : "Дастӣ", color: "#722ed1", icon: <QuestionCircleOutlined /> };
-      if (type === 3) return { label: lang === "ru" ? "Рейтинг" : "Баҳо", color: "#faad14", icon: <StarOutlined /> };
-      return { label: lang === "ru" ? "Тест" : "Тест", color: "#52c41a", icon: <CheckCircleOutlined /> };
-    },
-    [lang]
-  );
-
-  const getUsedQuestionIds = useCallback(() => {
-    const usedIds = new Set();
-    tests.forEach((test) => {
-      if (test.testType === 0 && test.questions?.length > 0) {
-        test.questions.forEach((q) => {
-          const questionId = q.id || q.questionId;
-          if (questionId) usedIds.add(questionId);
-        });
-      }
-    });
-    return usedIds;
-  }, [tests]);
-
-  const getAvailableQuestions = useCallback(() => {
-    const usedIds = getUsedQuestionIds();
-    return questions.filter((q) => !usedIds.has(q.id));
-  }, [questions, getUsedQuestionIds]);
-
-  // ==============================================================
-  // surveys и getSurveyQuestions
-  // ==============================================================
-  const surveys = tests.filter((test) => test.testType === 0);
-
-  const getSurveyQuestions = useCallback(
-    (survey) => {
-      if (!survey || !survey.questions) return [];
-      if (survey.questions.length > 0 && survey.questions[0].contentRu) {
-        return survey.questions;
-      }
-      const questionIds = survey.questions.map((q) => q.id || q.questionId).filter(Boolean);
-      const foundQuestions = questions.filter((q) => questionIds.includes(q.id));
-      if (foundQuestions.length === 0 && survey.questions.length > 0) {
-        return survey.questions.map((q) => ({
-          ...q,
-          contentRu: q.contentRu || q.content || "Вопрос",
-          contentTj: q.contentTj || q.content || "Вопрос",
-        }));
-      }
-      return foundQuestions;
-    },
-    [questions]
-  );
-
-  // ==============================================================
-  // useEffect
-  // ==============================================================
+  // ⭐ Первичная загрузка
   useEffect(() => {
-    const loadAllData = async () => {
+    (async () => {
       try {
-        await Promise.all([fetchTests(), fetchQuestions(1, 1000), fetchEmployee(), fetchSubDepartments()]);
+        await Promise.all([
+          fetchTests(1, 1000),
+          fetchEmployee(1, 1000),
+          fetchSubDepartments(),
+          fetchTestAssignments(1, 1000),
+          loadSurveyQuestions(),
+        ]);
         setDataLoaded(true);
-        const savedResults = JSON.parse(localStorage.getItem("survey_results") || "[]");
-        setSurveyResults(savedResults);
-      } catch (error) {
-        console.error("Ошибка загрузки данных:", error);
+      } catch (e) {
+        console.error("Ошибка загрузки:", e);
         message.error("Ошибка загрузки данных");
       }
-    };
-    loadAllData();
+    })();
+    // eslint-disable-next-line
   }, []);
 
-  // Восстановление активного опроса
   useEffect(() => {
     if (!dataLoaded) return;
-    const savedState = localStorage.getItem("active_survey_state");
-    if (savedState) {
-      try {
-        const state = JSON.parse(savedState);
-        const survey = surveys.find((s) => s.id === state.surveyId);
-        const employee = employees.find((e) => e.id === state.employeeId);
-        if (survey && employee) {
-          setSelectedSurveyForTaking(survey);
-          setSelectedEmployeeIdForTaking(state.employeeId);
-          setSurveyTakingOpen(true);
-        } else {
-          localStorage.removeItem("active_survey_state");
-        }
-      } catch (e) {
-        localStorage.removeItem("active_survey_state");
-      }
-    }
-  }, [dataLoaded, surveys, employees]);
+    if (selEmpId) {
+      const subId = getEmployeeSubDepartment(selEmpId);
+      setSelSubDeptId(subId || null);
+    } else setSelSubDeptId(null);
+  }, [selEmpId, dataLoaded, getEmployeeSubDepartment]);
 
-  useEffect(() => {
-    const savedResults = JSON.parse(localStorage.getItem("survey_results") || "[]");
-    setSurveyResults(savedResults);
-  }, [surveyTakingOpen]);
+  const currentEditingId = editingItem?.id;
+  const availableQuestions = getAvailableQuestions(currentEditingId);
 
-  useEffect(() => {
-    if (!dataLoaded) return;
-    if (selectedEmployeeId) {
-      const subDeptId = getEmployeeSubDepartment(selectedEmployeeId);
-      setSelectedSubDepartmentId(subDeptId || null);
-    } else {
-      setSelectedSubDepartmentId(null);
-    }
-  }, [selectedEmployeeId, dataLoaded, getEmployeeSubDepartment]);
+  const filteredAvailableQuestions = useMemo(
+    () =>
+      availableQuestions.filter((q) => {
+        const text = getQuestionText(q).toLowerCase();
+        const sMatch = text.includes(searchTerm.toLowerCase());
+        const tMatch =
+          filterType === "all" ||
+          getNumericType(q.type) === parseInt(filterType);
+        return sMatch && tMatch;
+      }),
+    [availableQuestions, searchTerm, filterType, getQuestionText]
+  );
 
-  // ==============================================================
-  // ТЕКСТЫ
-  // ==============================================================
+  const selectedQuestions = useMemo(
+    () =>
+      selectedQIds
+        .map((id) => surveyQuestions.find((q) => q.id === id))
+        .filter(Boolean),
+    [selectedQIds, surveyQuestions]
+  );
+
   const t = {
     ru: {
       title: "Управление опросами",
@@ -1468,367 +894,286 @@ export const SurveyManager = ({ onStartSurvey }) => {
       delete: "Удалить",
       save: "Сохранить",
       cancel: "Отмена",
-      deleteConfirm: "Вы уверены, что хотите удалить этот опрос?",
+      deleteConfirm: "Удалить опрос?",
       surveyTitle: "Название опроса",
       description: "Описание",
-      questions: "Вопросы",
-      availableQuestions: "Доступные вопросы",
-      selectedQuestions: "Выбранные вопросы",
-      questionText: "Текст вопроса",
-      order: "Порядок",
       noSurveys: "Нет созданных опросов",
-      noQuestions: "Нет доступных вопросов",
-      surveyCreated: "Опрос успешно создан",
-      surveyUpdated: "Опрос успешно обновлен",
-      loading: "Загрузка...",
+      surveyCreated: "Опрос создан",
+      surveyUpdated: "Опрос обновлён",
       questionCount: "вопросов",
       createFirst: "Создать первый опрос",
-      step1: "Основная информация",
-      step2: "Выбор вопросов",
-      step3: "Проверка и сохранение",
+      step1: "Информация",
+      step2: "Вопросы",
+      step3: "Проверка",
       next: "Далее",
       back: "Назад",
-      surveyInfo: "Информация об опросе",
-      questionsInfo: "Вопросы опроса",
-      summary: "Сводка",
       totalQuestions: "Всего вопросов",
       surveyReady: "Опрос готов к публикации",
-      fillTitle: "Пожалуйста, заполните название опроса",
-      selectQuestions: "Пожалуйста, выберите хотя бы один вопрос",
+      fillTitle: "Заполните название",
+      selectQuestions: "Выберите хотя бы один вопрос",
       success: "Успешно!",
-      warning: "Внимание",
       info: "Информация",
-      questionType: "Тип вопроса",
       test: "Тест",
       manual: "Ручной",
-      allQuestions: "Все вопросы",
-      manualAnswer: "Правильный ответ",
+      rating: "Рейтинг",
       selectAll: "Выбрать все",
-      clearAll: "Очистить все",
+      clearAll: "Очистить",
       selected: "Выбрано",
-      questionsSelected: "вопросов выбрано",
-      searchPlaceholder: "Поиск вопросов...",
+      questionsSelected: "вопросов",
+      searchPlaceholder: "Поиск...",
       allTypes: "Все типы",
-      noQuestionsFound: "Вопросы не найдены",
-      noAvailableQuestions: "Нет доступных вопросов для добавления в опрос",
-      createQuestionFirst: "Создайте вопросы перед созданием опроса",
-      usedInTests: "Используется в опросах",
-      available: "Доступен",
-      filters: "Фильтры",
-      clearFilters: "Сбросить фильтры",
-      showing: "Показано",
-      of: "из",
-      questionsFound: "вопросов найдено",
-      preview: "Просмотр опроса",
-      noQuestionsInSurvey: "Нет вопросов в этом опросе",
-      created: "Создан",
-      totalQuestionsLabel: "Всего вопросов",
-      correctAnswer: "Правильный ответ",
+      correctAnswer: "Эталон",
       question: "Вопрос",
       answer: "Ответ",
       correct: "Правильный",
       variant: "Вариант",
       add: "Добавить вариант",
-      rating: "Рейтинг",
-      selectRating: "Выберите рейтинг вопроса",
-      createQuestion: "Создать вопрос",
-      selectQuestionsTab: "Выбор вопросов",
+      selectRating: "Рейтинг",
       createQuestionTab: "Создать вопрос",
+      selectQuestionsTab: "Выбор вопросов",
       startSurvey: "Начать опрос",
       selectSurvey: "Выберите опрос",
       selectEmployee: "Выберите сотрудника",
       close: "Закрыть",
-      results: "Результаты",
-      viewResults: "Посмотреть результаты",
-      participants: "Участников",
-      takeSurvey: "Пройти опрос",
-      surveyResults: "Результаты опроса",
-      employee: "Сотрудник",
-      department: "Отдел",
-      subDepartment: "Отделение",
-      selectSubDepartment: "Выберите отделение",
-      selectDuration: "Длительность опроса",
-      minutes: "минут",
+      selectDuration: "Длительность",
       minutesShort: "мин",
-      presetTimes: "Быстрый выбор:",
-      customDuration: "Своя длительность",
-      timeRemaining: "Осталось времени:",
-      infoDuration: "На прохождение опроса дается {minutes} минут. Вы можете изменить время выше.",
-      deleteSuccess: "Опрос успешно удален",
-      deleteError: "Ошибка при удалении опроса",
-      refresh: "Обновить",
-      alreadyPassed: "Вы уже проходили этот опрос. Повторная сдача недоступна.",
+      presetTimes: "Быстро:",
+      alreadyPassed: "Сотрудник уже прошёл",
+      noSubDepartments: "У сотрудника нет отделения",
+      preview: "Просмотр опроса",
+      noQuestionsInSurvey: "Нет вопросов",
+      created: "Создан",
+      clearFilters: "Сбросить",
+      noQuestionsFound: "Ничего не найдено",
+      noAvailableQuestions: "Нет доступных вопросов",
+      createQuestionFirst: "Создайте вопросы",
+      selectedQuestionsTitle: "Выбранные вопросы",
     },
     tj: {
       title: "Идоракунии пурсишҳо",
       addSurvey: "Эҷоди пурсиш",
-      edit: "Тағйир додан",
+      edit: "Тағйир",
       delete: "Хориҷ",
-      save: "Сабт кардан",
-      cancel: "Бекор кардан",
-      deleteConfirm: "Шумо боварӣ доред, ки ин пурсишро нест кардан мехоҳед?",
+      save: "Сабт",
+      cancel: "Бекор",
+      deleteConfirm: "Пурсишро нест кунам?",
       surveyTitle: "Номи пурсиш",
       description: "Тавсиф",
-      questions: "Саволҳо",
-      availableQuestions: "Саволҳои дастрас",
-      selectedQuestions: "Саволҳои интихобшуда",
-      questionText: "Матни савол",
-      order: "Тартиб",
       noSurveys: "Пурсишҳо нестанд",
-      noQuestions: "Саволҳо нестанд",
-      surveyCreated: "Пурсиш бомуваффақият эҷод шуд",
-      surveyUpdated: "Пурсиш бомуваффақият нав карда шуд",
-      loading: "Боркунӣ...",
+      surveyCreated: "Пурсиш эҷод шуд",
+      surveyUpdated: "Пурсиш нав шуд",
       questionCount: "савол",
       createFirst: "Эҷоди пурсиши аввал",
-      step1: "Маълумоти асосӣ",
-      step2: "Интихоби саволҳо",
-      step3: "Санҷиш ва сабт",
+      step1: "Маълумот",
+      step2: "Саволҳо",
+      step3: "Санҷиш",
       next: "Баъдӣ",
       back: "Қаблӣ",
-      surveyInfo: "Маълумоти пурсиш",
-      questionsInfo: "Саволҳои пурсиш",
-      summary: "Хулоса",
-      totalQuestions: "Ҳамагӣ саволҳо",
-      surveyReady: "Пурсиш барои нашр омода аст",
-      fillTitle: "Лутфан, номи пурсишро пур кунед",
-      selectQuestions: "Лутфан, ҳадди ақал як саволро интихоб кунед",
+      totalQuestions: "Ҳамагӣ",
+      surveyReady: "Пурсиш омода аст",
+      fillTitle: "Номро пур кунед",
+      selectQuestions: "Як саволро интихоб кунед",
       success: "Бомуваффақият!",
-      warning: "Диққат",
       info: "Маълумот",
-      questionType: "Навъи савол",
       test: "Тест",
       manual: "Дастӣ",
-      allQuestions: "Ҳамаи саволҳо",
-      manualAnswer: "Ҷавоби дуруст",
-      selectAll: "Ҳамаро интихоб кунед",
-      clearAll: "Ҳамаро тоза кунед",
-      selected: "Интихоб шуд",
-      questionsSelected: "савол интихоб шуд",
-      searchPlaceholder: "Ҷустуҷӯи саволҳо...",
+      rating: "Баҳо",
+      selectAll: "Ҳамаро",
+      clearAll: "Тоза",
+      selected: "Интихоб",
+      questionsSelected: "савол",
+      searchPlaceholder: "Ҷустуҷӯ...",
       allTypes: "Ҳамаи навъҳо",
-      noQuestionsFound: "Саволҳо ёфт нашуд",
-      noAvailableQuestions: "Барои илова ба пурсиш саволҳо нестанд",
-      createQuestionFirst: "Пеш аз эҷоди пурсиш саволҳо эҷод кунед",
-      usedInTests: "Дар пурсишҳо истифода мешавад",
-      available: "Дастрас",
-      filters: "Филтрҳо",
-      clearFilters: "Тоза кардани филтрҳо",
-      showing: "Нишон дода шуд",
-      of: "аз",
-      questionsFound: "савол ёфт шуд",
-      preview: "Дидани пурсиш",
-      noQuestionsInSurvey: "Дар ин пурсиш саволҳо нест",
-      created: "Эҷод шуд",
-      totalQuestionsLabel: "Ҳамагӣ саволҳо",
       correctAnswer: "Ҷавоби дуруст",
       question: "Савол",
       answer: "Ҷавоб",
       correct: "Дуруст",
       variant: "Вариант",
-      add: "Илова вариант",
-      rating: "Баҳо",
-      selectRating: "Баҳои саволро интихоб кунед",
-      createQuestion: "Эҷоди савол",
-      selectQuestionsTab: "Интихоби саволҳо",
+      add: "Илова",
+      selectRating: "Баҳо",
       createQuestionTab: "Эҷоди савол",
-      startSurvey: "Оғози пурсиш",
+      selectQuestionsTab: "Интихоби саволҳо",
+      startSurvey: "Оғоз",
       selectSurvey: "Пурсишро интихоб кунед",
       selectEmployee: "Кормандра интихоб кунед",
       close: "Пӯшидан",
-      results: "Натиҷаҳо",
-      viewResults: "Дидани натиҷаҳо",
-      participants: "Иштирокчиён",
-      takeSurvey: "Гузаштани пурсиш",
-      surveyResults: "Натиҷаҳои пурсиш",
-      employee: "Корманд",
-      department: "Шуъба",
-      subDepartment: "Шуъбаи хурд",
-      selectSubDepartment: "Шуъбаи хурдро интихоб кунед",
-      selectDuration: "Давомнокии пурсиш",
-      minutes: "дақиқа",
+      selectDuration: "Давомнокӣ",
       minutesShort: "дақ.",
-      presetTimes: "Интихоби зуд:",
-      customDuration: "Давомнокии худ",
-      timeRemaining: "Вақти боқимонда:",
-      infoDuration: "Барои гузаштани пурсиш {minutes} дақиқа дода мешавад. Шумо метавонед вақтро тағйир диҳед.",
-      deleteSuccess: "Пурсиш бомуваффақият нест карда шуд",
-      deleteError: "Хатогӣ ҳангоми нест кардани пурсиш",
-      refresh: "Навсозӣ",
-      alreadyPassed: "Шумо аллакай ин пурсишро гузаштаед. Аз нав супоридан дастрас нест.",
+      presetTimes: "Зуд:",
+      alreadyPassed: "Аллакай гузашт",
+      noSubDepartments: "Шуъба нест",
+      preview: "Дидани пурсиш",
+      noQuestionsInSurvey: "Саволҳо нестанд",
+      created: "Эҷод шуд",
+      clearFilters: "Тоза",
+      noQuestionsFound: "Ёфт нашуд",
+      noAvailableQuestions: "Саволҳо нестанд",
+      createQuestionFirst: "Саволҳо эҷод кунед",
+      selectedQuestionsTitle: "Саволҳои интихобшуда",
     },
   };
 
-  // ==============================================================
-  // ФУНКЦИИ ДЛЯ РАБОТЫ С ОПРОСАМИ
-  // ==============================================================
-  const openCreateModal = () => {
+  const openCreate = () => {
     setEditingItem(null);
-    setCurrentStep(0);
+    setStep(0);
     setTitleRu("");
     setTitleTj("");
-    setDescriptionRu("");
-    setDescriptionTj("");
-    setSelectedQuestionIds([]);
+    setDescRu("");
+    setDescTj("");
+    setSelectedQIds([]);
     setSearchTerm("");
     setFilterType("all");
     setActiveTab("select");
     setOpen(true);
   };
 
-  const openEditModal = (survey) => {
-    setEditingItem(survey);
-    setCurrentStep(0);
-    setTitleRu(survey.titleRu || survey.title || "");
-    setTitleTj(survey.titleTj || survey.title || "");
-    setDescriptionRu(survey.descriptionRu || survey.description || "");
-    setDescriptionTj(survey.descriptionTj || survey.description || "");
-    const questionIds = survey.questions?.map((q) => q.id || q.questionId).filter(Boolean) || [];
-    setSelectedQuestionIds(questionIds);
+  const openEdit = (sv) => {
+    setEditingItem(sv);
+    setStep(0);
+    setTitleRu(sv.titleRu || sv.title || "");
+    setTitleTj(sv.titleTj || sv.title || "");
+    setDescRu(sv.descriptionRu || sv.description || "");
+    setDescTj(sv.descriptionTj || sv.description || "");
+    const ids = sv.questions?.map((q) => q.id || q.questionId).filter(Boolean) || [];
+    setSelectedQIds(ids);
     setActiveTab("select");
     setOpen(true);
   };
 
-  const handleSetLang = (newLang) => {
-    setLang(newLang);
-    localStorage.setItem("survey_manager_lang", newLang);
+  const openPreview = (sv) => {
+    setSelectedSurvey(sv);
+    setPreviewOpen(true);
   };
 
   const handleNext = () => {
-    if (currentStep === 0) {
-      const currentTitle = lang === "ru" ? titleRu : titleTj;
-      if (!currentTitle.trim()) {
-        message.warning(t[lang].fillTitle);
-        return;
-      }
+    if (step === 0) {
+      const cur = lang === "ru" ? titleRu : titleTj;
+      if (!cur.trim()) return message.warning(t[lang].fillTitle);
     }
-    if (currentStep === 1 && selectedQuestionIds.length === 0) {
-      message.warning(t[lang].selectQuestions);
-      return;
-    }
-    setCurrentStep(currentStep + 1);
+    if (step === 1 && selectedQIds.length === 0)
+      return message.warning(t[lang].selectQuestions);
+    setStep(step + 1);
   };
 
-  const handleBack = () => {
-    setCurrentStep(currentStep - 1);
+  const toggleQ = (id) =>
+    setSelectedQIds((p) =>
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
+    );
+
+  const selectAll = () => {
+    const ids = filteredAvailableQuestions.map((q) => q.id);
+    setSelectedQIds((p) => [...new Set([...p, ...ids])]);
   };
 
-  const toggleQuestionSelection = (questionId) => {
-    setSelectedQuestionIds((prev) => {
-      if (prev.includes(questionId)) {
-        return prev.filter((id) => id !== questionId);
-      } else {
-        return [...prev, questionId];
-      }
-    });
-  };
-
-  const selectAllQuestions = () => {
-    const availableQuestions = getAvailableQuestions();
-    const allIds = availableQuestions.map((q) => q.id);
-    setSelectedQuestionIds((prev) => {
-      const newIds = [...prev];
-      allIds.forEach((id) => {
-        if (!newIds.includes(id)) newIds.push(id);
-      });
-      return newIds;
-    });
-  };
-
-  const clearAllQuestions = () => {
-    setSelectedQuestionIds([]);
-  };
-
-  const handleQuestionCreated = (newQuestion) => {
-    fetchQuestions(1, 1000);
-    if (newQuestion && newQuestion.id) {
-      setSelectedQuestionIds((prev) => {
-        if (!prev.includes(newQuestion.id)) {
-          return [...prev, newQuestion.id];
-        }
-        return prev;
-      });
-      message.success("Вопрос добавлен в опрос!");
+  const handleQuestionCreated = async (nq) => {
+    await loadSurveyQuestions();
+    if (nq?.id) {
+      setSelectedQIds((p) => (p.includes(nq.id) ? p : [...p, nq.id]));
+      message.success("Вопрос добавлен в опрос");
     }
     setActiveTab("select");
   };
 
-  const handleDurationChange = (value) => {
-    const numValue = parseInt(value);
-    if (!isNaN(numValue) && numValue > 0 && numValue <= 480) {
-      setSelectedSurveyDuration(numValue);
-    } else if (value === "") {
-      setSelectedSurveyDuration(5);
+  const handleDeleteQuestion = async (questionId) => {
+    try {
+      await removeQuestion(questionId);
+      setSelectedQIds((prev) => prev.filter((id) => id !== questionId));
+      message.success("Вопрос удалён навсегда");
+      await loadSurveyQuestions();
+    } catch (err) {
+      console.error("Delete question error:", err);
+      message.error("Ошибка удаления вопроса");
     }
   };
 
-  const showSurveyResults = useCallback((resultData) => {
-    setSurveyResultData(resultData);
-    setSurveyResultModalVisible(true);
-  }, []);
-
   const handleSave = async () => {
-    const currentTitle = lang === "ru" ? titleRu : titleTj;
-    if (!currentTitle.trim()) {
-      message.warning(t[lang].fillTitle);
-      return;
-    }
-    if (selectedQuestionIds.length === 0) {
-      message.warning(t[lang].selectQuestions);
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        titleRu: titleRu || titleTj,
-        titleTj: titleTj || titleRu,
-        descriptionRu: descriptionRu || descriptionTj,
-        descriptionTj: descriptionTj || descriptionRu,
-        testType: 0,
-        questions: selectedQuestionIds.map((questionId, index) => ({
-          questionId: questionId,
-          order: index + 1,
+    const cur = lang === "ru" ? titleRu : titleTj;
+    if (!cur.trim()) return message.warning(t[lang].fillTitle);
+    if (selectedQIds.length === 0)
+      return message.warning(t[lang].selectQuestions);
+
+    const questionsData = selectedQIds.map((qid, i) => {
+      const q = surveyQuestions.find((x) => x.id === qid);
+      const nType = getNumericType(q?.type);
+      const apiType = getApiTypeString(nType);
+
+      let correctAnswer = null;
+      if (q) {
+        if (nType === 2 && q.options?.length > 0) {
+          const o = q.options[0];
+          correctAnswer = {
+            textRu: o.textRu || o.text || "",
+            textTj: o.textTj || o.text || "",
+          };
+        } else if (nType === 1) {
+          const o = q.options?.find((x) => x.isCorrect === true);
+          if (o)
+            correctAnswer = {
+              textRu: o.textRu || o.text || "",
+              textTj: o.textTj || o.text || "",
+            };
+        }
+      }
+
+      return {
+        questionId: qid,
+        order: i + 1,
+        type: apiType,
+        correctAnswer,
+        options: (q?.options || []).map((o) => ({
+          textRu: o.textRu || o.text || "",
+          textTj: o.textTj || o.text || "",
+          isCorrect: !!o.isCorrect,
         })),
       };
+    });
+
+    const payload = {
+      titleRu: titleRu || titleTj,
+      titleTj: titleTj || titleRu,
+      descriptionRu: descRu || descTj,
+      descriptionTj: descTj || descRu,
+      testType: "Quiz",
+      questions: questionsData,
+    };
+
+    setSaving(true);
+    try {
       let response;
       if (editingItem) {
-        response = await editTest(editingItem.id, payload);
+        await editTest(editingItem.id, payload);
         message.success(t[lang].surveyUpdated);
       } else {
         response = await addTest(payload);
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 3000);
         message.success(t[lang].surveyCreated);
-        setNewSurveyId(response?.id || Date.now());
+        if (response?.id) setNewSurveyId(response.id);
       }
-      await refreshData();
+
+      setCurrentPage(1);
+      await fetchTests(1, 1000);
+
       if (!editingItem && response?.id) {
-        setNewSurveyId(response.id);
         setTimeout(() => {
-          const element = document.getElementById(`survey-${response.id}`);
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
+          const el = document.getElementById(`survey-${response.id}`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
           setTimeout(() => setNewSurveyId(null), 3000);
         }, 500);
       }
+
       setOpen(false);
       resetForm();
-      setCurrentStep(0);
+      setStep(0);
     } catch (err) {
       console.error("Save error:", err);
-      message.error(editingItem ? "Ошибка при обновлении опроса" : "Ошибка при создании опроса");
+      message.error(
+        err.response?.data?.message ||
+          err.response?.data?.title ||
+          "Ошибка сохранения"
+      );
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleRemoveSurvey = async (id) => {
-    try {
-      await removeTest(id);
-      message.success(t[lang].deleteSuccess);
-      await refreshData();
-    } catch (err) {
-      console.error("Delete error:", err);
-      message.error(t[lang].deleteError);
     }
   };
 
@@ -1836,1054 +1181,744 @@ export const SurveyManager = ({ onStartSurvey }) => {
     setEditingItem(null);
     setTitleRu("");
     setTitleTj("");
-    setDescriptionRu("");
-    setDescriptionTj("");
-    setSelectedQuestionIds([]);
+    setDescRu("");
+    setDescTj("");
+    setSelectedQIds([]);
     setSearchTerm("");
     setFilterType("all");
-    setCurrentStep(0);
+    setStep(0);
     setActiveTab("select");
   };
 
-  // ==============================================================
-  // ФУНКЦИИ ДЛЯ НАЧАЛА ОПРОСА
-  // ==============================================================
-  const openEmployeeSelection = (survey) => {
-    setSelectedSurveyForTaking(survey);
-    setTempEmployeeId(null);
-    setEmployeeModalVisible(true);
-  };
-
-  const isSurveyPassed = useCallback((surveyId, employeeId) => {
+  const handleDelete = async (id) => {
     try {
-      const allResults = JSON.parse(localStorage.getItem("survey_results") || "[]");
-      return allResults.some(
-        (r) => r.surveyId === surveyId && r.employeeId === employeeId
-      );
-    } catch (e) {
-      return false;
+      await removeTest(id);
+      message.success("Опрос удалён");
+      const newTotal = surveyItems.length - 1;
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / pageSize));
+      if (currentPage > newTotalPages) setCurrentPage(newTotalPages);
+      await fetchTests(1, 1000);
+    } catch (err) {
+      console.error("Delete error:", err);
+      message.error(err.response?.data?.message || "Ошибка удаления");
     }
-  }, []);
-
-  const handleStartSurvey = () => {
-    if (!selectedSurveyForTaking) {
-      message.warning("Опрос не выбран");
-      return;
-    }
-    if (!tempEmployeeId) {
-      message.warning("Выберите сотрудника");
-      return;
-    }
-
-    if (isSurveyPassed(selectedSurveyForTaking.id, tempEmployeeId)) {
-      message.warning(t[lang].alreadyPassed);
-      setEmployeeModalVisible(false);
-      return;
-    }
-
-    setSelectedEmployeeIdForTaking(tempEmployeeId);
-    setEmployeeModalVisible(false);
-
-    setSurveyTakingOpen(true);
-    localStorage.setItem(
-      "active_survey_state",
-      JSON.stringify({
-        surveyId: selectedSurveyForTaking.id,
-        employeeId: tempEmployeeId,
-      })
-    );
   };
 
-  const handleStartSurveyFromMain = () => {
-    if (!selectedSurveyId) {
-      message.warning("Выберите опрос");
-      return;
-    }
-    if (!selectedEmployeeId) {
-      message.warning("Выберите сотрудника");
-      return;
-    }
+  const handleStartSurvey = async () => {
+    if (!selSurveyId || !selEmpId)
+      return message.warning("Выберите опрос и сотрудника");
+    const subId = getEmployeeSubDepartment(selEmpId);
+    if (!subId) return message.warning(t[lang].noSubDepartments);
 
-    if (isSurveyPassed(selectedSurveyId, selectedEmployeeId)) {
-      message.warning(t[lang].alreadyPassed);
-      setStartSurveyModalOpen(false);
-      return;
-    }
+    const sv = surveyItems.find((s) => s.id === selSurveyId);
+    if (!sv) return message.error("Опрос не найден");
 
-    const subDeptId = getEmployeeSubDepartment(selectedEmployeeId);
-    if (!subDeptId) {
-      message.warning("У сотрудника не указано отделение");
-      return;
-    }
-    setSelectedSubDepartmentId(subDeptId);
-    startSurveySession();
-  };
+    setStartOpen(false);
 
-  const startSurveySession = () => {
-    const survey = surveys.find((s) => s.id === selectedSurveyId);
-    if (!survey) {
-      message.error("Опрос не найден");
-      return;
-    }
-    const surveyWithDuration = {
-      ...survey,
-      durationMinutes: selectedSurveyDuration || 5,
-    };
-    setStartSurveyModalOpen(false);
-    localStorage.setItem(
-      "active_survey_state",
-      JSON.stringify({
-        surveyId: selectedSurveyId,
-        employeeId: selectedEmployeeId,
-      })
-    );
     if (onStartSurvey) {
       onStartSurvey({
-        surveyId: selectedSurveyId,
-        employeeId: selectedEmployeeId,
-        subDepartmentId: selectedSubDepartmentId,
-        survey: surveyWithDuration,
-        duration: selectedSurveyDuration,
+        surveyId: selSurveyId,
+        employeeId: selEmpId,
+        subDepartmentId: subId,
+        duration: selDuration,
+        survey: sv,
       });
-    } else {
-      setSelectedSurveyForTaking(surveyWithDuration);
-      setSelectedEmployeeIdForTaking(selectedEmployeeId);
-      setSurveyTakingOpen(true);
+      return;
     }
+
+    setTakingSurvey({ ...sv, durationMinutes: selDuration });
+    setTakingEmpId(selEmpId);
+    setTakingOpen(true);
   };
 
-  const handleViewResults = (survey) => {
-    const results = JSON.parse(localStorage.getItem("survey_results") || "[]");
-    const surveyResultsForThis = results.filter((r) => r.surveyId === survey.id);
-    setSelectedSurveyForResults(survey);
-    setSurveyResults(surveyResultsForThis);
-    setResultsOpen(true);
-  };
+  const getSurveyQuestions = useCallback(
+    (sv) => {
+      if (!sv || !sv.questions?.length) return [];
+      return sv.questions
+        .map((q) => {
+          const id = q.id || q.questionId;
+          const found = surveyQuestions.find((x) => x.id === id);
+          return found || normalizeQuestion(q);
+        })
+        .filter(Boolean);
+    },
+    [surveyQuestions]
+  );
 
-  // ===== ЗАВЕРШЕНИЕ ОПРОСА (с увеличением attemptCount) =====
-  const handleSurveyComplete = (result) => {
-    setSurveyTakingOpen(false);
-    setSelectedSurveyForTaking(null);
-    setSelectedEmployeeIdForTaking(null);
-    localStorage.removeItem("active_survey_state");
-
-    const updatedResults = JSON.parse(localStorage.getItem("survey_results") || "[]");
-    const employee = employees.find((e) => e.id === result.employeeId);
-    const survey = surveys.find((s) => s.id === result.surveyId);
-    const surveyQuestions = getSurveyQuestions(survey);
-
-    const existingIndex = updatedResults.findIndex(
-      (r) => r.surveyId === result.surveyId && r.employeeId === result.employeeId
-    );
-
-    const resultWithNames = {
+  const handleComplete = (result) => {
+    setTakingOpen(false);
+    setTakingSurvey(null);
+    setTakingEmpId(null);
+    const all = JSON.parse(localStorage.getItem("survey_results") || "[]");
+    const emp = employees.find((e) => e.id === result.employeeId);
+    const sv = surveyItems.find((s) => s.id === result.surveyId);
+    const svQ = getSurveyQuestions(sv);
+    const withNames = {
       ...result,
-      employeeName: employee ? `${employee.firstName} ${employee.lastName}` : `ID: ${result.employeeId}`,
+      employeeName: emp
+        ? `${emp.firstName} ${emp.lastName}`
+        : `ID: ${result.employeeId}`,
       surveyName:
         lang === "ru"
-          ? survey?.titleRu || survey?.title || `Опрос ${result.surveyId}`
-          : survey?.titleTj || survey?.title || `Опрос ${result.surveyId}`,
-      questions: surveyQuestions,
-      totalQuestions: surveyQuestions.length,
+          ? sv?.titleRu || sv?.title || "—"
+          : sv?.titleTj || sv?.title || "—",
+      questions: svQ,
+      totalQuestions: svQ.length,
     };
-
-    // ===== УВЕЛИЧИВАЕМ attemptCount при обновлении =====
-    if (existingIndex !== -1) {
-      const existing = updatedResults[existingIndex];
-      const newAttemptCount = (existing.attemptCount || 1) + 1;
-      updatedResults[existingIndex] = { ...existing, ...resultWithNames, attemptCount: newAttemptCount };
-    } else {
-      updatedResults.push({ ...resultWithNames, attemptCount: 1 });
-    }
-
-    localStorage.setItem("survey_results", JSON.stringify(updatedResults));
-    setSurveyResults(updatedResults);
-    refreshData();
-
-    const resultData = {
-      employeeName: employee ? `${employee.firstName} ${employee.lastName}` : `ID: ${result.employeeId}`,
-      surveyName:
-        lang === "ru"
-          ? survey?.titleRu || survey?.title || `Опрос ${result.surveyId}`
-          : survey?.titleTj || survey?.title || `Опрос ${result.surveyId}`,
-      answers: result.answers || [],
-      totalQuestions: surveyQuestions.length || 0,
-      isCompleted: result.isCompleted !== false,
-      timeSpent: result.timeSpent ? `${Math.floor(result.timeSpent / 60)} мин ${result.timeSpent % 60} сек` : "—",
-      questions: surveyQuestions,
-      surveyId: result.surveyId,
-      employeeId: result.employeeId,
-      completedAt: result.completedAt,
-    };
-    showSurveyResults(resultData);
-
-    navigate("/survey-results");
+    const i = all.findIndex(
+      (r) =>
+        String(r.surveyId) === String(result.surveyId) &&
+        String(r.employeeId) === String(result.employeeId)
+    );
+    if (i !== -1) all[i] = { ...all[i], ...withNames };
+    else all.push(withNames);
+    localStorage.setItem("survey_results", JSON.stringify(all));
+    message.success("Результат сохранён");
   };
 
-  const availableQuestions = getAvailableQuestions();
-  const filteredAvailableQuestions = availableQuestions.filter((q) => {
-    const searchMatch = getQuestionText(q).toLowerCase().includes(searchTerm.toLowerCase());
-    const typeMatch = filterType === "all" || q.type === parseInt(filterType);
-    return searchMatch && typeMatch;
-  });
+  const loading = testsLoading || surveyQuestionsLoading;
 
-  const loading = testsLoading || questionsLoading;
+  if (loading && surveyItems.length === 0 && !dataLoaded) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 50, alignItems: "center", height: "60vh" }}>
+        <Spin size="large" tip="Загрузка..." />
+      </div>
+    );
+  }
 
-  // ==============================================================
-  // RENDER
-  // ==============================================================
   return (
-    <div style={{ padding: 24, maxWidth: 1600, margin: "0 auto", background: "#f0f2f5", minHeight: "100vh" }}>
+    <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto", background: "#f0f2f5", minHeight: "100vh" }}>
+      {showConfetti && (
+        <Confetti
+          width={window.innerWidth}
+          height={window.innerHeight}
+          recycle={false}
+          numberOfPieces={500}
+          colors={["#ff416c", "#ff4b2b", "#ff6b4a", "#ff8c6b"]}
+        />
+      )}
+
       <Flex justify="space-between" align="center" style={{ marginBottom: 24, padding: "0 8px" }} wrap="wrap" gap={12}>
         <div>
-          <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>
+          <Title level={2} style={{ margin: 0, color: "#f00", fontWeight: 400 }}>
             📋 {t[lang].title}
           </Title>
           <Text type="secondary" style={{ fontSize: 14 }}>
-            Всего {surveys.length} {surveys.length === 1 ? "опрос" : "опросов"} • Всего {questions.length} вопросов
+            Всего {surveyItems.length} {surveyItems.length === 1 ? "опрос" : "опросов"}
+            • Вопросов: {surveyQuestions.length}
           </Text>
         </div>
-        <Space size="middle" wrap>
-          {/* <Button icon={<ReloadOutlined />} onClick={refreshData} loading={testsLoading} style={{ borderRadius: 20 }}>
-            {t[lang].refresh}
-          </Button> */}
+        <Space wrap>
           <Button
             type={lang === "ru" ? "primary" : "default"}
-            onClick={() => handleSetLang("ru")}
-            style={lang === "ru" ? { background: "#1890ff", borderColor: "#1890ff", borderRadius: 20 } : { borderRadius: 20 }}
+            onClick={() => { setLang("ru"); localStorage.setItem("survey_manager_lang", "ru"); }}
+            style={lang === "ru" ? { background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 } : { borderRadius: 20 }}
           >
             RU
           </Button>
           <Button
             type={lang === "tj" ? "primary" : "default"}
-            onClick={() => handleSetLang("tj")}
-            style={lang === "tj" ? { background: "#1890ff", borderColor: "#1890ff", borderRadius: 20 } : { borderRadius: 20 }}
+            onClick={() => { setLang("tj"); localStorage.setItem("survey_manager_lang", "tj"); }}
+            style={lang === "tj" ? { background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 } : { borderRadius: 20 }}
           >
             TJ
           </Button>
+
           <Button
             type="primary"
-            onClick={() => setStartSurveyModalOpen(true)}
             icon={<PlayCircleOutlined />}
             size="large"
-            style={{ background: "#1890ff", borderColor: "#1890ff", borderRadius: 20 }}
+            onClick={() => setStartOpen(true)}
+            style={{ background: "#ff4b2b", borderColor: "#ff4b2b", borderRadius: 20 }}
           >
             {t[lang].startSurvey}
           </Button>
-          <Button
-            type="primary"
-            onClick={openCreateModal}
-            style={{
-              background: "linear-gradient(135deg, #1890ff, #096dd9)",
-              border: "none",
-              boxShadow: "0 4px 12px rgba(24, 144, 255, 0.3)",
-              fontWeight: "bold",
-              height: "40px",
-              padding: "0 24px",
-              borderRadius: "20px",
-            }}
-            icon={<RocketOutlined />}
-          >
-            {t[lang].addSurvey}
-          </Button>
+
+          {isAdmin && (
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                type="primary"
+                onClick={openCreate}
+                icon={<RocketOutlined />}
+                style={{
+                  background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
+                  border: "none", borderRadius: 20, height: 40, padding: "0 24px",
+                  fontWeight: "bold", boxShadow: "0 4px 12px rgba(255, 75, 43, 0.3)",
+                }}
+              >
+                {t[lang].addSurvey}
+              </Button>
+            </motion.div>
+          )}
         </Space>
       </Flex>
 
-      {/* Список опросов */}
-      {loading && surveys.length === 0 ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: 50 }}>
-          <Spin size="large" tip={t[lang].loading} />
-        </div>
-      ) : surveys.length === 0 ? (
-        <Card style={{ textAlign: "center", padding: 60, borderRadius: 20 }}>
-          <FileTextOutlined style={{ fontSize: 64, color: "#1890ff", marginBottom: 20 }} />
-          <Title level={4}>{t[lang].noSurveys}</Title>
-          <Text type="secondary" style={{ display: "block", marginBottom: 20 }}>
-            Нажмите кнопку "Создать опрос" чтобы создать первый опрос
-          </Text>
-          <Button type="primary" onClick={openCreateModal} style={{ background: "#1890ff", borderRadius: 20 }} icon={<RocketOutlined />}>
-            {t[lang].createFirst}
-          </Button>
-        </Card>
-      ) : (
-        <Row gutter={[16, 16]}>
-          {surveys.map((survey, index) => {
-            const isNew = newSurveyId === survey.id;
-            const surveyQuestions = getSurveyQuestions(survey);
-            const questionCount = surveyQuestions.length;
-            const resultsForSurvey = surveyResults.filter((r) => r.surveyId === survey.id);
-            const participantsCount = resultsForSurvey.length;
+      <AnimatePresence>
+        {!surveyItems || surveyItems.length === 0 ? (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <Card style={{ textAlign: "center", padding: 60, borderRadius: 20 }}>
+              <FileTextOutlined style={{ fontSize: 64, color: "#ff4b2b", marginBottom: 20 }} />
+              <Title level={4}>{t[lang].noSurveys}</Title>
+              {isAdmin && (
+                <Button type="primary" onClick={openCreate} icon={<RocketOutlined />}
+                  style={{ borderRadius: 20, background: "#ff4b2b" }}>
+                  {t[lang].createFirst}
+                </Button>
+              )}
+            </Card>
+          </motion.div>
+        ) : (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
+            <Row gutter={[24, 24]}>
+              {paginatedSurveys.map((sv, index) => {
+                const isHovered = hoveredCard === sv.id;
+                const isNew = newSurveyId === sv.id;
+                const questionCount = sv.questions?.length || 0;
+                const hasDescription = lang === "ru"
+                  ? sv.descriptionRu || sv.description
+                  : sv.descriptionTj || sv.description;
 
-            return (
-              <Col xs={24} sm={12} lg={9} key={survey.id || index}>
-                <motion.div
-                  id={`survey-${survey.id}`}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.05 }}
-                  whileHover={{ y: -4 }}
-                >
-                  <Card
-                    style={{
-                      borderRadius: 16,
-                      boxShadow: "0 2px 12px rgba(24, 144, 255, 0.08)",
-                      border: "1px solid #e6f0ff",
-                      overflow: "hidden",
-                      background: "#fff",
-                      height: "100%",
-                      transition: "all 0.3s",
-                      position: "relative",
-                    }}
-                    styles={{ body: { padding: 0 } }}
-                    onMouseEnter={() => setHoveredCard(survey.id)}
-                    onMouseLeave={() => setHoveredCard(null)}
-                  >
-                    {isNew && (
-                      <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10 }}>
-                        <Tag color="blue" style={{ fontSize: 11, padding: "2px 12px", borderRadius: 12 }}>NEW</Tag>
-                      </div>
-                    )}
-
-                    <div
-                      style={{
-                        padding: "20px 24px",
-                        background: "linear-gradient(135deg, #1890ff, #096dd9)",
-                        color: "white",
+                return (
+                  <Col xs={24} md={12} lg={8} key={sv.id}>
+                    <motion.div
+                      id={`survey-${sv.id}`}
+                      initial={{ opacity: 0, scale: 0.8, y: 50 }}
+                      animate={{
+                        opacity: 1, scale: 1, y: 0,
+                        boxShadow: isNew ? "0 0 0 3px #ff4b2b, 0 0 0 6px rgba(255, 75, 43, 0.3)" : "none",
                       }}
+                      transition={{ duration: 0.6, delay: index * 0.1, type: "spring", stiffness: 100 }}
+                      whileHover={{ y: -8 }}
                     >
-                      <Flex align="center" gap={12}>
+                      {isNew && (
+                        <motion.div
+                          initial={{ scale: 0 }} animate={{ scale: 1 }}
+                          transition={{ type: "spring", stiffness: 200 }}
+                          style={{ position: "absolute", top: -10, right: -10, zIndex: 10 }}
+                        >
+                          <Tag color="red" style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20 }}>
+                            NEW! 🎉
+                          </Tag>
+                        </motion.div>
+                      )}
+
+                      <Card
+                        onClick={() => { if (isAdmin) openPreview(sv); }}
+                        onMouseEnter={() => setHoveredCard(sv.id)}
+                        onMouseLeave={() => setHoveredCard(null)}
+                        style={{
+                          borderRadius: 20, border: "none", overflow: "hidden",
+                          cursor: isAdmin ? "pointer" : "default",
+                          boxShadow: isHovered
+                            ? "0 16px 40px rgba(255, 75, 43, 0.18)"
+                            : "0 6px 20px rgba(0, 0, 0, 0.08)",
+                          transition: "all 0.3s ease", position: "relative", background: "#fff",
+                        }}
+                        styles={{ body: { padding: 0 } }}
+                      >
                         <div
                           style={{
-                            background: "rgba(255,255,255,0.2)",
-                            borderRadius: "50%",
-                            width: 44,
-                            height: 44,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
+                            background: "linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)",
+                            padding: "22px 24px", color: "#fff",
+                            position: "relative", overflow: "hidden",
                           }}
                         >
-                          <FileTextOutlined style={{ fontSize: 20 }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <Text
-                            style={{
-                              color: "white",
-                              fontSize: 16,
-                              fontWeight: 600,
-                              display: "block",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {lang === "ru" ? survey.titleRu || survey.title : survey.titleTj || survey.title}
-                          </Text>
-                          <Flex gap={8} align="center" style={{ marginTop: 4 }} wrap>
-                            <Tag
+                          <div style={{ position: "absolute", top: -50, right: -50, width: 150, height: 150, borderRadius: "50%", background: "rgba(255, 255, 255, 0.12)" }} />
+                          <div style={{ position: "absolute", bottom: -60, right: 80, width: 100, height: 100, borderRadius: "50%", background: "rgba(255, 255, 255, 0.08)" }} />
+
+                          <Flex align="flex-start" gap={14} style={{ position: "relative", zIndex: 1 }}>
+                            <div
                               style={{
-                                background: "rgba(255,255,255,0.2)",
-                                border: "none",
-                                color: "white",
-                                fontSize: 11,
-                                borderRadius: 12,
-                                margin: 0,
+                                background: "rgba(255, 255, 255, 0.25)", borderRadius: 14,
+                                width: 52, height: 52, display: "flex", alignItems: "center",
+                                justifyContent: "center", flexShrink: 0, fontSize: 24,
+                                border: "1px solid rgba(255, 255, 255, 0.3)",
+                                backdropFilter: "blur(6px)",
                               }}
                             >
-                              {questionCount} {t[lang].questionCount}
-                            </Tag>
-                            <Tag
-                              style={{
-                                background: "rgba(255,255,255,0.2)",
-                                border: "none",
-                                color: "white",
-                                fontSize: 11,
-                                borderRadius: 12,
-                                margin: 0,
-                              }}
-                            >
-                              {participantsCount} {t[lang].participants}
-                            </Tag>
-                            <Tag
-                              style={{
-                                background: "rgba(255,255,255,0.25)",
-                                border: "none",
-                                color: "white",
-                                fontSize: 10,
-                                borderRadius: 12,
-                                margin: 0,
-                              }}
-                            >
-                              Опрос
-                            </Tag>
+                              <FileTextOutlined />
+                            </div>
+
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <Text strong style={{
+                                color: "#fff", fontSize: 16, display: "block",
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                textShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                              }}>
+                                {lang === "ru"
+                                  ? sv.titleRu || sv.title || "Без названия"
+                                  : sv.titleTj || sv.title || "Безунвон"}
+                              </Text>
+
+                              <div style={{ marginTop: 10 }}>
+                                <Tag icon={<ClockCircleOutlined />} style={{
+                                  background: "rgba(255, 255, 255, 0.25)", color: "#fff",
+                                  border: "1px solid rgba(255, 255, 255, 0.35)", borderRadius: 20,
+                                  padding: "3px 12px", fontSize: 12, fontWeight: 500,
+                                  backdropFilter: "blur(6px)",
+                                }}>
+                                  {questionCount} {t[lang].questionCount}
+                                </Tag>
+                              </div>
+                            </div>
                           </Flex>
                         </div>
-                      </Flex>
-                    </div>
 
-                    {survey.descriptionRu || survey.descriptionTj ? (
-                      <div style={{ padding: "8px 20px", background: "#fafbff", borderBottom: "1px solid #f0f0f0" }}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {lang === "ru" ? survey.descriptionRu || survey.description : survey.descriptionTj || survey.description}
-                        </Text>
-                      </div>
-                    ) : null}
+                        {hasDescription && (
+                          <div style={{ padding: "16px 22px 14px", background: "#fff", minHeight: 60 }}>
+                            <Text type="secondary" style={{
+                              fontSize: 13, display: "-webkit-box", WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.55,
+                            }}>
+                              {hasDescription}
+                            </Text>
+                          </div>
+                        )}
 
-                    <div style={{ padding: "14px 20px", background: "#fafbff" }}>
-                      <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
-                        <Space size={8}>
-                          {/* <Button
-                            size="middle"
-                            icon={<PlayCircleOutlined />}
-                            onClick={() => openEmployeeSelection(survey)}
-                            style={{
-                              fontSize: 13,
-                              borderRadius: 8,
-                              borderColor: "#1890ff",
-                              color: "#1890ff",
-                            }}
-                          >
-                            {t[lang].takeSurvey}
-                          </Button> */}
-                          <Button
-                            size="middle"
-                            icon={<BarChartOutlined />}
-                            onClick={() => handleViewResults(survey)}
-                            style={{
-                              fontSize: 13,
-                              borderRadius: 8,
-                            }}
-                          >
-                            {t[lang].viewResults}
-                          </Button>
-                        </Space>
-                        <Space size={4}>
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<EditOutlined />}
-                            onClick={() => openEditModal(survey)}
-                            style={{ fontSize: 13 }}
-                          />
-                          <Popconfirm
-                            title={t[lang].deleteConfirm}
-                            onConfirm={() => handleRemoveSurvey(survey.id)}
-                            okText="Да"
-                            cancelText="Нет"
-                          >
-                            <Button type="text" size="small" danger icon={<DeleteOutlined />} style={{ fontSize: 13 }} />
-                          </Popconfirm>
-                        </Space>
-                      </Flex>
-                    </div>
-                  </Card>
-                </motion.div>
-              </Col>
-            );
-          })}
-        </Row>
-      )}
+                        {isAdmin && (
+                          <div style={{ padding: "14px 22px", background: "#fafbff", borderTop: "1px solid #f0f2f5" }}>
+                            <Flex justify="end">
+                              <Space>
+                                <Button
+                                  icon={<EditOutlined />}
+                                  onClick={(e) => { e.stopPropagation(); openEdit(sv); }}
+                                  style={{ borderRadius: 8, borderColor: "#ff4b2b", color: "#ff4b2b", fontWeight: 500 }}
+                                >
+                                  {t[lang].edit}
+                                </Button>
+                                <Popconfirm
+                                  title={t[lang].deleteConfirm}
+                                  onConfirm={async (e) => { e?.stopPropagation(); await handleDelete(sv.id); }}
+                                  okText="Да" cancelText="Нет"
+                                >
+                                  <Button danger icon={<DeleteOutlined />}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ borderRadius: 8, fontWeight: 500 }}>
+                                    {t[lang].delete}
+                                  </Button>
+                                </Popconfirm>
+                              </Space>
+                            </Flex>
+                          </div>
+                        )}
 
-      {surveys.length > 0 && (
-        <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
-          <Pagination
-            current={currentPage}
-            pageSize={pageSize}
-            total={totalRecords || surveys.length}
-            showSizeChanger={false}
-            onChange={(page) => {
-              setCurrentPage(page);
-            }}
-          />
-        </div>
-      )}
-
-      {/* Модальное окно "Начать опрос" */}
-      <Modal
-        title={
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <PlayCircleOutlined style={{ color: "#1890ff" }} />
-            <span>{t[lang].startSurvey}</span>
-          </div>
-        }
-        open={startSurveyModalOpen}
-        onCancel={() => {
-          setStartSurveyModalOpen(false);
-          setSelectedSurveyId(null);
-          setSelectedEmployeeId(null);
-        }}
-        footer={[
-          <Button key="cancel" onClick={() => setStartSurveyModalOpen(false)}>
-            {t[lang].close}
-          </Button>,
-          <Button
-            key="start"
-            type="primary"
-            onClick={handleStartSurveyFromMain}
-            disabled={!selectedSurveyId || !selectedEmployeeId || !selectedSubDepartmentId}
-            style={{ background: "#1890ff", borderColor: "#1890ff" }}
-          >
-            {t[lang].startSurvey} ({selectedSurveyDuration} {t[lang].minutesShort})
-          </Button>,
-        ]}
-        width={650}
-        centered
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 24, padding: "8px 0" }}>
-          <div>
-            <Text strong>{t[lang].selectSurvey}:</Text>
-            <Select
-              placeholder={t[lang].selectSurvey}
-              value={selectedSurveyId}
-              onChange={(value) => setSelectedSurveyId(value)}
-              style={{ width: "100%", marginTop: 8 }}
-              showSearch
-              size="large"
-              optionFilterProp="children"
-              filterOption={(input, option) => {
-                const text = option?.children?.toString?.() || "";
-                return text.toLowerCase().includes(input.toLowerCase());
-              }}
-            >
-              {surveys.map((survey) => {
-                const surveyQuestions = getSurveyQuestions(survey);
-                return (
-                  <Option key={survey.id} value={survey.id}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <FileTextOutlined />
-                        {lang === "ru" ? survey.titleRu || survey.title : survey.titleTj || survey.title}
-                      </div>
-                      <Tag color="blue">{surveyQuestions.length} вопросов</Tag>
-                    </div>
-                  </Option>
+                        <div style={{ height: 3, background: "linear-gradient(90deg, #ff416c 0%, #ff4b2b 50%, #ff8c6b 100%)" }} />
+                      </Card>
+                    </motion.div>
+                  </Col>
                 );
               })}
-            </Select>
-          </div>
-
-          <div>
-            <Text strong>{t[lang].selectDuration}:</Text>
-            <div style={{ marginTop: 8 }}>
-              <Input
-                type="number"
-                placeholder={t[lang].customDuration}
-                value={selectedSurveyDuration}
-                onChange={(e) => handleDurationChange(e.target.value)}
-                min={1}
-                max={480}
-                step={1}
-                size="large"
-                prefix={<HourglassOutlined />}
-                suffix={t[lang].minutesShort}
-                style={{ width: "100%" }}
-              />
-            </div>
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {t[lang].presetTimes}
-              </Text>
-              {[5, 10, 15, 20, 30, 45, 60].map((min) => (
-                <Button
-                  key={min}
-                  size="small"
-                  type={selectedSurveyDuration === min ? "primary" : "default"}
-                  onClick={() => setSelectedSurveyDuration(min)}
-                  style={selectedSurveyDuration === min ? { background: "#1890ff", borderColor: "#1890ff" } : {}}
-                >
-                  {min} мин
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <Alert
-            message="Информация"
-            description={t[lang].infoDuration.replace("{minutes}", selectedSurveyDuration)}
-            type="info"
-            showIcon
-            icon={<HourglassOutlined />}
-          />
-
-          <div>
-            <Text strong>{t[lang].selectEmployee}:</Text>
-            <Select
-              placeholder={t[lang].selectEmployee}
-              value={selectedEmployeeId}
-              onChange={(value) => {
-                setSelectedEmployeeId(value);
-                setSelectedSubDepartmentId(null);
-              }}
-              style={{ width: "100%", marginTop: 8 }}
-              showSearch
-              size="large"
-              optionFilterProp="children"
-              filterOption={(input, option) => {
-                const text = option?.children?.toString?.() || "";
-                return text.toLowerCase().includes(input.toLowerCase());
-              }}
-            >
-              {Object.entries(groupedEmployees).map(([department, deptEmployees]) => (
-                <Select.OptGroup key={department} label={`${t[lang].department}: ${department}`}>
-                  {deptEmployees.map((emp) => (
-                    <Option key={emp.id} value={emp.id}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <UserOutlined />
-                        {emp.firstName} {emp.lastName}
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {emp.email}
-                        </Text>
-                        {emp.subDepartmentId && (
-                          <Tag color="green" style={{ marginLeft: 4 }}>
-                            <ApartmentOutlined /> {getSubDepartmentName(emp.subDepartmentId)}
-                          </Tag>
-                        )}
-                      </div>
-                    </Option>
-                  ))}
-                </Select.OptGroup>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Text strong>{t[lang].subDepartment}:</Text>
-            {selectedEmployeeId ? (
-              <>
-                {selectedSubDepartmentId ? (
-                  <Card size="small" style={{ marginTop: 8, background: "#f6ffed", borderColor: "#b7eb8f", borderRadius: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <ApartmentOutlined style={{ color: "#52c41a", fontSize: 20 }} />
-                      <div>
-                        <Text strong style={{ fontSize: 16 }}>
-                          {getSubDepartmentName(selectedSubDepartmentId)}
-                        </Text>
-                        <br />
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          Отделение из данных сотрудника
-                        </Text>
-                      </div>
-                      <Tag color="green" style={{ marginLeft: "auto" }}>
-                        <CheckCircleOutlined /> Из сотрудника
-                      </Tag>
-                    </div>
-                  </Card>
-                ) : (
-                  <Alert
-                    message="У сотрудника не указано отделение"
-                    description="Пожалуйста, укажите отделение в карточке сотрудника"
-                    type="warning"
-                    showIcon
-                    style={{ marginTop: 8 }}
-                  />
-                )}
-              </>
-            ) : (
-              <div style={{ marginTop: 8 }}>
-                <Select placeholder={t[lang].selectSubDepartment} disabled style={{ width: "100%" }}>
-                  <Option value="">{t[lang].selectEmployee}</Option>
-                </Select>
-              </div>
-            )}
-          </div>
-        </div>
-      </Modal>
-
-      {/* Модальное окно выбора сотрудника */}
-      <Modal
-        title={
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <UserOutlined style={{ color: "#1890ff" }} />
-            <span>{t[lang].selectEmployee}</span>
-          </div>
-        }
-        open={employeeModalVisible}
-        onCancel={() => setEmployeeModalVisible(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setEmployeeModalVisible(false)}>
-            {t[lang].cancel}
-          </Button>,
-          <Button
-            key="start"
-            type="primary"
-            onClick={handleStartSurvey}
-            disabled={!tempEmployeeId}
-            style={{ background: "#1890ff", borderColor: "#1890ff" }}
-          >
-            {t[lang].takeSurvey}
-          </Button>,
-        ]}
-        width={450}
-        centered
-      >
-        <div style={{ padding: "8px 0" }}>
-          <Text strong style={{ display: "block", marginBottom: 12 }}>
-            {t[lang].selectEmployee}
-          </Text>
-          <Select
-            placeholder={t[lang].selectEmployee}
-            style={{ width: "100%" }}
-            value={tempEmployeeId}
-            onChange={setTempEmployeeId}
-            showSearch
-            size="large"
-            optionFilterProp="children"
-            filterOption={(input, option) => {
-              const text = option?.children?.toString?.() || "";
-              return text.toLowerCase().includes(input.toLowerCase());
-            }}
-          >
-            {employees.map((emp) => (
-              <Option key={emp.id} value={emp.id}>
-                <Space>
-                  <UserOutlined />
-                  {emp.firstName} {emp.lastName}
-                  {emp.position && <Tag color="blue" style={{ fontSize: 11 }}>{emp.position}</Tag>}
-                </Space>
-              </Option>
-            ))}
-          </Select>
-          {tempEmployeeId && (
-            <div style={{ marginTop: 12, padding: "8px 12px", background: "#f6ffed", borderRadius: 8, border: "1px solid #b7eb8f" }}>
-              <Text type="secondary">Выбран: </Text>
-              <Text strong>
-                {employees.find((e) => e.id === tempEmployeeId)?.firstName}{" "}
-                {employees.find((e) => e.id === tempEmployeeId)?.lastName}
-              </Text>
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      {/* Модальное окно прохождения опроса */}
-      <Modal
-        title={
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <FormOutlined style={{ color: "#1890ff" }} />
-            <span>{selectedSurveyForTaking?.titleRu || t[lang].startSurvey}</span>
-          </div>
-        }
-        open={surveyTakingOpen}
-        onCancel={() => {
-          setSurveyTakingOpen(false);
-          setSelectedSurveyForTaking(null);
-          setSelectedEmployeeIdForTaking(null);
-        }}
-        footer={null}
-        width={680}
-        centered
-        styles={{ body: { maxHeight: "80vh", overflow: "auto" } }}
-      >
-        {selectedSurveyForTaking && (
-          <SurveyTaking
-            survey={selectedSurveyForTaking}
-            questions={getSurveyQuestions(selectedSurveyForTaking)}
-            onComplete={handleSurveyComplete}
-            onClose={() => {
-              setSurveyTakingOpen(false);
-              setSelectedSurveyForTaking(null);
-              setSelectedEmployeeIdForTaking(null);
-            }}
-            employeeId={selectedEmployeeIdForTaking}
-            lang={lang}
-            t={t[lang]}
-            durationMinutes={selectedSurveyForTaking.durationMinutes || 5}
-          />
+            </Row>
+          </motion.div>
         )}
-      </Modal>
+      </AnimatePresence>
 
-      {/* Модальное окно результатов после завершения */}
-      <SurveyResultsModal
-        visible={surveyResultModalVisible}
-        result={surveyResultData}
-        onClose={() => {
-          setSurveyResultModalVisible(false);
-          setSurveyResultData(null);
-        }}
-        lang={lang}
-      />
-
-      {/* Модальное окно просмотра всех результатов */}
-      <Modal
-        title={
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <BarChartOutlined style={{ color: "#1890ff" }} />
-            <span>{t[lang].surveyResults}</span>
-          </div>
-        }
-        open={resultsOpen}
-        onCancel={() => {
-          setResultsOpen(false);
-          setSelectedSurveyForResults(null);
-        }}
-        footer={null}
-        width={850}
-        centered
-        styles={{ body: { maxHeight: "80vh", overflow: "auto" } }}
-      >
-        {selectedSurveyForResults && (
-          <SurveyResults
-            survey={selectedSurveyForResults}
-            questions={getSurveyQuestions(selectedSurveyForResults)}
-            results={surveyResults}
-            employees={employees}
-            lang={lang}
-            t={t[lang]}
+      {surveyItems.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
+          <Pagination
+            current={currentPage} pageSize={pageSize} total={totalCount}
+            onChange={(page, size) => {
+              if (size !== pageSize) { setPageSize(size); setCurrentPage(1); }
+              else setCurrentPage(page);
+            }}
           />
-        )}
-      </Modal>
+        </div>
+      )}
 
-      {/* ============================================================
-          МОДАЛЬНОЕ ОКНО СОЗДАНИЯ/РЕДАКТИРОВАНИЯ ОПРОСА (ПОЛНОЕ)
-          ============================================================ */}
+      {/* МОДАЛКА СТАРТА */}
       <Modal
-        open={open}
-        onCancel={() => {
-          setOpen(false);
-          resetForm();
-        }}
-        footer={null}
-        width={900}
-        centered
-        styles={{ header: { display: "none" }, body: { padding: 0 } }}
+        open={startOpen} onCancel={() => setStartOpen(false)} centered width={650}
+        footer={null} styles={{ header: { display: "none" }, body: { padding: 0 } }}
       >
-        <div style={{ borderRadius: 16, overflow: "hidden" }}>
-          <div style={{ background: "linear-gradient(135deg, #1890ff, #096dd9)", padding: "20px 28px", color: "white" }}>
+        <div style={{ borderRadius: 20, overflow: "hidden" }}>
+          <div style={{ background: "linear-gradient(135deg, #ff416c, #ff4b2b)", padding: "24px 30px", color: "#fff" }}>
             <Flex align="center" gap={12}>
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.2)",
-                  borderRadius: "50%",
-                  width: 40,
-                  height: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {editingItem ? <EditOutlined style={{ fontSize: 20 }} /> : <RocketOutlined style={{ fontSize: 20 }} />}
+              <div style={{
+                background: "rgba(255,255,255,0.2)", borderRadius: "50%",
+                width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <PlayCircleOutlined style={{ fontSize: 24 }} />
               </div>
               <div>
-                <Title level={4} style={{ color: "white", margin: 0 }}>
+                <Title level={3} style={{ color: "#fff", margin: 0 }}>{t[lang].startSurvey}</Title>
+                <Text style={{ color: "rgba(255,255,255,0.8)" }}>
+                  Выберите опрос, длительность и сотрудника
+                </Text>
+              </div>
+            </Flex>
+          </div>
+
+          <div style={{ padding: "24px 30px 30px", background: "#fff", display: "flex", flexDirection: "column", gap: 20 }}>
+            <div>
+              <Text strong>{t[lang].selectSurvey}:</Text>
+              <Select
+                value={selSurveyId} onChange={setSelSurveyId} showSearch size="large"
+                style={{ width: "100%", marginTop: 8 }} placeholder={t[lang].selectSurvey}
+                optionFilterProp="children"
+              >
+                {surveyItems.map((s) => (
+                  <Option key={s.id} value={s.id}>
+                    {lang === "ru" ? s.titleRu || s.title : s.titleTj || s.title}
+                  </Option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <Text strong>{t[lang].selectDuration}:</Text>
+              <Input
+                type="number" min={1} max={480} value={selDuration}
+                onChange={(e) => setSelDuration(Math.max(1, Math.min(480, parseInt(e.target.value) || 5)))}
+                prefix={<HourglassOutlined />} suffix={t[lang].minutesShort}
+                size="large" style={{ marginTop: 8, borderRadius: 10 }}
+              />
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>{t[lang].presetTimes}</Text>
+                {[5, 10, 15, 20, 30, 45, 60, 90].map((m) => (
+                  <Button
+                    key={m} size="small"
+                    type={selDuration === m ? "primary" : "default"}
+                    onClick={() => setSelDuration(m)}
+                    style={{
+                      borderRadius: 20,
+                      ...(selDuration === m ? { background: "#ff4b2b", borderColor: "#ff4b2b" } : {}),
+                    }}
+                  >
+                    {m}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Alert message="Информация" description={`На прохождение опроса даётся ${selDuration} минут.`}
+              type="info" showIcon icon={<HourglassOutlined />} style={{ borderRadius: 12 }} />
+
+            <div>
+              <Text strong>{t[lang].selectEmployee}:</Text>
+              <Select
+                value={selEmpId} onChange={setSelEmpId} showSearch size="large"
+                style={{ width: "100%", marginTop: 8 }} placeholder={t[lang].selectEmployee}
+                optionFilterProp="children"
+              >
+                {Object.entries(groupedEmployees).map(([dep, list]) => (
+                  <Select.OptGroup key={dep} label={`Отдел: ${dep}`}>
+                    {list.map((e) => (
+                      <Option key={e.id} value={e.id}>
+                        <UserOutlined /> {e.firstName} {e.lastName}
+                        {e.subDepartmentId && (
+                          <Tag color="green" style={{ marginLeft: 6 }}>
+                            <ApartmentOutlined /> {getSubDepartmentName(e.subDepartmentId)}
+                          </Tag>
+                        )}
+                      </Option>
+                    ))}
+                  </Select.OptGroup>
+                ))}
+              </Select>
+            </div>
+
+            {selSubDeptId && (
+              <Card size="small" style={{ background: "#f6ffed", borderColor: "#b7eb8f" }}>
+                <Space>
+                  <ApartmentOutlined style={{ color: "#52c41a" }} />
+                  <Text strong>{getSubDepartmentName(selSubDeptId)}</Text>
+                  <Tag color="green"><CheckCircleOutlined /></Tag>
+                </Space>
+              </Card>
+            )}
+
+            <Flex justify="flex-end" gap={8} style={{ marginTop: 8 }}>
+              <Button onClick={() => setStartOpen(false)} style={{ borderRadius: 10 }}>
+                {t[lang].close}
+              </Button>
+              <Button
+                type="primary" onClick={handleStartSurvey}
+                disabled={!selSurveyId || !selEmpId}
+                icon={<PlayCircleOutlined />}
+                style={{
+                  background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
+                  border: "none", borderRadius: 10, fontWeight: "bold",
+                }}
+              >
+                {t[lang].startSurvey} ({selDuration} {t[lang].minutesShort})
+              </Button>
+            </Flex>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ПРОХОЖДЕНИЕ */}
+      <Modal
+        open={takingOpen} footer={null} width={700} centered
+        title={<Space><FormOutlined style={{ color: "#ff4b2b" }} />{takingSurvey?.titleRu || takingSurvey?.titleTj || "Опрос"}</Space>}
+        onCancel={() => { setTakingOpen(false); setTakingSurvey(null); setTakingEmpId(null); }}
+        styles={{ body: { maxHeight: "80vh", overflow: "auto" } }}
+      >
+        {takingSurvey && (
+          <SurveyTaking
+            survey={takingSurvey}
+            questions={getSurveyQuestions(takingSurvey)}
+            onComplete={handleComplete}
+            onClose={() => { setTakingOpen(false); setTakingSurvey(null); setTakingEmpId(null); }}
+            employeeId={takingEmpId}
+            lang={lang}
+            durationMinutes={takingSurvey.durationMinutes || 5}
+          />
+        )}
+      </Modal>
+
+      {/* СОЗДАНИЕ / РЕДАКТИРОВАНИЕ */}
+      <Modal
+        open={open}
+        onCancel={() => { setOpen(false); resetForm(); }}
+        footer={null} width={1100} centered
+        styles={{ header: { display: "none" }, body: { padding: 0 } }}
+      >
+        <div style={{ borderRadius: 20, overflow: "hidden" }}>
+          <div style={{ background: "linear-gradient(135deg, #ff416c, #ff4b2b)", padding: "24px 30px", color: "#fff" }}>
+            <Flex align="center" gap={12}>
+              <div style={{
+                background: "rgba(255,255,255,0.2)", borderRadius: "50%",
+                width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {editingItem ? <EditOutlined style={{ fontSize: 24 }} /> : <RocketOutlined style={{ fontSize: 24 }} />}
+              </div>
+              <div>
+                <Title level={3} style={{ color: "#fff", margin: 0 }}>
                   {editingItem ? t[lang].edit : t[lang].addSurvey}
                 </Title>
-                <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 13 }}>
+                <Text style={{ color: "rgba(255,255,255,0.8)" }}>
                   {editingItem ? "Измените параметры опроса" : "Заполните информацию о новом опросе"}
                 </Text>
               </div>
             </Flex>
           </div>
 
-          <div style={{ padding: "20px 28px 0 28px", background: "#fff" }}>
+          <div style={{ padding: "24px 30px 0 30px", background: "#fff" }}>
             <Steps
-              current={currentStep}
-              size="small"
+              current={step}
               items={[
                 { title: t[lang].step1, icon: <FileTextOutlined /> },
                 { title: t[lang].step2, icon: <QuestionCircleOutlined /> },
                 { title: t[lang].step3, icon: <CheckCircleOutlined /> },
               ]}
-              style={{ marginBottom: 24 }}
+              style={{ marginBottom: 30 }}
             />
           </div>
 
-          <div style={{ padding: "0 28px 24px 28px", background: "#fff" }}>
+          <div style={{ padding: "0 30px 30px 30px", background: "#fff" }}>
             <AnimatePresence mode="wait">
-              {currentStep === 0 && (
-                <motion.div
-                  key="step1"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Alert
-                    message={t[lang].info}
-                    description="Введите основную информацию об опросе."
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 16, borderRadius: 10 }}
-                  />
-
-                  <div style={{ marginBottom: 16 }}>
-                    <Text strong style={{ fontSize: 14, display: "block", marginBottom: 6 }}>
+              {step === 0 && (
+                <motion.div key="s1" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+                  <Alert message={t[lang].info} description="Введите информацию об опросе."
+                    type="info" showIcon style={{ marginBottom: 24, borderRadius: 12 }} />
+                  <div style={{ marginBottom: 24 }}>
+                    <Text strong style={{ fontSize: 16, display: "block", marginBottom: 8 }}>
                       {t[lang].surveyTitle} <span style={{ color: "#ff4b2b" }}>*</span>
                     </Text>
                     <Input
                       value={lang === "ru" ? titleRu : titleTj}
-                      onChange={(e) => {
-                        if (lang === "ru") setTitleRu(e.target.value);
-                        else setTitleTj(e.target.value);
-                      }}
-                      placeholder={lang === "ru" ? "Введите название опроса" : "Номи пурсишро ворид кунед"}
-                      size="large"
-                      style={{ borderRadius: 10 }}
+                      onChange={(e) => lang === "ru" ? setTitleRu(e.target.value) : setTitleTj(e.target.value)}
+                      size="large" style={{ borderRadius: 12 }} placeholder="Введите название опроса"
                     />
                   </div>
-
                   <div>
-                    <Text strong style={{ fontSize: 14, display: "block", marginBottom: 6 }}>
+                    <Text strong style={{ fontSize: 16, display: "block", marginBottom: 8 }}>
                       {t[lang].description}
                     </Text>
-                    <Input.TextArea
-                      value={lang === "ru" ? descriptionRu : descriptionTj}
-                      onChange={(e) => {
-                        if (lang === "ru") setDescriptionRu(e.target.value);
-                        else setDescriptionTj(e.target.value);
-                      }}
-                      placeholder={lang === "ru" ? "Введите описание опроса" : "Тавсифи пурсишро ворид кунед"}
-                      rows={3}
-                      size="large"
-                      style={{ borderRadius: 10 }}
+                    <TextArea
+                      value={lang === "ru" ? descRu : descTj}
+                      onChange={(e) => lang === "ru" ? setDescRu(e.target.value) : setDescTj(e.target.value)}
+                      rows={4} size="large" style={{ borderRadius: 12 }} placeholder="Введите описание"
                     />
                   </div>
                 </motion.div>
               )}
 
-              {currentStep === 1 && (
-                <motion.div
-                  key="step2"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                >
+              {step === 1 && (
+                <motion.div key="s2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
                   <Alert
                     message={t[lang].info}
                     description={
                       <div>
-                        <Text>
-                          {editingItem
-                            ? "Редактирование опроса. Вы можете добавлять новые вопросы или удалять существующие."
-                            : "Выберите вопросы для опроса из доступных."}
-                        </Text>
+                        <Text>Выберите вопросы для опроса (Ручной + Рейтинг).</Text>
                         <div style={{ marginTop: 6 }}>
-                          <Tag color="blue" style={{ borderRadius: 16 }}>
-                            {editingItem
-                              ? `В опросе: ${selectedQuestionIds.length} вопросов`
-                              : `Доступно: ${availableQuestions.length} вопросов`}
-                          </Tag>
+                          <Tag color="blue">Доступно: {availableQuestions.length}</Tag>
+                          <Tag color="green" style={{ marginLeft: 8 }}>Всего опросных: {surveyQuestions.length}</Tag>
+                          {selectedQIds.length > 0 && (
+                            <Tag color="red" style={{ marginLeft: 8 }}>Выбрано: {selectedQIds.length}</Tag>
+                          )}
                         </div>
                       </div>
                     }
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 16, borderRadius: 10 }}
+                    type="info" showIcon style={{ marginBottom: 24, borderRadius: 12 }}
                   />
 
-                  <Tabs activeKey={activeTab} onChange={setActiveTab} size="small">
+                  <Tabs activeKey={activeTab} onChange={setActiveTab}>
                     <TabPane tab={<span><FormOutlined /> {t[lang].selectQuestionsTab}</span>} key="select">
-                      <div style={{ background: "#f8f9fa", padding: "12px 16px", borderRadius: 10, marginBottom: 16 }}>
-                        <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
-                          <Space size="small" wrap>
-                            <Button
-                              size="small"
-                              icon={<PlusOutlined />}
-                              onClick={selectAllQuestions}
+                      <div style={{ background: "#f8f9fa", padding: "16px 20px", borderRadius: 12, marginBottom: 20 }}>
+                        <Flex justify="space-between" wrap="wrap" gap={12}>
+                          <Space>
+                            <Button icon={<PlusOutlined />} onClick={selectAll}
                               disabled={filteredAvailableQuestions.length === 0}
-                            >
+                              type="primary" ghost style={{ borderRadius: 20 }}>
                               {t[lang].selectAll}
                             </Button>
-                            <Button
-                              size="small"
-                              icon={<MinusOutlined />}
-                              onClick={clearAllQuestions}
-                              disabled={selectedQuestionIds.length === 0}
-                            >
+                            <Button icon={<MinusOutlined />} onClick={() => setSelectedQIds([])}
+                              disabled={selectedQIds.length === 0} danger ghost style={{ borderRadius: 20 }}>
                               {t[lang].clearAll}
                             </Button>
                           </Space>
-
-                          <Space size="small" wrap>
+                          <Space>
                             <Input
-                              placeholder={t[lang].searchPlaceholder}
-                              value={searchTerm}
+                              placeholder={t[lang].searchPlaceholder} value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
-                              style={{ width: 200, borderRadius: 16 }}
-                              allowClear
-                              prefix={<SearchOutlined style={{ color: "#bfbfbf" }} />}
-                              size="small"
+                              prefix={<SearchOutlined />} allowClear style={{ width: 220, borderRadius: 20 }}
                             />
-                            <Select
-                              value={filterType}
-                              onChange={setFilterType}
-                              style={{ width: 120, borderRadius: 16 }}
-                              size="small"
-                              suffixIcon={<FilterOutlined />}
-                            >
+                            <Select value={filterType} onChange={setFilterType} style={{ width: 140 }} suffixIcon={<FilterOutlined />}>
                               <Option value="all">{t[lang].allTypes}</Option>
-                              <Option value="1">📝 {t[lang].test}</Option>
                               <Option value="2">✏️ {t[lang].manual}</Option>
                               <Option value="3">⭐ {t[lang].rating}</Option>
                             </Select>
+                            {(searchTerm || filterType !== "all") && (
+                              <Button icon={<ClearOutlined />}
+                                onClick={() => { setSearchTerm(""); setFilterType("all"); }}
+                                style={{ borderRadius: 20 }}>
+                                {t[lang].clearFilters}
+                              </Button>
+                            )}
                           </Space>
                         </Flex>
                       </div>
 
                       {filteredAvailableQuestions.length === 0 ? (
-                        <Empty description={t[lang].noQuestionsFound} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 30 }} />
+                        <Empty
+                          description={
+                            searchTerm || filterType !== "all"
+                              ? t[lang].noQuestionsFound
+                              : surveyQuestions.length === 0
+                              ? t[lang].createQuestionFirst
+                              : t[lang].noAvailableQuestions
+                          }
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          style={{ padding: 40 }}
+                        >
+                          {surveyQuestions.length === 0 && (
+                            <Button type="primary" onClick={() => setActiveTab("create")}
+                              style={{ borderRadius: 20, background: "#ff4b2b" }}>
+                              {t[lang].createQuestionTab}
+                            </Button>
+                          )}
+                        </Empty>
                       ) : (
-                        <div style={{ maxHeight: 350, overflow: "auto" }}>
-                          {filteredAvailableQuestions.map((question) => {
-                            const isSelected = selectedQuestionIds.includes(question.id);
-                            const typeInfo = getTypeLabel(question.type);
+                        <div style={{ maxHeight: 420, overflow: "auto", padding: "4px" }}>
+                          <Row gutter={[12, 12]}>
+                            {filteredAvailableQuestions.map((q) => {
+                              const sel = selectedQIds.includes(q.id);
+                              const tInfo = getTypeLabel(q.type);
+                              const nType = getNumericType(q.type);
+                              return (
+                                <Col xs={24} key={q.id}>
+                                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                                    <Card
+                                      onClick={() => toggleQ(q.id)}
+                                      style={{
+                                        cursor: "pointer", borderRadius: 16,
+                                        border: sel ? "2px solid #ff4b2b" : "1px solid #e8e8e8",
+                                        background: sel ? "linear-gradient(135deg, #fff5f5, #ffffff)" : "#fff",
+                                        boxShadow: sel ? "0 4px 12px rgba(255, 75, 43, 0.15)" : "0 2px 8px rgba(0,0,0,0.06)",
+                                        transition: "all 0.2s",
+                                      }}
+                                      styles={{ body: { padding: "14px 18px" } }}
+                                    >
+                                      <Flex align="flex-start" gap={14}>
+                                        <Checkbox checked={sel} onChange={() => toggleQ(q.id)} style={{ flexShrink: 0, marginTop: 4 }} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <Text style={{ fontSize: 15, display: "block", fontWeight: sel ? 500 : 400 }}>
+                                            {getQuestionText(q)}
+                                          </Text>
+                                          <Flex gap={8} style={{ marginTop: 8 }} wrap="wrap">
+                                            <Tag color={tInfo.color} icon={tInfo.icon} style={{ borderRadius: 20, border: "none" }}>
+                                              {tInfo.label}
+                                            </Tag>
+                                            <Text type="secondary" style={{ fontSize: 11, alignSelf: "center" }}>
+                                              ID: {q.id}
+                                            </Text>
+                                            {nType === 2 && q.options?.length > 0 && (
+                                              <Text style={{ fontSize: 11, color: "#52c41a", alignSelf: "center" }}>
+                                                ✓ {getOptTextSafe(q.options[0], lang)}
+                                              </Text>
+                                            )}
+                                          </Flex>
+                                        </div>
 
-                            return (
-                              <div
-                                key={question.id}
-                                onClick={() => toggleQuestionSelection(question.id)}
-                                style={{
-                                  padding: "10px 14px",
-                                  marginBottom: 8,
-                                  borderRadius: 10,
-                                  border: isSelected ? "2px solid #1890ff" : "1px solid #e8e8e8",
-                                  background: isSelected ? "#e6f7ff" : "#fff",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s",
-                                }}
-                              >
-                                <Flex align="center" gap={12}>
-                                  <Checkbox checked={isSelected} />
-                                  <div style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 14 }}>{getQuestionText(question)}</Text>
-                                    <div style={{ marginTop: 4 }}>
-                                      <Tag color={typeInfo.color} style={{ fontSize: 11, borderRadius: 12 }}>
-                                        {typeInfo.label}
-                                      </Tag>
-                                    </div>
-                                  </div>
-                                  {isSelected && <CheckCircleOutlined style={{ color: "#1890ff" }} />}
-                                </Flex>
-                              </div>
-                            );
-                          })}
+                                        <Flex vertical align="center" gap={6} style={{ flexShrink: 0, marginTop: 4 }}>
+                                          {sel && (
+                                            <div style={{
+                                              background: "#ff4b2b", color: "white", borderRadius: "50%",
+                                              width: 28, height: 28, display: "flex", alignItems: "center",
+                                              justifyContent: "center", boxShadow: "0 2px 8px rgba(255, 75, 43, 0.3)",
+                                            }}>
+                                              <CheckCircleOutlined />
+                                            </div>
+                                          )}
+                                          {sel && (
+                                            <Popconfirm
+                                              title="Убрать из опроса?" description="Вопрос останется в базе данных"
+                                              onConfirm={(e) => { e?.stopPropagation(); toggleQ(q.id); }}
+                                              onCancel={(e) => e?.stopPropagation()}
+                                              okText="Да" cancelText="Нет"
+                                            >
+                                              <Button type="text" size="small" icon={<MinusOutlined />}
+                                                title="Убрать из опроса" onClick={(e) => e.stopPropagation()}
+                                                style={{ color: "#faad14" }} />
+                                            </Popconfirm>
+                                          )}
+                                          <Popconfirm
+                                            title="Удалить вопрос навсегда?"
+                                            description="Вопрос исчезнет из базы данных. Действие нельзя отменить!"
+                                            onConfirm={(e) => { e?.stopPropagation(); handleDeleteQuestion(q.id); }}
+                                            onCancel={(e) => e?.stopPropagation()}
+                                            okText="Да, удалить" cancelText="Отмена"
+                                            okButtonProps={{ danger: true }}
+                                          >
+                                            <Button type="text" danger size="small" icon={<DeleteOutlined />}
+                                              title="Удалить вопрос навсегда" onClick={(e) => e.stopPropagation()} />
+                                          </Popconfirm>
+                                        </Flex>
+                                      </Flex>
+                                    </Card>
+                                  </motion.div>
+                                </Col>
+                              );
+                            })}
+                          </Row>
                         </div>
                       )}
 
-                      {filteredAvailableQuestions.length > 0 && (
-                        <div style={{ marginTop: 16, padding: "10px 16px", background: "#f8f9fa", borderRadius: 10 }}>
-                          <Text strong style={{ fontSize: 13 }}>
-                            {t[lang].selected}: {selectedQuestionIds.length} {t[lang].questionsSelected}
+                      {selectedQIds.length > 0 && (
+                        <div style={{
+                          marginTop: 20, padding: "10px 16px", background: "#fff5f5",
+                          borderRadius: 10, border: "1px solid #ffd6d6", textAlign: "center",
+                        }}>
+                          <Text strong style={{ fontSize: 14, color: "#ff4b2b" }}>
+                            <TrophyOutlined style={{ marginRight: 8 }} />
+                            {t[lang].selected}: {selectedQIds.length} {t[lang].questionsSelected}
                           </Text>
                         </div>
                       )}
                     </TabPane>
+
                     <TabPane tab={<span><PlusOutlined /> {t[lang].createQuestionTab}</span>} key="create">
-                      <SurveyQuestionCreator
+                      <QuestionCreator
                         onQuestionCreated={handleQuestionCreated}
                         lang={lang}
                         t={{
-                          question: t[lang].question,
-                          answer: t[lang].answer,
-                          correct: t[lang].correct,
-                          variant: t[lang].variant,
-                          add: t[lang].add,
-                          test: t[lang].test,
-                          manual: t[lang].manual,
-                          rating: t[lang].rating,
-                          correctAnswer: t[lang].correctAnswer,
-                          selectRating: t[lang].selectRating,
+                          question: t[lang].question, answer: t[lang].answer,
+                          correct: t[lang].correct, variant: t[lang].variant,
+                          add: t[lang].add, test: t[lang].test,
+                          manual: t[lang].manual, rating: t[lang].rating,
+                          correctAnswer: t[lang].correctAnswer, selectRating: t[lang].selectRating,
                         }}
                       />
                     </TabPane>
@@ -2891,97 +1926,155 @@ export const SurveyManager = ({ onStartSurvey }) => {
                 </motion.div>
               )}
 
-              {currentStep === 2 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Alert message={t[lang].success} description={t[lang].surveyReady} type="success" showIcon style={{ marginBottom: 16, borderRadius: 10 }} />
-
-                  <div style={{ padding: "16px 20px", background: "#e6f7ff", borderRadius: 12, border: "1px solid #bae7ff", marginBottom: 16 }}>
-                    <Flex align="center" gap={12}>
-                      <Avatar style={{ background: "#1890ff", width: 36, height: 36 }}>
-                        <FileTextOutlined />
-                      </Avatar>
+              {step === 2 && (
+                <motion.div key="s3" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
+                  <Alert message={t[lang].success} description={t[lang].surveyReady}
+                    type="success" showIcon style={{ marginBottom: 24, borderRadius: 12 }} />
+                  <Card style={{ background: "#fff5f5", borderColor: "#ffd6d6", marginBottom: 16 }}>
+                    <Space>
+                      <Avatar style={{ background: "#ff4b2b" }}><FileTextOutlined /></Avatar>
                       <div>
-                        <Text strong style={{ fontSize: 16 }}>
-                          {lang === "ru" ? titleRu || "Без названия" : titleTj || "Безунвон"}
-                        </Text>
+                        <Text strong>{lang === "ru" ? titleRu : titleTj}</Text>
                         <div>
-                          <Tag color="blue" style={{ borderRadius: 16 }}>
-                            {selectedQuestionIds.length} {t[lang].totalQuestions}
-                          </Tag>
-                          <Tag color="purple" style={{ borderRadius: 16, marginLeft: 8 }}>
-                            Опрос
-                          </Tag>
+                          <Tag color="blue">{selectedQIds.length} {t[lang].totalQuestions}</Tag>
                         </div>
                       </div>
-                    </Flex>
-                  </div>
-
-                  {selectedQuestionIds.length > 0 && (
-                    <div>
-                      <Text strong style={{ fontSize: 14, display: "block", marginBottom: 8 }}>
-                        📋 {t[lang].questionsInfo}:
-                      </Text>
-                      <div style={{ maxHeight: 200, overflow: "auto" }}>
-                        {questions
-                          .filter((q) => selectedQuestionIds.includes(q.id))
-                          .map((q, idx) => (
-                            <div
-                              key={q.id}
-                              style={{
-                                padding: "6px 12px",
-                                borderBottom: "1px solid #f0f0f0",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                              }}
-                            >
-                              <Badge count={idx + 1} style={{ backgroundColor: "#1890ff" }} />
-                              <Text style={{ fontSize: 13 }}>{getQuestionText(q)}</Text>
-                            </div>
-                          ))}
-                      </div>
+                    </Space>
+                  </Card>
+                  {selectedQuestions.length > 0 && (
+                    <div style={{ maxHeight: 260, overflow: "auto" }}>
+                      {selectedQuestions.map((q, idx) => (
+                        <Flex
+                          key={q.id} align="center" gap={10} onClick={() => toggleQ(q.id)}
+                          style={{
+                            padding: "8px 12px", marginBottom: 6, background: "#fafafa",
+                            borderRadius: 8, border: "1px solid #f0f0f0", cursor: "pointer",
+                          }}
+                        >
+                          <Checkbox checked onChange={() => toggleQ(q.id)} />
+                          <Badge count={idx + 1} style={{ backgroundColor: "#ff4b2b" }} />
+                          <Text style={{ fontSize: 13, flex: 1 }}>{getQuestionText(q)}</Text>
+                        </Flex>
+                      ))}
                     </div>
                   )}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
-              <Button onClick={() => setOpen(false)} style={{ borderRadius: 8 }}>
-                {t[lang].cancel}
-              </Button>
+            <Flex justify="space-between" style={{ marginTop: 30, paddingTop: 20 }}>
+              <Button onClick={() => setOpen(false)} style={{ borderRadius: 10 }}>{t[lang].cancel}</Button>
               <Space>
-                {currentStep > 0 && (
-                  <Button onClick={handleBack} style={{ borderRadius: 8 }}>
-                    {t[lang].back}
-                  </Button>
+                {step > 0 && (
+                  <Button onClick={() => setStep(step - 1)} style={{ borderRadius: 10 }}>{t[lang].back}</Button>
                 )}
-                {currentStep < 2 ? (
-                  <Button type="primary" onClick={handleNext} style={{ background: "#1890ff", borderRadius: 8 }} icon={<ArrowRightOutlined />}>
+                {step < 2 ? (
+                  <Button type="primary" onClick={handleNext} icon={<ArrowRightOutlined />}
+                    style={{ background: "#ff4b2b", borderRadius: 10 }}>
                     {t[lang].next}
                   </Button>
                 ) : (
-                  <Button
-                    type="primary"
-                    onClick={handleSave}
-                    loading={saving}
-                    style={{ background: "linear-gradient(135deg, #1890ff, #096dd9)", borderRadius: 8 }}
-                    icon={<RocketOutlined />}
-                  >
+                  <Button type="primary" onClick={handleSave} loading={saving} icon={<RocketOutlined />}
+                    style={{ background: "linear-gradient(135deg, #ff416c, #ff4b2b)", borderRadius: 10, fontWeight: "bold" }}>
                     {saving ? "Сохранение..." : editingItem ? t[lang].save : t[lang].addSurvey}
                   </Button>
                 )}
               </Space>
-            </div>
+            </Flex>
           </div>
         </div>
+      </Modal>
+
+      {/* ПРЕДПРОСМОТР */}
+      <Modal
+        open={previewOpen} footer={null} onCancel={() => setPreviewOpen(false)} width={1200}
+        title={
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ fontSize: 18, fontWeight: 600 }}>
+              {lang === "ru"
+                ? selectedSurvey?.titleRu || selectedSurvey?.title
+                : selectedSurvey?.titleTj || selectedSurvey?.title}
+            </span>
+            <Tag color="blue" style={{ borderRadius: 20, padding: "4px 12px" }}>
+              <ClockCircleOutlined /> {selectedSurvey?.questions?.length || 0} {t[lang].questionCount}
+            </Tag>
+          </div>
+        }
+      >
+        {selectedSurvey && (selectedSurvey.descriptionRu || selectedSurvey.description) && (
+          <div style={{
+            marginBottom: 20, padding: "12px 16px", background: "#f8f9fa",
+            borderRadius: 8, borderLeft: "4px solid #ff4b2b",
+          }}>
+            <Text>
+              {lang === "ru"
+                ? selectedSurvey.descriptionRu || selectedSurvey.description
+                : selectedSurvey.descriptionTj || selectedSurvey.description}
+            </Text>
+          </div>
+        )}
+
+        <Table
+          dataSource={getSurveyQuestions(selectedSurvey)}
+          rowKey={(r) => r.id}
+          columns={[
+            {
+              title: "№", width: 60,
+              render: (_, __, i) => <Badge count={i + 1} style={{ backgroundColor: "#ff4b2b" }} />,
+            },
+            {
+              title: "Вопрос", key: "q",
+              render: (_, r) => {
+                const nType = getNumericType(r.type);
+                const tInfo = getTypeLabel(r.type);
+                return (
+                  <div>
+                    <Text style={{ fontSize: 15 }}>{getQuestionText(r)}</Text>
+                    <div style={{ marginTop: 6 }}>
+                      <Tag color={tInfo.color} icon={tInfo.icon}>{tInfo.label}</Tag>
+                    </div>
+                    {nType === 1 && r.options?.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        {r.options.map((o, oi) => (
+                          <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                            <span style={{
+                              width: 22, height: 22, borderRadius: "50%",
+                              background: o.isCorrect ? "#52c41a" : "#f0f0f0",
+                              color: o.isCorrect ? "#fff" : "#666",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 12, fontWeight: "bold",
+                            }}>
+                              {["A", "B", "C", "D", "E", "F"][oi]}
+                            </span>
+                            <Text style={{ color: o.isCorrect ? "#52c41a" : "#333" }}>
+                              {getOptTextSafe(o, lang)}
+                            </Text>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {nType === 2 && (
+                      <Text type="secondary" style={{ fontSize: 12, marginTop: 6, display: "block" }}>
+                        ✏️ Ручной ответ
+                        {r.options?.[0] && ` — эталон: ${getOptTextSafe(r.options[0], lang)}`}
+                      </Text>
+                    )}
+                    {nType === 3 && (
+                      <Text type="secondary" style={{ fontSize: 12, marginTop: 6, display: "block" }}>
+                        ⭐ Рейтинг 1-10
+                      </Text>
+                    )}
+                  </div>
+                );
+              },
+            },
+          ]}
+          pagination={false}
+          locale={{ emptyText: t[lang].noQuestionsInSurvey }}
+        />
       </Modal>
     </div>
   );
 };
+
+export default SurveyManager;

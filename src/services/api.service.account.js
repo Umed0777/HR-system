@@ -12,7 +12,6 @@ API_URL.interceptors.request.use((config) =>{
 }
     return config;
 })
-/////////// LOGIN ///////////////
 
 export const login = async (data) => {
     try{
@@ -27,11 +26,10 @@ export const login = async (data) => {
     }
 }
 
-/////////  REGISTER ////////////
-
 export const register = async (data) => {
     try{
         const res = await API_URL.post("/api/Account/register", data);
+        console.log("register", data);
         return res.data
     }catch(error){
         console.error(error);
@@ -39,7 +37,6 @@ export const register = async (data) => {
     }
 }
 
-///////// REGISTER ADMIN ///////////
 
 export const registerAdmin = async(data) =>{
     try{
@@ -50,3 +47,24 @@ export const registerAdmin = async(data) =>{
         throw error;
     }
 }
+export const getUsers = async (pageNumber = 1, pageSize = 10) => {
+  try {
+    const res = await API_URL.get("/api/User", {
+      params: {
+        pageNumber,
+        pageSize,
+      },
+    });
+
+    console.log("USERS RESPONSE:", res.data);
+
+    return res.data;
+  } catch (error) {
+    console.error(
+      "Ошибка получения пользователей:",
+      error.response?.data || error
+    );
+
+    throw error;
+  }
+};

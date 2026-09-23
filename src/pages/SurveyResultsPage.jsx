@@ -1,4 +1,4 @@
-// pages/SurveyResultsPage.jsx – ПОЛНАЯ ВЕРСИЯ (две попытки, после второй disabled)
+// pages/SurveyResultsPage.jsx – КРАСНАЯ ТЕМА, БЕЗ РЕЙТИНГА
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,20 +14,16 @@ import {
   Col,
   Statistic,
   Empty,
-  Descriptions,
   Divider,
-  Badge,
   message,
   Avatar,
-  List,
   Alert,
+  Tooltip,
 } from "antd";
 import {
   BarChartOutlined,
   FileExcelOutlined,
-  DeleteOutlined,
   EyeOutlined,
-  ReloadOutlined,
   UserOutlined,
   FileTextOutlined,
   TeamOutlined,
@@ -36,12 +32,56 @@ import {
   WarningOutlined,
   StarOutlined,
   TrophyOutlined,
-  CrownOutlined,
   RedoOutlined,
+  CloseCircleOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
+import { motion } from "framer-motion";
 import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
+
+// Красная тема
+const RED = "#ff4b2b";
+const RED_DARK = "#ff416c";
+const RED_GRADIENT = "linear-gradient(135deg, #ff416c, #ff4b2b)";
+
+// ============================================================
+// УТИЛИТЫ
+// ============================================================
+const getNumericType = (type) => {
+  if (type === 1 || type === "MultipleChoice" || type === "Test") return 1;
+  if (type === 2 || type === "OpenEnded" || type === "Manual") return 2;
+  if (type === 3 || type === "Rating") return 3;
+  if (typeof type === "string") {
+    const l = type.toLowerCase();
+    if (l.startsWith("open")) return 2;
+    if (l.startsWith("rat")) return 3;
+  }
+  return 1;
+};
+
+const isSameId = (a, b) =>
+  a != null && b != null && String(a) === String(b);
+
+const getManualCorrectAnswer = (q) => {
+  if (!q) return null;
+  if (q.correctAnswer) return q.correctAnswer;
+  const firstOption = Array.isArray(q.options) && q.options[0];
+  if (firstOption) {
+    return firstOption.textRu || firstOption.text || firstOption.textTj || null;
+  }
+  return null;
+};
+
+const checkManualAnswer = (q, userAnswer) => {
+  const correct = getManualCorrectAnswer(q);
+  if (!correct) return null;
+  const a = String(userAnswer ?? "").trim().toLowerCase();
+  const c = String(correct).trim().toLowerCase();
+  if (!a) return false;
+  return a === c;
+};
 
 // ============================================================
 // 1. МОДАЛЬНОЕ ОКНО ДЕТАЛЕЙ ОТВЕТОВ
@@ -56,14 +96,17 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
       totalQuestions: "Всего вопросов",
       timeSpent: "Затраченное время",
       status: "Статус",
-      completed: "Завершен ✅",
-      notCompleted: "Не завершен ❌",
       close: "Закрыть",
       answers: "Ответы",
       rating: "Рейтинг",
-      textAnswer: "Текстовый ответ",
       question: "Вопрос",
       answer: "Ответ",
+      correct: "Правильно",
+      wrong: "Неправильно",
+      noStandard: "Эталон не задан",
+      yourAnswer: "Ваш ответ",
+      standardAnswer: "Эталон",
+      completed: "Завершено",
     },
     tj: {
       surveyResults: "Тафсилоти ҷавобҳо",
@@ -73,14 +116,17 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
       totalQuestions: "Ҳамагӣ саволҳо",
       timeSpent: "Вақти сарфшуда",
       status: "Ҳолат",
-      completed: "Анҷомёфта ✅",
-      notCompleted: "Анҷом наёфта ❌",
       close: "Пӯшидан",
       answers: "Ҷавобҳо",
       rating: "Баҳо",
-      textAnswer: "Ҷавоби матнӣ",
       question: "Савол",
       answer: "Ҷавоб",
+      correct: "Дуруст",
+      wrong: "Нодуруст",
+      noStandard: "Ҷавоби дуруст муайян нашудааст",
+      yourAnswer: "Ҷавоби шумо",
+      standardAnswer: "Ҷавоби дуруст",
+      completed: "Анҷомёфта",
     },
   };
 
@@ -89,37 +135,36 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
   const isCompleted = result.isCompleted !== false;
   const answeredCount = result.answers?.length || 0;
   const totalQuestions = result.totalQuestions || 0;
-  const completionPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+  const completionPercent =
+    totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+
+  const findQuestion = (qid) =>
+    result.questions?.find((q) => isSameId(q.id, qid));
 
   const getQuestionText = (questionId) => {
-    const q = result.questions?.find((q) => q.id === questionId);
+    const q = findQuestion(questionId);
     if (!q) return "—";
-    return lang === "ru" ? q.contentRu || q.content : q.contentTj || q.content;
+    return lang === "ru"
+      ? q.contentRu || q.content
+      : q.contentTj || q.content;
   };
 
   const getAnswerText = (answer) => {
-    const q = result.questions?.find((q) => q.id === answer.questionId);
+    const q = findQuestion(answer.questionId);
     if (!q) return String(answer.answer);
 
-    if (q.type === 1) {
-      const option = q.options?.find((o) => o.id === answer.answer || o.text === answer.answer);
+    const nType = getNumericType(q.type);
+    if (nType === 1) {
+      const option = q.options?.find(
+        (o) => isSameId(o.id, answer.answer) || o.text === answer.answer
+      );
       if (lang === "ru") {
         return option?.textRu || option?.text || String(answer.answer);
       }
       return option?.textTj || option?.text || String(answer.answer);
     }
-
-    if (q.type === 3) {
-      return `⭐ ${answer.answer}/10`;
-    }
-
+    if (nType === 3) return `⭐ ${answer.answer}/10`;
     return String(answer.answer);
-  };
-
-  const getQuestionType = (questionId) => {
-    const q = result.questions?.find((q) => q.id === questionId);
-    if (!q) return "—";
-    return q.type;
   };
 
   return (
@@ -127,11 +172,13 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
       title={
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {isCompleted ? (
-            <TrophyOutlined style={{ color: "#1890ff", fontSize: 28 }} />
+            <TrophyOutlined style={{ color: RED, fontSize: 28 }} />
           ) : (
             <WarningOutlined style={{ color: "#faad14", fontSize: 28 }} />
           )}
-          <span style={{ fontSize: 20, fontWeight: 600 }}>{t[lang].surveyResults}</span>
+          <span style={{ fontSize: 20, fontWeight: 600 }}>
+            {t[lang].surveyResults}
+          </span>
         </div>
       }
       open={visible}
@@ -142,8 +189,8 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
           type="primary"
           onClick={onClose}
           style={{
-            background: isCompleted ? "#1890ff" : "#faad14",
-            borderColor: isCompleted ? "#1890ff" : "#faad14",
+            background: RED_GRADIENT,
+            border: "none",
             borderRadius: 12,
             padding: "0 32px",
             height: 44,
@@ -153,11 +200,16 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
           {t[lang].close}
         </Button>,
       ]}
-      width={620}
+      width={680}
       centered
       styles={{
         header: { borderBottom: "1px solid #f0f0f0", paddingBottom: 16 },
-        body: { paddingTop: 24, paddingBottom: 16, maxHeight: "70vh", overflowY: "auto" },
+        body: {
+          paddingTop: 24,
+          paddingBottom: 16,
+          maxHeight: "70vh",
+          overflowY: "auto",
+        },
       }}
     >
       <div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -166,11 +218,17 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
           percent={completionPercent}
           format={(percent) => (
             <div>
-              <div style={{ fontSize: 30, fontWeight: "bold", lineHeight: 1 }}>{percent}%</div>
-              <div style={{ fontSize: 13, color: "#8c8c8c", marginTop: 4 }}>Завершено</div>
+              <div
+                style={{ fontSize: 30, fontWeight: "bold", lineHeight: 1, color: RED }}
+              >
+                {percent}%
+              </div>
+              <div style={{ fontSize: 13, color: "#8c8c8c", marginTop: 4 }}>
+                {t[lang].completed}
+              </div>
             </div>
           )}
-          strokeColor={isCompleted ? "#1890ff" : "#faad14"}
+          strokeColor={isCompleted ? RED : "#faad14"}
           trailColor="#f0f0f0"
           width={150}
         />
@@ -178,23 +236,40 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
 
       <div
         style={{
-          background: "#f8f9fa",
+          background: "#fff5f5",
           borderRadius: 12,
           padding: "16px 20px",
           marginBottom: 16,
+          border: "1px solid #ffd6d6",
         }}
       >
         <Row gutter={[16, 8]}>
           <Col span={24}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <Text type="secondary">{t[lang].employee}:</Text>
-              <Text strong>{result.employeeName || `ID: ${result.employeeId}`}</Text>
+              <Text strong>
+                {result.employeeName || `ID: ${result.employeeId}`}
+              </Text>
             </div>
           </Col>
           <Col span={24}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <Text type="secondary">{t[lang].surveyName}:</Text>
-              <Text strong>{result.surveyName || `Опрос ${result.surveyId}`}</Text>
+              <Text strong>
+                {result.surveyName || `Опрос ${result.surveyId}`}
+              </Text>
             </div>
           </Col>
         </Row>
@@ -204,16 +279,22 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
         <Col span={12}>
           <div
             style={{
-              background: "#e6f7ff",
+              background: "#fff1f0",
               borderRadius: 10,
               padding: "14px 16px",
               textAlign: "center",
-              border: "1px solid #91d5ff",
+              border: "1px solid #ffccc7",
               height: "100%",
             }}
           >
-            <div style={{ fontSize: 12, color: "#8c8c8c" }}>{t[lang].answeredQuestions}</div>
-            <div style={{ fontSize: 24, fontWeight: "bold", color: "#1890ff" }}>{answeredCount}</div>
+            <div style={{ fontSize: 12, color: "#8c8c8c" }}>
+              {t[lang].answeredQuestions}
+            </div>
+            <div
+              style={{ fontSize: 24, fontWeight: "bold", color: RED }}
+            >
+              {answeredCount}
+            </div>
           </div>
         </Col>
         <Col span={12}>
@@ -227,8 +308,14 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
               height: "100%",
             }}
           >
-            <div style={{ fontSize: 12, color: "#8c8c8c" }}>{t[lang].totalQuestions}</div>
-            <div style={{ fontSize: 24, fontWeight: "bold", color: "#52c41a" }}>{totalQuestions}</div>
+            <div style={{ fontSize: 12, color: "#8c8c8c" }}>
+              {t[lang].totalQuestions}
+            </div>
+            <div
+              style={{ fontSize: 24, fontWeight: "bold", color: "#52c41a" }}
+            >
+              {totalQuestions}
+            </div>
           </div>
         </Col>
       </Row>
@@ -256,42 +343,126 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
           <Divider orientation="left">
             <Text strong>{t[lang].answers}</Text>
           </Divider>
-          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
             {result.answers.map((answer, idx) => {
-              const qType = getQuestionType(answer.questionId);
+              const q = findQuestion(answer.questionId);
+              const qType = q ? getNumericType(q.type) : 1;
+              const isCorrect =
+                qType === 2 ? checkManualAnswer(q, answer.answer) : null;
+              const correctRef = qType === 2 ? getManualCorrectAnswer(q) : null;
+
               return (
                 <div
                   key={idx}
                   style={{
-                    padding: "10px 14px",
+                    padding: "12px 14px",
                     marginBottom: 8,
-                    background: "#fafafa",
+                    background:
+                      qType === 2
+                        ? isCorrect === true
+                          ? "#f6ffed"
+                          : isCorrect === false
+                          ? "#fff1f0"
+                          : "#fafafa"
+                        : "#fafafa",
                     borderRadius: 8,
-                    border: "1px solid #f0f0f0",
+                    border:
+                      qType === 2
+                        ? isCorrect === true
+                          ? "1px solid #b7eb8f"
+                          : isCorrect === false
+                          ? "1px solid #ffccc7"
+                          : "1px solid #f0f0f0"
+                        : "1px solid #f0f0f0",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <Tag color="blue" style={{ borderRadius: 50, minWidth: 24, textAlign: "center" }}>
+                  <div
+                    style={{ display: "flex", alignItems: "flex-start", gap: 8 }}
+                  >
+                    <Tag
+                      color="red"
+                      style={{
+                        borderRadius: 50,
+                        minWidth: 24,
+                        textAlign: "center",
+                      }}
+                    >
                       {idx + 1}
                     </Tag>
                     <div style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: 500 }}>{getQuestionText(answer.questionId)}</Text>
-                      <div style={{ marginTop: 4 }}>
+                      <Text style={{ fontSize: 13, fontWeight: 500 }}>
+                        {getQuestionText(answer.questionId)}
+                      </Text>
+
+                      <div style={{ marginTop: 6 }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {t[lang].answer}:{" "}
+                          {qType === 2
+                            ? `${t[lang].yourAnswer}: `
+                            : `${t[lang].answer}: `}
                         </Text>
-                        <Text style={{ fontSize: 13 }}>{getAnswerText(answer)}</Text>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: qType === 2 ? 500 : 400,
+                          }}
+                        >
+                          {getAnswerText(answer)}
+                        </Text>
+
                         {qType === 3 && (
                           <Tag color="orange" style={{ marginLeft: 8 }}>
                             <StarOutlined /> {t[lang].rating}
                           </Tag>
                         )}
                         {qType === 2 && (
-                          <Tag color="purple" style={{ marginLeft: 8 }}>
-                            {t[lang].textAnswer}
-                          </Tag>
+                          <>
+                            {isCorrect === true && (
+                              <Tag
+                                color="success"
+                                icon={<CheckCircleOutlined />}
+                                style={{ marginLeft: 8 }}
+                              >
+                                {t[lang].correct}
+                              </Tag>
+                            )}
+                            {isCorrect === false && (
+                              <Tag
+                                color="error"
+                                icon={<CloseCircleOutlined />}
+                                style={{ marginLeft: 8 }}
+                              >
+                                {t[lang].wrong}
+                              </Tag>
+                            )}
+                            {isCorrect === null && (
+                              <Tag
+                                color="default"
+                                icon={<QuestionCircleOutlined />}
+                                style={{ marginLeft: 8 }}
+                              >
+                                {t[lang].noStandard}
+                              </Tag>
+                            )}
+                          </>
                         )}
                       </div>
+
+                      {qType === 2 && correctRef && (
+                        <div style={{ marginTop: 6 }}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {t[lang].standardAnswer}:{" "}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: "#52c41a",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {correctRef}
+                          </Text>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -329,7 +500,6 @@ export const SurveyResultsPage = () => {
   const [lang, setLang] = useState(() => {
     return localStorage.getItem("survey_manager_lang") || "ru";
   });
-  const [showRanking, setShowRanking] = useState(true);
 
   const t = {
     ru: {
@@ -345,33 +515,18 @@ export const SurveyResultsPage = () => {
       close: "Закрыть",
       noResults: "Нет результатов опросов",
       exportExcel: "Экспорт в Excel",
-      clearAll: "Очистить все",
-      refresh: "Обновить",
       details: "Детали",
       participants: "Участников",
       avgCompletion: "Средний процент",
       totalSurveys: "Всего опросов",
-      deleteConfirm: "Вы уверены, что хотите удалить все результаты?",
-      deleteSuccess: "Все результаты удалены",
       exportSuccess: "Данные экспортированы",
-      answers: "Ответы",
-      question: "Вопрос",
-      answer: "Ответ",
-      rating: "Рейтинг",
-      textAnswer: "Текстовый ответ",
-      completionRate: "Процент завершения",
-      timeSpentLabel: "Затраченное время",
-      survey: "Опрос",
-      viewDetails: "Детали",
-      ranking: "Рейтинг участников",
-      showRanking: "Показать рейтинг",
-      hideRanking: "Скрыть рейтинг",
-      id: "ID",
       attempt: "Попытка",
       retake: "Пройти снова",
       retakeConfirm: "Вы уверены, что хотите пройти опрос снова?",
       retakeSuccess: "Опрос запущен повторно",
       maxAttemptsReached: "Максимум попыток достигнут",
+      totalSessions: "Всего сессий",
+      inProgress: "В процессе",
     },
     tj: {
       title: "Натиҷаҳои пурсишҳо",
@@ -386,37 +541,21 @@ export const SurveyResultsPage = () => {
       close: "Пӯшидан",
       noResults: "Натиҷаҳои пурсишҳо нестанд",
       exportExcel: "Содирот ба Excel",
-      clearAll: "Тоза кардани ҳама",
-      refresh: "Навсозӣ",
       details: "Тафсилот",
       participants: "Иштирокчиён",
       avgCompletion: "Фоизи миёна",
       totalSurveys: "Ҳамагӣ пурсишҳо",
-      deleteConfirm: "Шумо боварӣ доред, ки ҳамаи натиҷаҳоро нест кардан мехоҳед?",
-      deleteSuccess: "Ҳамаи натиҷаҳо нест карда шуданд",
       exportSuccess: "Маълумот содир карда шуд",
-      answers: "Ҷавобҳо",
-      question: "Савол",
-      answer: "Ҷавоб",
-      rating: "Баҳо",
-      textAnswer: "Ҷавоби матнӣ",
-      completionRate: "Фоизи анҷом",
-      timeSpentLabel: "Вақти сарфшуда",
-      survey: "Пурсиш",
-      viewDetails: "Тафсилот",
-      ranking: "Рейтинги иштирокчиён",
-      showRanking: "Нишон додани рейтинг",
-      hideRanking: "Пинҳон кардани рейтинг",
-      id: "ID",
       attempt: "Кӯшиш",
       retake: "Аз нав супоридан",
       retakeConfirm: "Шумо боварӣ доред, ки пурсишро аз нав супоридан мехоҳед?",
       retakeSuccess: "Пурсиш аз нав оғоз шуд",
       maxAttemptsReached: "Ҳадди аксари кӯшишҳо расидааст",
+      totalSessions: "Ҳамагӣ сессияҳо",
+      inProgress: "Дар ҷараён",
     },
   };
 
-  // Загрузка результатов
   const loadResults = useCallback(() => {
     setLoading(true);
     try {
@@ -434,52 +573,202 @@ export const SurveyResultsPage = () => {
     loadResults();
   }, [loadResults]);
 
-  // Экспорт в Excel
+  // ============================================================
+  // ЭКСПОРТ В EXCEL
+  // ============================================================
   const exportToExcel = () => {
     try {
-      const data = results.map((r, index) => {
-        const answeredCount = r.answers?.length || 0;
-        const totalQuestions = r.totalQuestions || 0;
-        const completionPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+      const wb = XLSX.utils.book_new();
+
+      // Лист 1 — Сводка
+      const summaryRows = results.map((r, index) => {
+        const answered = r.answers?.length || 0;
+        const total = r.totalQuestions || 0;
+        const percent = total > 0 ? Math.round((answered / total) * 100) : 0;
+
+        let manualTotal = 0;
+        let manualCorrect = 0;
+        (r.answers || []).forEach((a) => {
+          const q = (r.questions || []).find((x) =>
+            isSameId(x.id, a.questionId)
+          );
+          if (!q) return;
+          const nType = getNumericType(q.type);
+          if (nType !== 2) return;
+          const check = checkManualAnswer(q, a.answer);
+          if (check !== null) {
+            manualTotal += 1;
+            if (check) manualCorrect += 1;
+          }
+        });
 
         return {
-          "ID": index + 1,
+          "№": index + 1,
           "Сотрудник": r.employeeName || `ID: ${r.employeeId}`,
           "Опрос": r.surveyName || `Опрос ${r.surveyId}`,
-          "Отвечено вопросов": answeredCount,
-          "Всего вопросов": totalQuestions,
-          "Процент завершения": `${completionPercent}%`,
-          "Статус": r.isCompleted !== false ? "Завершен" : "Не завершен",
+          "Отвечено": answered,
+          "Всего вопросов": total,
+          "Процент завершения": `${percent}%`,
+          "Правильных (ручных)": manualTotal
+            ? `${manualCorrect} / ${manualTotal}`
+            : "—",
+          "Статус": r.isCompleted !== false ? "Завершён" : "Не завершён",
           "Затраченное время": r.timeSpent || "—",
-          "Дата": r.completedAt ? new Date(r.completedAt).toLocaleString() : "—",
+          "Дата": r.completedAt
+            ? new Date(r.completedAt).toLocaleString()
+            : "—",
           "Попытка": r.attemptCount || 1,
         };
       });
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Результаты опросов");
-
-      const totalParticipants = results.length;
-      const avgCompletion = totalParticipants > 0
-        ? Math.round(
-            results.reduce((sum, r) => {
-              const answered = r.answers?.length || 0;
-              const total = r.totalQuestions || 0;
-              return sum + (total > 0 ? (answered / total) * 100 : 0);
-            }, 0) / totalParticipants
-          )
-        : 0;
-
-      const statsData = [
-        { "Показатель": "Всего опросов", "Значение": results.length },
-        { "Показатель": "Участников", "Значение": totalParticipants },
-        { "Показатель": "Средний процент завершения", "Значение": `${avgCompletion}%` },
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      wsSummary["!cols"] = [
+        { wch: 5 }, { wch: 30 }, { wch: 35 }, { wch: 10 }, { wch: 15 },
+        { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 22 },
+        { wch: 10 },
       ];
-      const wsStats = XLSX.utils.json_to_sheet(statsData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Сводка");
+
+      // Лист 2 — Статистика
+      const totalParticipants = results.length;
+      const avgCompletion =
+        totalParticipants > 0
+          ? Math.round(
+              results.reduce((sum, r) => {
+                const answered = r.answers?.length || 0;
+                const total = r.totalQuestions || 0;
+                return sum + (total > 0 ? (answered / total) * 100 : 0);
+              }, 0) / totalParticipants
+            )
+          : 0;
+
+      let totalManual = 0;
+      let totalManualCorrect = 0;
+      results.forEach((r) => {
+        (r.answers || []).forEach((a) => {
+          const q = (r.questions || []).find((x) =>
+            isSameId(x.id, a.questionId)
+          );
+          if (!q) return;
+          const nType = getNumericType(q.type);
+          if (nType !== 2) return;
+          const check = checkManualAnswer(q, a.answer);
+          if (check !== null) {
+            totalManual += 1;
+            if (check) totalManualCorrect += 1;
+          }
+        });
+      });
+
+      const statsRows = [
+        { Показатель: "Всего результатов", Значение: results.length },
+        { Показатель: "Участников", Значение: totalParticipants },
+        { Показатель: "Средний % завершения", Значение: `${avgCompletion}%` },
+        {
+          Показатель: "Правильных (ручных)",
+          Значение: `${totalManualCorrect} / ${totalManual}`,
+        },
+        {
+          Показатель: "Дата экспорта",
+          Значение: new Date().toLocaleString(),
+        },
+      ];
+      const wsStats = XLSX.utils.json_to_sheet(statsRows);
+      wsStats["!cols"] = [{ wch: 28 }, { wch: 30 }];
       XLSX.utils.book_append_sheet(wb, wsStats, "Статистика");
 
-      XLSX.writeFile(wb, `survey_results_${new Date().toISOString().split("T")[0]}.xlsx`);
+      // Лист 3 — Детали ответов
+      const detailRows = [];
+      results.forEach((r) => {
+        const empName = r.employeeName || `ID: ${r.employeeId}`;
+        const surveyName = r.surveyName || `Опрос ${r.surveyId}`;
+        (r.answers || []).forEach((a, idx) => {
+          const q = (r.questions || []).find((x) =>
+            isSameId(x.id, a.questionId)
+          );
+          const nType = q ? getNumericType(q.type) : 1;
+          const typeLabel =
+            nType === 1
+              ? "Тест"
+              : nType === 2
+              ? "Открытый"
+              : nType === 3
+              ? "Рейтинг"
+              : "—";
+
+          const qText = q
+            ? lang === "ru"
+              ? q.contentRu || q.content || "—"
+              : q.contentTj || q.content || "—"
+            : "—";
+
+          let answerText = "";
+          if (nType === 1 && q) {
+            const opt = q.options?.find(
+              (o) => isSameId(o.id, a.answer) || o.text === a.answer
+            );
+            answerText =
+              (lang === "ru"
+                ? opt?.textRu || opt?.text
+                : opt?.textTj || opt?.text) || String(a.answer ?? "—");
+          } else if (nType === 3) {
+            answerText = `⭐ ${a.answer}/10`;
+          } else {
+            answerText = String(a.answer ?? "—");
+          }
+
+          let correctness = "—";
+          let standard = "";
+          if (nType === 1 && q) {
+            const opt = q.options?.find(
+              (o) => isSameId(o.id, a.answer) || o.text === a.answer
+            );
+            correctness = opt?.isCorrect
+              ? "✅ Правильно"
+              : "❌ Неправильно";
+            const correctOpt = q.options?.find((o) => o.isCorrect);
+            standard = correctOpt
+              ? lang === "ru"
+                ? correctOpt.textRu || correctOpt.text
+                : correctOpt.textTj || correctOpt.text
+              : "";
+          } else if (nType === 2) {
+            const check = checkManualAnswer(q, a.answer);
+            correctness =
+              check === true
+                ? "✅ Правильно"
+                : check === false
+                ? "❌ Неправильно"
+                : "— (нет эталона)";
+            standard = getManualCorrectAnswer(q) || "";
+          } else if (nType === 3) {
+            correctness = `⭐ Оценка ${a.answer}/10`;
+          }
+
+          detailRows.push({
+            "№": idx + 1,
+            "Сотрудник": empName,
+            "Опрос": surveyName,
+            "Тип": typeLabel,
+            "Вопрос": qText,
+            "Ответ": answerText,
+            "Правильность": correctness,
+            "Эталон": standard,
+          });
+        });
+      });
+
+      const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+      wsDetail["!cols"] = [
+        { wch: 5 }, { wch: 28 }, { wch: 30 }, { wch: 12 },
+        { wch: 60 }, { wch: 40 }, { wch: 22 }, { wch: 40 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsDetail, "Детали ответов");
+
+      XLSX.writeFile(
+        wb,
+        `survey_results_${new Date().toISOString().split("T")[0]}.xlsx`
+      );
       message.success(t[lang].exportSuccess);
     } catch (error) {
       console.error("Export error:", error);
@@ -487,34 +776,11 @@ export const SurveyResultsPage = () => {
     }
   };
 
-  // Очистка всех результатов
-  const clearAllResults = () => {
-    Modal.confirm({
-      title: t[lang].clearAll,
-      content: t[lang].deleteConfirm,
-      okText: "Да",
-      cancelText: "Нет",
-      onOk: () => {
-        localStorage.removeItem("survey_results");
-        setResults([]);
-        message.success(t[lang].deleteSuccess);
-      },
-    });
-  };
-
-  // Просмотр деталей
   const viewDetails = (record) => {
     setSelectedResult(record);
     setDetailModalVisible(true);
   };
 
-  // Обновление
-  const refreshResults = () => {
-    loadResults();
-    message.success("Данные обновлены");
-  };
-
-  // ===== ПОВТОРНОЕ ПРОХОЖДЕНИЕ (разрешено, пока попыток < 2) =====
   const handleRetakeSurvey = (record) => {
     const attemptCount = record.attemptCount || 1;
     if (attemptCount >= 2) {
@@ -526,6 +792,7 @@ export const SurveyResultsPage = () => {
       content: t[lang].retakeConfirm,
       okText: "Да",
       cancelText: "Нет",
+      okButtonProps: { style: { background: RED, borderColor: RED } },
       onOk: () => {
         localStorage.setItem(
           "active_survey_state",
@@ -540,8 +807,13 @@ export const SurveyResultsPage = () => {
     });
   };
 
-  // Статистика
   const totalParticipants = results.length;
+  const totalCompleted = results.filter(
+    (r) => r.isCompleted !== false
+  ).length;
+  const totalInProgress = results.filter(
+    (r) => r.isCompleted === false
+  ).length;
   const avgCompletion =
     totalParticipants > 0
       ? Math.round(
@@ -553,64 +825,47 @@ export const SurveyResultsPage = () => {
         )
       : 0;
 
-  // Переключение языка
   const handleSetLang = (newLang) => {
     setLang(newLang);
     localStorage.setItem("survey_manager_lang", newLang);
   };
 
-  // Рейтинг участников
-  const participantStats = results
-    .map((r) => {
-      const employeeName = r.employeeName || `ID: ${r.employeeId}`;
-      const answered = r.answers?.length || 0;
-      const total = r.totalQuestions || 0;
-      const percent = total > 0 ? Math.round((answered / total) * 100) : 0;
-      const isCompleted = r.isCompleted !== false;
-      return {
-        employeeName,
-        employeeId: r.employeeId,
-        surveyName: r.surveyName || `Опрос ${r.surveyId}`,
-        answered,
-        total,
-        percent,
-        isCompleted,
-        timeSpent: r.timeSpent || "—",
-        completedAt: r.completedAt,
-        attemptCount: r.attemptCount || 1,
-      };
-    })
-    .sort((a, b) => b.percent - a.percent);
-
-  const getRankIcon = (index) => {
-    if (index === 0) return <CrownOutlined style={{ color: "#ffd700", fontSize: 20 }} />;
-    if (index === 1) return <TrophyOutlined style={{ color: "#c0c0c0", fontSize: 20 }} />;
-    if (index === 2) return <TrophyOutlined style={{ color: "#cd7f32", fontSize: 20 }} />;
-    return null;
-  };
-
-  // ===== КОЛОНКИ ТАБЛИЦЫ (кнопка активна до 2-й попытки) =====
+  // Колонки
   const columns = [
     {
-      title: t[lang].id,
+      title: "ID",
       key: "id",
       width: 60,
-      render: (_, __, index) => index + 1,
+      render: (_, __, index) => (
+        <Tag color="red" style={{ borderRadius: 20 }}>
+          {index + 1}
+        </Tag>
+      ),
     },
     {
       title: t[lang].employee,
       key: "employee",
       render: (_, record) => (
         <Space>
-          <UserOutlined />
-          <Text>{record.employeeName || `ID: ${record.employeeId}`}</Text>
+          <Avatar
+            size={28}
+            icon={<UserOutlined />}
+            style={{ background: RED_GRADIENT }}
+          />
+          <Text strong>
+            {record.employeeName || `ID: ${record.employeeId}`}
+          </Text>
         </Space>
       ),
     },
     {
       title: t[lang].surveyName,
       key: "survey",
-      render: (_, record) => <Text>{record.surveyName || `Опрос ${record.surveyId}`}</Text>,
+      render: (_, record) => (
+        <Tag color="red" style={{ borderRadius: 20 }}>
+          {record.surveyName || `Опрос ${record.surveyId}`}
+        </Tag>
+      ),
     },
     {
       title: t[lang].answeredQuestions,
@@ -618,13 +873,14 @@ export const SurveyResultsPage = () => {
       render: (_, record) => {
         const answered = record.answers?.length || 0;
         const total = record.totalQuestions || 0;
-        const percent = total > 0 ? Math.round((answered / total) * 100) : 0;
+        const percent =
+          total > 0 ? Math.round((answered / total) * 100) : 0;
         return (
           <div style={{ minWidth: 120 }}>
             <Progress
               percent={percent}
               size="small"
-              strokeColor={percent === 100 ? "#52c41a" : "#1890ff"}
+              strokeColor={percent === 100 ? "#52c41a" : RED}
               format={() => `${answered}/${total}`}
             />
           </div>
@@ -658,17 +914,30 @@ export const SurveyResultsPage = () => {
     {
       title: t[lang].attempt,
       dataIndex: "attemptCount",
-      render: (count) => count || 1,
+      render: (count) => (
+        <Tag color="orange" style={{ borderRadius: 20 }}>
+          {count || 1}
+        </Tag>
+      ),
     },
     {
       title: t[lang].details,
       key: "actions",
       render: (_, record) => {
         const attemptCount = record.attemptCount || 1;
-        const canRetake = attemptCount < 2; // можно пройти снова, если попыток меньше 2
+        const canRetake = attemptCount < 2;
         return (
           <Space size="small">
-            <Button size="small" icon={<EyeOutlined />} onClick={() => viewDetails(record)}>
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => viewDetails(record)}
+              style={{
+                color: RED,
+                borderColor: RED,
+                borderRadius: 8,
+              }}
+            >
               {t[lang].details}
             </Button>
             <Button
@@ -676,8 +945,10 @@ export const SurveyResultsPage = () => {
               icon={<RedoOutlined />}
               onClick={() => handleRetakeSurvey(record)}
               style={{
-                color: canRetake ? "#1890ff" : "#d9d9d9",
-                borderColor: canRetake ? "#1890ff" : "#d9d9d9",
+                color: canRetake ? "#fff" : "#d9d9d9",
+                background: canRetake ? RED : "transparent",
+                borderColor: canRetake ? RED : "#d9d9d9",
+                borderRadius: 8,
               }}
               disabled={!canRetake}
             >
@@ -690,209 +961,247 @@ export const SurveyResultsPage = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      {/* Верхняя панель */}
+    <div
+      style={{
+        padding: 24,
+        background: "#f0f2f5",
+        minHeight: "100vh",
+      }}
+    >
+      <style>{`
+        .red-pagination .ant-pagination-item-active {
+          background: ${RED} !important;
+          border-color: ${RED} !important;
+        }
+        .red-pagination .ant-pagination-item-active a {
+          color: #fff !important;
+        }
+        .red-pagination .ant-pagination-item:hover {
+          border-color: ${RED} !important;
+        }
+        .red-pagination .ant-pagination-item:hover a {
+          color: ${RED} !important;
+        }
+      `}</style>
+
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 24,
-          flexWrap: "wrap",
-          gap: 16,
+          maxWidth: 1400,
+          margin: "0 auto",
         }}
       >
-        <div>
-          <Title level={2} style={{ margin: 0 }}>
-            <BarChartOutlined style={{ color: "#1890ff", marginRight: 12 }} />
-            {t[lang].title}
-          </Title>
-          <Text type="secondary">Всего {results.length} результатов</Text>
-        </div>
-
-        <Space>
-          <Button
-            type={lang === "ru" ? "primary" : "default"}
-            onClick={() => handleSetLang("ru")}
-            style={lang === "ru" ? { background: "#1890ff", borderColor: "#1890ff" } : {}}
-          >
-            RU
-          </Button>
-          <Button
-            type={lang === "tj" ? "primary" : "default"}
-            onClick={() => handleSetLang("tj")}
-            style={lang === "tj" ? { background: "#1890ff", borderColor: "#1890ff" } : {}}
-          >
-            TJ
-          </Button>
-          <Button icon={showRanking ? <StarOutlined /> : <TeamOutlined />} onClick={() => setShowRanking(!showRanking)}>
-            {showRanking ? t[lang].hideRanking : t[lang].showRanking}
-          </Button>
-          {/* <Button icon={<ReloadOutlined />} onClick={refreshResults} loading={loading}>
-            {t[lang].refresh}
-          </Button> */}
-          <Button
-            icon={<FileExcelOutlined />}
-            onClick={exportToExcel}
-            style={{ color: "#52c41a", borderColor: "#52c41a" }}
-            disabled={results.length === 0}
-          >
-            {t[lang].exportExcel}
-          </Button>
-          <Button danger icon={<DeleteOutlined />} onClick={clearAllResults} disabled={results.length === 0}>
-            {t[lang].clearAll}
-          </Button>
-        </Space>
-      </div>
-
-      {/* Статистика */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic
-              title={t[lang].totalSurveys}
-              value={results.length}
-              prefix={<FileTextOutlined />}
-              valueStyle={{ color: "#1890ff" }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic
-              title={t[lang].participants}
-              value={totalParticipants}
-              prefix={<TeamOutlined />}
-              valueStyle={{ color: "#52c41a" }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic
-              title={t[lang].avgCompletion}
-              value={avgCompletion}
-              suffix="%"
-              prefix={<BarChartOutlined />}
-              valueStyle={{ color: "#faad14" }}
-            />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Рейтинг участников */}
-      {showRanking && participantStats.length > 0 && (
-        <Card
-          title={
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <StarOutlined style={{ color: "#ffd700" }} />
-              <span>{t[lang].ranking}</span>
-            </div>
-          }
-          style={{ borderRadius: 12, marginBottom: 24 }}
+        {/* Верхняя панель */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: "20px 24px",
+            marginBottom: 24,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
         >
-          <List
-            dataSource={participantStats}
-            renderItem={(item, index) => (
-              <List.Item>
-                <List.Item.Meta
-                  avatar={
-                    <div style={{ minWidth: 50, textAlign: "center" }}>
-                      {getRankIcon(index)}
-                      <div style={{ fontSize: 18, fontWeight: "bold", color: index < 3 ? "#1890ff" : "#666" }}>
-                        #{index + 1}
-                      </div>
-                    </div>
-                  }
-                  title={
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <Avatar icon={<UserOutlined />} style={{ backgroundColor: "#1890ff" }} />
-                      <Text strong>{item.employeeName}</Text>
-                      <Tag color="blue">{item.surveyName}</Tag>
-                      {item.isCompleted ? (
-                        <Tag color="success" icon={<CheckCircleOutlined />}>
-                          Завершен
-                        </Tag>
-                      ) : (
-                        <Tag color="warning" icon={<WarningOutlined />}>
-                          Не завершен
-                        </Tag>
-                      )}
-                      <Tag color="purple">Попытка {item.attemptCount}</Tag>
-                    </div>
-                  }
-                  description={
-                    <div style={{ marginTop: 8 }}>
-                      <Row gutter={16}>
-                        <Col span={8}>
-                          <Statistic
-                            title="Отвечено"
-                            value={item.answered}
-                            suffix={`/ ${item.total}`}
-                            valueStyle={{ fontSize: 16 }}
-                          />
-                        </Col>
-                        <Col span={8}>
-                          <Statistic
-                            title="Процент"
-                            value={item.percent}
-                            suffix="%"
-                            valueStyle={{
-                              fontSize: 16,
-                              color: item.percent === 100 ? "#52c41a" : "#1890ff",
-                            }}
-                          />
-                        </Col>
-                        <Col span={8}>
-                          <Statistic
-                            title="Время"
-                            value={item.timeSpent}
-                            valueStyle={{ fontSize: 16 }}
-                          />
-                        </Col>
-                      </Row>
-                      <Progress
-                        percent={item.percent}
-                        size="small"
-                        strokeColor={item.percent === 100 ? "#52c41a" : "#1890ff"}
-                        showInfo={false}
-                        style={{ marginTop: 8 }}
-                      />
-                    </div>
-                  }
+          <div>
+            <Title level={2} style={{ margin: 0, color: "#1a1a1a" }}>
+              <BarChartOutlined
+                style={{ color: RED, marginRight: 12 }}
+              />
+              {t[lang].title}
+            </Title>
+            <Text type="secondary">
+              Всего {results.length} сессий
+            </Text>
+          </div>
+
+          <Space wrap>
+            <Button
+              type={lang === "ru" ? "primary" : "default"}
+              onClick={() => handleSetLang("ru")}
+              style={
+                lang === "ru"
+                  ? {
+                      background: RED,
+                      borderColor: RED,
+                      borderRadius: 20,
+                    }
+                  : { borderRadius: 20 }
+              }
+            >
+              RU
+            </Button>
+            <Button
+              type={lang === "tj" ? "primary" : "default"}
+              onClick={() => handleSetLang("tj")}
+              style={
+                lang === "tj"
+                  ? {
+                      background: RED,
+                      borderColor: RED,
+                      borderRadius: 20,
+                    }
+                  : { borderRadius: 20 }
+              }
+            >
+              TJ
+            </Button>
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={exportToExcel}
+              style={{
+                color: "#fff",
+                background: "#217346",
+                borderColor: "#217346",
+                fontWeight: 500,
+                borderRadius: 20,
+              }}
+              disabled={results.length === 0}
+            >
+              {t[lang].exportExcel}
+            </Button>
+          </Space>
+        </motion.div>
+
+        {/* Статистика — 4 карточки */}
+        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          <Col xs={24} sm={12} md={6}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                }}
+              >
+                <Statistic
+                  title={t[lang].totalSessions}
+                  value={results.length}
+                  prefix={<FileTextOutlined style={{ color: RED }} />}
+                  valueStyle={{ color: RED, fontWeight: 700 }}
                 />
-              </List.Item>
-            )}
-          />
+              </Card>
+            </motion.div>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.05 }}
+            >
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                }}
+              >
+                <Statistic
+                  title={t[lang].completed}
+                  value={totalCompleted}
+                  prefix={<CheckCircleOutlined style={{ color: "#52c41a" }} />}
+                  valueStyle={{ color: "#52c41a", fontWeight: 700 }}
+                />
+              </Card>
+            </motion.div>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+            >
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                }}
+              >
+                <Statistic
+                  title={t[lang].inProgress}
+                  value={totalInProgress}
+                  prefix={<ClockCircleOutlined style={{ color: "#1890ff" }} />}
+                  valueStyle={{ color: "#1890ff", fontWeight: 700 }}
+                />
+              </Card>
+            </motion.div>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.15 }}
+            >
+              <Card
+                style={{
+                  borderRadius: 16,
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                }}
+              >
+                <Statistic
+                  title={t[lang].avgCompletion}
+                  value={avgCompletion}
+                  suffix="%"
+                  prefix={<TrophyOutlined style={{ color: "#faad14" }} />}
+                  valueStyle={{ color: "#faad14", fontWeight: 700 }}
+                />
+              </Card>
+            </motion.div>
+          </Col>
+        </Row>
+
+        {/* Таблица результатов */}
+        <Card
+          style={{
+            borderRadius: 16,
+            border: "none",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+          }}
+        >
+          {results.length === 0 ? (
+            <Empty
+              description={t[lang].noResults}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              style={{ padding: 40 }}
+            />
+          ) : (
+            <Table
+              dataSource={results}
+              columns={columns}
+              rowKey={(record, index) =>
+                `${record.surveyId}-${record.employeeId}-${index}`
+              }
+              pagination={{
+                pageSize: 10,
+                className: "red-pagination",
+                showSizeChanger: false,
+              }}
+              scroll={{ x: 1300 }}
+              loading={loading}
+            />
+          )}
         </Card>
-      )}
 
-      {/* Таблица результатов */}
-      <Card>
-        {results.length === 0 ? (
-          <Empty description={t[lang].noResults} />
-        ) : (
-          <Table
-            dataSource={results}
-            columns={columns}
-            rowKey={(record, index) => `${record.surveyId}-${record.employeeId}-${index}`}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 1200 }}
-            loading={loading}
-          />
-        )}
-      </Card>
-
-      {/* Модальное окно деталей */}
-      <SurveyResultDetailModal
-        visible={detailModalVisible}
-        result={selectedResult}
-        onClose={() => {
-          setDetailModalVisible(false);
-          setSelectedResult(null);
-        }}
-        lang={lang}
-      />
+        {/* Модалка деталей */}
+        <SurveyResultDetailModal
+          visible={detailModalVisible}
+          result={selectedResult}
+          onClose={() => {
+            setDetailModalVisible(false);
+            setSelectedResult(null);
+          }}
+          lang={lang}
+        />
+      </div>
     </div>
   );
 };

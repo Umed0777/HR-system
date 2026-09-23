@@ -123,7 +123,7 @@ export const Departament = () => {
                 <Popconfirm
                   onConfirm={async () => {
                     await removeDepartment(dep.id);
-                    await fetchDepartments(currentPage, pageSize); // 🔥 главное
+                    await fetchDepartments(currentPage, pageSize); 
                   }}
                   title="Хотите удалить управление?"
                   okText="да"
@@ -148,8 +148,8 @@ export const Departament = () => {
             current={currentPage}
             pageSize={pageSize}
             total={totalItems}
-            showSizeChanger={false}
-            showQuickJumper={false}
+            // showSizeChanger={false}
+            // showQuickJumper={false}
             pageSizeOptions={[5, 10, 20, 50]}
             onChange={(page, size) => {
               setCurrentPage(page);

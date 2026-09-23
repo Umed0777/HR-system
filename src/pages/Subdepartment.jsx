@@ -190,7 +190,7 @@ export const Subdepartment = () => {
             pageSize={pageSize}
             total={totalRecords}
             onChange={handlePageChange}
-            // showSizeChanger
+            //  showSizeChanger = {false}
             // showQuickJumper
 
             showTotal={(total) => `Всего ${total} отделений`}

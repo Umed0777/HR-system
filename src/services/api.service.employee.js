@@ -11,7 +11,7 @@ export const getEmployee = async (pageNumber = 1, pageSize = 10) => {
         PageSize: pageSize,
       },
     })
-      return res.data.data;
+      return res.data;
     } catch (error) {
     console.error(error);
     throw error;

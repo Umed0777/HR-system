@@ -24,6 +24,7 @@ import Articles from "../pages/Articles";
 import Chat from "../pages/Chat";
 import ArticleDetail from "../pages/ArticleDetail";
 import MyArticles from "../pages/MyArticles";
+import { Dashboard } from "../pages/Dashboard";
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem("token");
@@ -52,11 +53,9 @@ export const HRSystemRoutes = () => {
 
   return (
     <Routes>
-      {/* PUBLIC */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* PROTECTED LAYOUT */}
       <Route
         path="/"
         element={
@@ -65,6 +64,7 @@ export const HRSystemRoutes = () => {
           </PrivateRoute>
         }
       >
+         <Route index element={<Dashboard />} /> 
         <Route path="announcement" element={<Announcement />} />
         <Route path="reply" element={<Answer />} />
         <Route path="department" element={<Departament />} />

@@ -4,23 +4,31 @@ const API = axios.create({
   baseURL: import.meta.env.VITE_API,
 });
 
-// GET ALL
-export const getQuestions = async (pageNumber = 1, pageSize = 10) => {
+export const getQuestions = async (
+  pageNumber = 1,
+  pageSize = 10,
+  type = null,
+  search = null,
+  language = null
+) => {
   try {
-    const res = await API.get("/api/Question",{
-       params: {
-        PageNumber: pageNumber,
-        PageSize: pageSize,
-      },
-    })
+    const params = {
+      PageNumber: pageNumber,
+      PageSize: pageSize,
+    };
+    if (type) params.Type = type;
+    if (search) params.Search = search;
+    if (language) params.language = language;
+
+    const res = await API.get("/api/Question", { params });
     return res.data;
   } catch (error) {
-    console.error(error);
+    console.error("getQuestions error:", error);
     throw error;
   }
 };
 
-// GET BY ID
+
 export const getQuestionById = async (id) => {
   try {
     const res = await API.get(`/api/Question/${id}`);
@@ -31,7 +39,6 @@ export const getQuestionById = async (id) => {
   }
 };
 
-// CREATE
 export const createQuestion = async (data) => {
   try {
     const res = await API.post("/api/Question", data);
@@ -42,7 +49,6 @@ export const createQuestion = async (data) => {
   }
 };
 
-// UPDATE
 export const updateQuestion = async (id, data) => {
   try {
     const res = await API.put(`/api/Question/${id}`, data);
@@ -53,7 +59,6 @@ export const updateQuestion = async (id, data) => {
   }
 };
 
-// DELETE
 export const deleteQuestion = async (id) => {
   try {
     const res = await API.delete(`/api/Question/${id}`);
@@ -64,9 +69,7 @@ export const deleteQuestion = async (id) => {
   }
 };
 
-// ==================== ANSWER API METHODS ====================
 
-// GET ALL ANSWERS
 export const getAnswers = async () => {
   try {
     const res = await API.get("/api/Answer");
@@ -77,7 +80,6 @@ export const getAnswers = async () => {
   }
 };
 
-// GET ANSWER BY ID
 export const getAnswerById = async (id) => {
   try {
     const res = await API.get(`/api/Answer/${id}`);
@@ -88,7 +90,6 @@ export const getAnswerById = async (id) => {
   }
 };
 
-// CREATE ANSWER
 export const createAnswer = async (data) => {
   try {
     const res = await API.post("/api/Answer", data);
@@ -99,7 +100,6 @@ export const createAnswer = async (data) => {
   }
 };
 
-// UPDATE ANSWER
 export const updateAnswer = async (id, data) => {
   try {
     const res = await API.put(`/api/Answer/${id}`, data);
@@ -110,7 +110,6 @@ export const updateAnswer = async (id, data) => {
   }
 };
 
-// DELETE ANSWER
 export const deleteAnswer = async (id) => {
   try {
     const res = await API.delete(`/api/Answer/${id}`);
