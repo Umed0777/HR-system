@@ -37,22 +37,15 @@ import {
   GlobalOutlined,
   BellOutlined,
   LoginOutlined,
+  ExportOutlined,
+  PoweroffOutlined,
 } from "@ant-design/icons";
 
-import {
-  useEffect,
-  useState,
-  useMemo,
-  useCallback,
-} from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 
-import {
-  Outlet,
-  useNavigate,
-  useLocation,
-} from "react-router-dom";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
-import active from "../assets/active.png";
+import active from "../assets/ActivUpdate.png";
 
 // ==========================================
 // ZUSTAND NOTIFICATION STORE
@@ -84,21 +77,39 @@ export const HRSystemLayout = () => {
     fetchUsers,
   } = useUserNotificationStore();
 
+  // ==========================================
+  // LANGUAGE — единый ключ "language"
+  // ==========================================
   const [language, setLanguage] = useState(
-    localStorage.getItem("language") || "ru"
+    () => localStorage.getItem("language") || "ru",
   );
+
+  // Слушаем смену языка из других вкладок и из других компонентов
+  useEffect(() => {
+    const handler = (e) => {
+      const newLang =
+        (e?.type === "languagechange" ? e.detail : e?.newValue) ||
+        localStorage.getItem("language") ||
+        "ru";
+      setLanguage(newLang);
+    };
+
+    window.addEventListener("languagechange", handler);
+    window.addEventListener("storage", handler);
+
+    return () => {
+      window.removeEventListener("languagechange", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ==========================================
-  // TRANSLATIONS
-  // ==========================================
-
   const translations = {
     ru: {
       loading: "Загрузка...",
-      systemTitle: "HR Management System",
+      systemTitle: "Система управления кадрами",
 
       administration: "Администрирование",
       management: "Управление",
@@ -127,8 +138,7 @@ export const HRSystemLayout = () => {
       close: "Закрыть",
 
       loginNotifications: "Пользователи",
-      noLoginNotifications:
-        "Пользователей нет",
+      noLoginNotifications: "Пользователей нет",
 
       user: "Пользователь",
       email: "Email",
@@ -156,8 +166,7 @@ export const HRSystemLayout = () => {
         {
           question:
             "Я нашел ошибку или устаревшую информацию в Базе Знаний. Что делать?",
-          answer:
-            "Напишите по адресу OKevorkova@activbank.tj",
+          answer: "Напишите по адресу OKevorkova@activbank.tj",
         },
         {
           question:
@@ -172,22 +181,17 @@ export const HRSystemLayout = () => {
             "База знаний содержит конфиденциальную информацию Банка. Доступ к ней открыт только для действующих сотрудников.",
         },
         {
-          question:
-            "Что находится в разделе «ВидеоУрок»?",
+          question: "Что находится в разделе «ВидеоУрок»?",
           answer:
             "В этом подразделе собраны обучающие видеоролики, записи вебинаров и видеоинструкции.",
         },
         {
-          question:
-            "Что искать в разделе «Документация»?",
-          answer:
-            "Здесь хранятся текстовые файлы, регламенты и инструкции.",
+          question: "Что искать в разделе «Документация»?",
+          answer: "Здесь хранятся текстовые файлы, регламенты и инструкции.",
         },
         {
-          question:
-            "Будет ли работать База знаний, если отключится интернет?",
-          answer:
-            "Да, система работает локально внутри нашей сети.",
+          question: "Будет ли работать База знаний, если отключится интернет?",
+          answer: "Да, система работает локально внутри нашей сети.",
         },
         {
           question:
@@ -196,23 +200,19 @@ export const HRSystemLayout = () => {
             "Нет, доступ к системе возможен только с рабочих компьютеров в офисе.",
         },
         {
-          question:
-            "Как каждый раз не вводить цифры адреса в браузере?",
-          answer:
-            "Сохраните страницу в закладки браузера.",
+          question: "Как каждый раз не вводить цифры адреса в браузере?",
+          answer: "Сохраните страницу в закладки браузера.",
         },
         {
-          question:
-            "Что значат красные звёздочки * возле некоторых полей?",
-          answer:
-            "Это знак обязательного поля.",
+          question: "Что значат красные звёздочки * возле некоторых полей?",
+          answer: "Это знак обязательного поля.",
         },
       ],
     },
 
     tj: {
       loading: "Боргир шуда истодааст...",
-      systemTitle: "Системаи идоракунии HR",
+      systemTitle: "Системаи идоракунии кадрҳо",
 
       administration: "Идоракунӣ",
       management: "Идоракунӣ",
@@ -241,8 +241,7 @@ export const HRSystemLayout = () => {
       close: "Пӯшидан",
 
       loginNotifications: "Корбарон",
-      noLoginNotifications:
-        "Корбарон нестанд",
+      noLoginNotifications: "Корбарон нестанд",
 
       user: "Корбар",
       email: "Email",
@@ -254,74 +253,56 @@ export const HRSystemLayout = () => {
       faqQuestions: [
         {
           question: "Пойгоҳи дониш (ПД) чист?",
-          answer:
-            "Ин китобхонаи ягонаи рақамии Бонки мо мебошад.",
+          answer: "Ин китобхонаи ягонаи рақамии Бонки мо мебошад.",
         },
         {
-          question:
-            "Чаро ман бояд аз он истифода барам?",
-          answer:
-            "Барои сарфа кардани вақт ва пайдо кардани маълумоти зарурӣ.",
+          question: "Чаро ман бояд аз он истифода барам?",
+          answer: "Барои сарфа кардани вақт ва пайдо кардани маълумоти зарурӣ.",
         },
         {
-          question:
-            "Чӣ тавр ба система ворид шудан мумкин аст?",
+          question: "Чӣ тавр ба система ворид шудан мумкин аст?",
           answer:
             "Воридшавӣ тавассути логин ва рамзи компютери корӣ анҷом дода мешавад.",
         },
         {
           question:
             "Ман дар Пойгоҳи донишҳо хато ё маълумоти кӯҳнашударо пайдо кардам. Чӣ кор кунам?",
-          answer:
-            "Ба суроғаи OKevorkova@activbank.tj хабар фиристед.",
+          answer: "Ба суроғаи OKevorkova@activbank.tj хабар фиристед.",
         },
         {
-          question:
-            "Мехоҳам ҳуҷҷати нав ё дастури муфид илова кунам.",
+          question: "Мехоҳам ҳуҷҷати нав ё дастури муфид илова кунам.",
           answer:
             "Маводро ба Хадамоти идоракунии захираҳои инсонӣ ирсол намоед.",
         },
         {
           question:
             "Оё ман метавонам Пойгоҳи донишҳоро бо муштариён мубодила кунам?",
-          answer:
-            "Не, маълумот махфӣ мебошад.",
+          answer: "Не, маълумот махфӣ мебошад.",
         },
         {
-          question:
-            "Дар бахши «Видео Дарс» чӣ мавод ҷой дода шудааст?",
+          question: "Дар бахши «Видео Дарс» чӣ мавод ҷой дода шудааст?",
           answer:
             "Дар ин бахш наворҳои омӯзишӣ ва дастурҳои видеоӣ ҷой дода шудаанд.",
         },
         {
-          question:
-            "Дар бахши «Ҳуҷҷатгузорӣ» чиро бояд ҷустуҷӯ кард?",
-          answer:
-            "Дар ин бахш ҳуҷҷатҳо ва дастурҳо нигоҳ дошта мешаванд.",
+          question: "Дар бахши «Ҳуҷҷатгузорӣ» чиро бояд ҷустуҷӯ кард?",
+          answer: "Дар ин бахш ҳуҷҷатҳо ва дастурҳо нигоҳ дошта мешаванд.",
         },
         {
-          question:
-            "Агар интернет қатъ шавад, пойгоҳи донишҳо кор мекунад?",
-          answer:
-            "Бале, система дар дохили шабакаи локалӣ фаъолият мекунад.",
+          question: "Агар интернет қатъ шавад, пойгоҳи донишҳо кор мекунад?",
+          answer: "Бале, система дар дохили шабакаи локалӣ фаъолият мекунад.",
         },
         {
-          question:
-            "Оё аз хона ба Пойгоҳи донишҳо ворид шудан мумкин аст?",
-          answer:
-            "Не, дастрасӣ аз шабакаи дохилии Бонк мебошад.",
+          question: "Оё аз хона ба Пойгоҳи донишҳо ворид шудан мумкин аст?",
+          answer: "Не, дастрасӣ аз шабакаи дохилии Бонк мебошад.",
         },
         {
-          question:
-            "Чӣ кор кунам, то ҳар дафъа рақами суроғаро ворид накунам?",
-          answer:
-            "Саҳифаро дар bookmarks браузер нигоҳ доред.",
+          question: "Чӣ кор кунам, то ҳар дафъа рақами суроғаро ворид накунам?",
+          answer: "Саҳифаро дар bookmarks браузер нигоҳ доред.",
         },
         {
-          question:
-            "Ситорачаҳои сурх чӣ маъно доранд?",
-          answer:
-            "Ин нишонаи майдони ҳатмӣ мебошад.",
+          question: "Ситорачаҳои сурх чӣ маъно доранд?",
+          answer: "Ин нишонаи майдони ҳатмӣ мебошад.",
         },
       ],
     },
@@ -332,25 +313,19 @@ export const HRSystemLayout = () => {
   // ==========================================
   // ROLES
   // ==========================================
-
   const roles = useMemo(() => {
     try {
-      return JSON.parse(
-        localStorage.getItem("roles") || "[]"
-      );
+      return JSON.parse(localStorage.getItem("roles") || "[]");
     } catch {
       return [];
     }
   }, []);
 
-  const isAdmin =
-    roles.includes("Admin") ||
-    roles.includes("SuperAdmin");
+  const isAdmin = roles.includes("Admin") || roles.includes("SuperAdmin");
 
   // ==========================================
   // AUTH
   // ==========================================
-
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -366,7 +341,6 @@ export const HRSystemLayout = () => {
   // ==========================================
   // OPEN MENU
   // ==========================================
-
   useEffect(() => {
     if (!initialized) return;
 
@@ -375,33 +349,17 @@ export const HRSystemLayout = () => {
     const newOpenKeys = [];
 
     if (
-      [
-        "/department",
-        "/position",
-        "/subdepartment",
-        "/employee",
-      ].includes(path)
+      ["/department", "/position", "/subdepartment", "/employee"].includes(path)
     ) {
       newOpenKeys.push("administration");
     }
 
-    if (
-      [
-        "/announcement",
-        "/video-lessons",
-        "/documentation",
-      ].includes(path)
-    ) {
+    if (["/announcement", "/video-lessons", "/documentation"].includes(path)) {
       newOpenKeys.push("announcement");
     }
 
     if (
-      [
-        "/test",
-        "/test-taking",
-        "/surveys",
-        "/survey-results",
-      ].includes(path)
+      ["/test", "/test-taking", "/surveys", "/survey-results"].includes(path)
     ) {
       newOpenKeys.push("testing");
     }
@@ -412,24 +370,19 @@ export const HRSystemLayout = () => {
   // ==========================================
   // LOAD USERS FOR NOTIFICATIONS
   // ==========================================
-
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
 
     try {
-      await fetchUsers();
+      await fetchUsers(1, 100);
     } catch (error) {
-      console.error(
-        "Ошибка загрузки пользователей:",
-        error
-      );
+      console.error("Ошибка загрузки пользователей:", error);
     }
   }, [isAdmin, fetchUsers]);
 
   // ==========================================
   // LOAD USERS
   // ==========================================
-
   useEffect(() => {
     if (!initialized || !isAdmin) {
       return;
@@ -437,7 +390,6 @@ export const HRSystemLayout = () => {
 
     loadUsers();
 
-    // Обновляем список пользователей каждые 30 секунд
     const interval = setInterval(() => {
       loadUsers();
     }, 30000);
@@ -445,16 +397,11 @@ export const HRSystemLayout = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [
-    initialized,
-    isAdmin,
-    loadUsers,
-  ]);
+  }, [initialized, isAdmin, loadUsers]);
 
   // ==========================================
   // LOGOUT
   // ==========================================
-
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
@@ -466,22 +413,17 @@ export const HRSystemLayout = () => {
   };
 
   // ==========================================
-  // LANGUAGE
+  // LANGUAGE — оповещаем все компоненты
   // ==========================================
-
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
-
-    localStorage.setItem(
-      "language",
-      lang
-    );
+    localStorage.setItem("language", lang);
+    window.dispatchEvent(new CustomEvent("languagechange", { detail: lang }));
   };
 
   // ==========================================
   // FAQ
   // ==========================================
-
   const handleFAQ = () => {
     setFaqOpen(true);
   };
@@ -489,14 +431,10 @@ export const HRSystemLayout = () => {
   // ==========================================
   // MENU
   // ==========================================
-
   const menuItems = useMemo(() => {
     const items = [];
 
-    // ========================================
     // ADMIN / SUPERADMIN
-    // ========================================
-
     if (isAdmin) {
       items.push(
         {
@@ -510,23 +448,30 @@ export const HRSystemLayout = () => {
               icon: <ApartmentOutlined />,
               label: t.management,
             },
-
             {
               key: "/position",
               icon: <IdcardOutlined />,
               label: t.position,
             },
-
             {
               key: "/subdepartment",
               icon: <ClusterOutlined />,
               label: t.department,
             },
-
             {
               key: "/employee",
               icon: <TeamOutlined />,
               label: t.employees,
+            },
+            {
+              key: "/test-taking",
+              icon: <CheckSquareOutlined />,
+              label: t.testResults,
+            },
+            {
+              key: "/survey-results",
+              icon: <BarChartOutlined />,
+              label: t.surveyResults,
             },
           ],
         },
@@ -542,7 +487,6 @@ export const HRSystemLayout = () => {
               icon: <VideoCameraOutlined />,
               label: t.videoLessons,
             },
-
             {
               key: "/documentation",
               icon: <FilePdfOutlined />,
@@ -562,51 +506,17 @@ export const HRSystemLayout = () => {
               icon: <FormOutlined />,
               label: t.tests,
             },
-
             {
               key: "/surveys",
               icon: <BarsOutlined />,
               label: t.surveys,
             },
-
-            {
-              key: "/survey-results",
-              icon: <BarChartOutlined />,
-              label: t.surveyResults,
-            },
-
-            {
-              key: "/test-taking",
-              icon: <CheckSquareOutlined />,
-              label: t.testResults,
-            },
           ],
         },
-
-        // {
-        //   key: "/article",
-        //   icon: <ReadOutlined />,
-        //   label: t.news,
-        // },
-
-        // {
-        //   key: "/my-articles",
-        //   icon: <UserOutlined />,
-        //   label: t.myArticles,
-        // },
-
-        // {
-        //   key: "/chat",
-        //   icon: <MessageOutlined />,
-        //   label: t.chat,
-        // }
       );
     }
 
-    // ========================================
     // BASIC
-    // ========================================
-
     if (
       roles.includes("Basic") &&
       !roles.includes("Admin") &&
@@ -624,7 +534,6 @@ export const HRSystemLayout = () => {
               icon: <VideoCameraOutlined />,
               label: t.videoLessons,
             },
-
             {
               key: "/documentation",
               icon: <FilePdfOutlined />,
@@ -644,28 +553,22 @@ export const HRSystemLayout = () => {
               icon: <FormOutlined />,
               label: t.tests,
             },
-
             {
               key: "/surveys",
               icon: <BarsOutlined />,
               label: t.surveys,
             },
           ],
-        }
+        },
       );
     }
 
     return items;
-  }, [
-    roles,
-    t,
-    isAdmin,
-  ]);
+  }, [roles, t, isAdmin]);
 
   // ==========================================
   // MENU OPEN
   // ==========================================
-
   const handleOpenChange = (keys) => {
     setOpenKeys(keys);
   };
@@ -673,7 +576,6 @@ export const HRSystemLayout = () => {
   // ==========================================
   // MENU CLICK
   // ==========================================
-
   const handleMenuClick = ({ key }) => {
     if (key.startsWith("/")) {
       navigate(key);
@@ -683,54 +585,31 @@ export const HRSystemLayout = () => {
   // ==========================================
   // GET USER NAME
   // ==========================================
+  const getUserName = (item) => {
+    const firstName =
+      item?.firstName || item?.FirstName || item?.first_name || "";
 
- const getUserName = (item) => {
-  const firstName =
-    item?.firstName ||
-    item?.FirstName ||
-    item?.first_name ||
-    "";
+    const lastName = item?.lastName || item?.LastName || item?.last_name || "";
 
-  const lastName =
-    item?.lastName ||
-    item?.LastName ||
-    item?.last_name ||
-    "";
+    const fullName = item?.fullName || item?.FullName || "";
 
-  const fullName =
-    item?.fullName ||
-    item?.FullName ||
-    "";
+    const username =
+      item?.userName || item?.username || item?.login || item?.name || "";
 
-  const username =
-    item?.userName ||
-    item?.username ||
-    item?.login ||
-    item?.name ||
-    "";
+    if (firstName || lastName) {
+      return `${firstName} ${lastName}`.trim();
+    }
 
-  if (firstName || lastName) {
-    return `${firstName} ${lastName}`.trim();
-  }
+    if (fullName) {
+      return fullName;
+    }
 
-  if (fullName) {
-    return fullName;
-  }
-
-  return username || "Пользователь";
-};
-
-  const getUserEmail = (item) => {
-    return (
-      item?.email ||
-      item?.Email ||
-      "Email не указан"
-    );
+    return username || "Пользователь";
   };
 
-  // ==========================================
-  // GET USER ROLE
-  // ==========================================
+  const getUserEmail = (item) => {
+    return item?.email || item?.Email || "Email не указан";
+  };
 
   const getUserRoles = (item) => {
     if (Array.isArray(item?.roles)) {
@@ -741,16 +620,8 @@ export const HRSystemLayout = () => {
       return item.Roles.join(", ");
     }
 
-    return (
-      item?.role ||
-      item?.Role ||
-      "Basic"
-    );
+    return item?.role || item?.Role || "Basic";
   };
-
-  // ==========================================
-  // GET LOGIN / CREATED DATE
-  // ==========================================
 
   const getLoginTime = (item) => {
     return (
@@ -768,7 +639,6 @@ export const HRSystemLayout = () => {
   // ==========================================
   // NOTIFICATION CONTENT
   // ==========================================
-
   const notificationContent = (
     <div
       style={{
@@ -777,22 +647,17 @@ export const HRSystemLayout = () => {
         overflowY: "auto",
         background: "#fff",
         borderRadius: 18,
-        boxShadow:
-          "0 20px 60px rgba(0,0,0,0.2)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
         padding: 12,
       }}
     >
-      {/* HEADER */}
-
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding:
-            "10px 12px 14px",
-          borderBottom:
-            "1px solid #eeeeee",
+          padding: "10px 12px 14px",
+          borderBottom: "1px solid #eeeeee",
         }}
       >
         <div
@@ -825,14 +690,11 @@ export const HRSystemLayout = () => {
             count={users.length}
             overflowCount={99}
             style={{
-              backgroundColor:
-                "#ef4444",
+              backgroundColor: "#ef4444",
             }}
           />
         )}
       </div>
-
-      {/* LOADING */}
 
       {usersLoading && (
         <div
@@ -847,186 +709,136 @@ export const HRSystemLayout = () => {
         </div>
       )}
 
-      {/* EMPTY */}
+      {!usersLoading && users.length === 0 && (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t.noLoginNotifications}
+          style={{
+            padding: "30px 0",
+          }}
+        />
+      )}
 
-      {!usersLoading &&
-        users.length === 0 && (
-          <Empty
-            image={
-              Empty.PRESENTED_IMAGE_SIMPLE
-            }
-            description={
-              t.noLoginNotifications
-            }
-            style={{
-              padding: "30px 0",
-            }}
-          />
-        )}
+      {!usersLoading && users.length > 0 && (
+        <List
+          dataSource={users}
+          split
+          renderItem={(item, index) => {
+            const userName = getUserName(item);
+            const email = getUserEmail(item);
+            const userRoles = getUserRoles(item);
+            const loginTime = getLoginTime(item);
 
-      {/* USERS */}
-
-      {!usersLoading &&
-        users.length > 0 && (
-          <List
-            dataSource={users}
-            split
-            renderItem={(item, index) => {
-              const userName =
-                getUserName(item);
-
-              const email =
-                getUserEmail(item);
-
-              const userRoles =
-                getUserRoles(item);
-
-              const loginTime =
-                getLoginTime(item);
-
-              return (
-                <List.Item
-                  key={
-                    item?.id ||
-                    item?.Id ||
-                    index
+            return (
+              <List.Item
+                key={item?.id || item?.Id || index}
+                style={{
+                  padding: "14px 8px",
+                }}
+              >
+                <List.Item.Meta
+                  avatar={
+                    <Avatar
+                      size={44}
+                      style={{
+                        background: "linear-gradient(135deg,#ff416c,#ff4b2b)",
+                      }}
+                      icon={<LoginOutlined />}
+                    />
                   }
-                  style={{
-                    padding:
-                      "14px 8px",
-                  }}
-                >
-                  <List.Item.Meta
-                    avatar={
-                      <Avatar
-                        size={44}
+                  title={
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                    >
+                      <span
                         style={{
-                          background:
-                            "linear-gradient(135deg,#ff416c,#ff4b2b)",
-                        }}
-                        icon={
-                          <LoginOutlined />
-                        }
-                      />
-                    }
-                    title={
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent:
-                            "space-between",
-                          alignItems:
-                            "center",
-                          gap: 10,
+                          fontWeight: 700,
+                          color: "#222",
                         }}
                       >
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            color: "#222",
-                          }}
-                        >
-                          {userName}
-                        </span>
+                        {userName}
+                      </span>
 
-                        <Tag
-                          color="red"
-                          style={{
-                            margin: 0,
-                            borderRadius: 6,
-                          }}
-                        >
-                          {userRoles}
-                        </Tag>
+                      <Tag
+                        color="red"
+                        style={{
+                          margin: 0,
+                          borderRadius: 6,
+                        }}
+                      >
+                        {userRoles}
+                      </Tag>
+                    </div>
+                  }
+                  description={
+                    <div
+                      style={{
+                        marginTop: 6,
+                        lineHeight: 1.7,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "#555",
+                        }}
+                      >
+                        <strong>{t.email}:</strong> {email}
                       </div>
-                    }
-                    description={
-                      <div
-                        style={{
-                          marginTop: 6,
-                          lineHeight: 1.7,
-                        }}
-                      >
-                        {/* EMAIL */}
 
+                      {loginTime && (
                         <div
                           style={{
-                            fontSize: 13,
-                            color: "#555",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                            fontSize: 12,
+                            color: "#999",
+                            marginTop: 3,
                           }}
                         >
-                          <strong>
-                            {t.email}:
-                          </strong>{" "}
-                          {email}
+                          <LoginOutlined />
+
+                          <span>{t.loginTime}:</span>
+
+                          <span>
+                            {new Date(loginTime).toLocaleString(
+                              language === "tj" ? "tg-TJ" : "ru-RU",
+                            )}
+                          </span>
                         </div>
-
-                        {/* LOGIN TIME */}
-
-                        {loginTime && (
-                          <div
-                            style={{
-                              display:
-                                "flex",
-                              alignItems:
-                                "center",
-                              gap: 5,
-                              fontSize: 12,
-                              color:
-                                "#999",
-                              marginTop: 3,
-                            }}
-                          >
-                            <LoginOutlined />
-
-                            <span>
-                              {
-                                t.loginTime
-                              }
-                              :
-                            </span>
-
-                            <span>
-                              {new Date(
-                                loginTime
-                              ).toLocaleString(
-                                language ===
-                                  "tj"
-                                  ? "tg-TJ"
-                                  : "ru-RU"
-                              )}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    }
-                  />
-                </List.Item>
-              );
-            }}
-          />
-        )}
+                      )}
+                    </div>
+                  }
+                />
+              </List.Item>
+            );
+          }}
+        />
+      )}
     </div>
   );
 
   // ==========================================
   // INITIAL LOADING
   // ==========================================
-
   if (!initialized) {
     return (
       <Layout
         style={{
           minHeight: "100vh",
-          background:
-            "linear-gradient(135deg,#4b0000,#8b0000,#c1121f)",
+          background: "linear-gradient(135deg,#4b0000,#8b0000,#c1121f)",
         }}
       >
         <div
           style={{
             display: "flex",
-            justifyContent:
-              "center",
+            justifyContent: "center",
             alignItems: "center",
             height: "100vh",
           }}
@@ -1049,14 +861,10 @@ export const HRSystemLayout = () => {
       <Layout
         style={{
           minHeight: "100vh",
-          background:
-            "linear-gradient(135deg,#4b0000,#8b0000,#c1121f)",
+          background: "linear-gradient(135deg,#4b0000,#8b0000,#c1121f)",
         }}
       >
-        {/* ==========================================
-            SIDEBAR
-        ========================================== */}
-
+        {/* SIDEBAR */}
         <Sider
           collapsed={collapsed}
           trigger={null}
@@ -1064,55 +872,42 @@ export const HRSystemLayout = () => {
           collapsedWidth={80}
           style={{
             margin: 15,
-            height:
-              "calc(100vh - 30px)",
+            height: "calc(100vh - 30px)",
             borderRadius: 20,
             overflow: "hidden",
-            background:
-              "linear-gradient(180deg,#8b0000 0%,#650000 100%)",
-            boxShadow:
-              "0 20px 40px rgba(0,0,0,.35)",
+            background: "linear-gradient(180deg,#8b0000 0%,#650000 100%)",
+            boxShadow: "0 20px 40px rgba(0,0,0,.35)",
             position: "sticky",
             top: 15,
-            alignSelf:
-              "flex-start",
+            alignSelf: "flex-start",
           }}
         >
           <div
             style={{
               height: "100%",
               display: "flex",
-              flexDirection:
-                "column",
+              flexDirection: "column",
               overflow: "hidden",
             }}
           >
-            {/* LOGO */}
-
             <div
               style={{
                 height: 90,
                 flexShrink: 0,
                 display: "flex",
-                alignItems:
-                  "center",
-                justifyContent:
-                  collapsed
-                    ? "center"
-                    : "space-between",
-                padding: "0 18px",
-                borderBottom:
-                  "1px solid rgba(255,255,255,0.1)",
+                alignItems: "center",
+                justifyContent: collapsed ? "center" : "space-between",
+                padding: "0 2px",
+                borderBottom: "1px solid rgba(255,255,255,0.1)",
               }}
             >
               <img
                 src={active}
                 style={{
-                  width: 45,
-                  height: 45,
-                  borderRadius:
-                    "50%",
-                  objectFit: "cover",
+                  width: 90,
+                  height: 90,
+                  borderRadius: "50%",
+                  objectFit: "contain",
                 }}
                 alt="Logo"
               />
@@ -1123,22 +918,15 @@ export const HRSystemLayout = () => {
                   icon={
                     <MenuFoldOutlined
                       style={{
-                        color:
-                          "#fff",
+                        color: "#fff",
                         fontSize: 16,
                       }}
                     />
                   }
-                  onClick={() =>
-                    setCollapsed(
-                      true
-                    )
-                  }
+                  onClick={() => setCollapsed(true)}
                 />
               )}
             </div>
-
-            {/* COLLAPSED */}
 
             {collapsed && (
               <Button
@@ -1146,34 +934,24 @@ export const HRSystemLayout = () => {
                 icon={
                   <MenuUnfoldOutlined
                     style={{
-                      color:
-                        "#fff",
+                      color: "#fff",
                       fontSize: 16,
                     }}
                   />
                 }
-                onClick={() =>
-                  setCollapsed(
-                    false
-                  )
-                }
+                onClick={() => setCollapsed(false)}
                 style={{
-                  margin:
-                    "10px auto",
+                  margin: "10px auto",
                   flexShrink: 0,
                 }}
               />
             )}
 
-            {/* MENU */}
-
             <div
               style={{
                 flex: 1,
-                overflowY:
-                  "auto",
-                overflowX:
-                  "hidden",
+                overflowY: "auto",
+                overflowX: "hidden",
                 paddingBottom: 10,
               }}
             >
@@ -1181,104 +959,66 @@ export const HRSystemLayout = () => {
                 theme="dark"
                 mode="inline"
                 items={menuItems}
-                selectedKeys={[
-                  location.pathname,
-                ]}
-                openKeys={
-                  openKeys
-                }
-                onOpenChange={
-                  handleOpenChange
-                }
-                onClick={
-                  handleMenuClick
-                }
+                selectedKeys={[location.pathname]}
+                openKeys={openKeys}
+                onOpenChange={handleOpenChange}
+                onClick={handleMenuClick}
                 style={{
-                  background:
-                    "transparent",
+                  background: "transparent",
                   border: "none",
                 }}
               />
             </div>
 
-            {/* LOGOUT */}
-
             <div
               style={{
                 display: "flex",
-                justifyContent:
-                  "end",
+                justifyContent: "end",
                 flexShrink: 0,
-                padding:
-                  collapsed
-                    ? "8px"
-                    : "10px 15px",
-                borderTop:
-                  "1px solid rgba(255,255,255,0.12)",
+                padding: collapsed ? "8px" : "10px 15px",
+                borderTop: "1px solid rgba(255,255,255,0.12)",
               }}
             >
               <Button
                 type="text"
-                icon={
-                  <LogoutOutlined />
-                }
-                onClick={
-                  handleLogout
-                }
+                icon={<PoweroffOutlined />}
+                onClick={handleLogout}
                 style={{
-                  width:
-                    collapsed
-                      ? "60px"
-                      : "90px",
+                  width: collapsed ? "60px" : "100px",
                   height: "34px",
-                  color:
-                    "#fff",
+                  color: "#fff",
                   fontSize: 14,
-                  padding:
-                    "0 10px",
+                  padding: "0 12px",
                 }}
               >
-                {!collapsed &&
-                  t.logout}
+                {!collapsed && t.logout}
               </Button>
             </div>
           </div>
         </Sider>
-
-        {/* ==========================================
-            MAIN
-        ========================================== */}
 
         <Layout
           style={{
             background:
               "linear-gradient(135deg,#f8f8f8 0%,#e2e2e2 50%,#cfcfcf 100%)",
             borderRadius: 20,
-            boxShadow:
-              "0 10px 30px rgba(0,0,0,0.12)",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
           }}
         >
           {/* HEADER */}
-
           <div
             style={{
               height: 75,
               margin: 15,
               borderRadius: 20,
-              background:
-                "rgba(255,255,255,.75)",
+              background: "rgba(255,255,255,.75)",
               display: "flex",
-              alignItems:
-                "center",
-              justifyContent:
-                "space-between",
+              alignItems: "center",
+              justifyContent: "space-between",
               padding: "0 20px",
-              boxShadow:
-                "0 5px 20px rgba(0,0,0,.08)",
+              boxShadow: "0 5px 20px rgba(0,0,0,.08)",
             }}
           >
-            {/* TITLE */}
-
             <h2
               style={{
                 margin: 0,
@@ -1289,42 +1029,22 @@ export const HRSystemLayout = () => {
               {t.systemTitle}
             </h2>
 
-            {/* HEADER ACTIONS */}
-
             <div
               style={{
                 display: "flex",
-                alignItems:
-                  "center",
+                alignItems: "center",
                 gap: 10,
               }}
             >
-              {/* RU */}
-
               <Button
                 danger
                 style={{
                   borderRadius: 16,
-                  fontWeight:
-                    language ===
-                    "ru"
-                      ? 700
-                      : 400,
+                  fontWeight: language === "ru" ? 700 : 400,
                 }}
-                icon={
-                  <GlobalOutlined />
-                }
-                type={
-                  language ===
-                  "ru"
-                    ? "primary"
-                    : "default"
-                }
-                onClick={() =>
-                  handleLanguageChange(
-                    "ru"
-                  )
-                }
+                icon={<GlobalOutlined />}
+                type={language === "ru" ? "primary" : "default"}
+                onClick={() => handleLanguageChange("ru")}
               >
                 RU
               </Button>
@@ -1333,78 +1053,42 @@ export const HRSystemLayout = () => {
                 danger
                 style={{
                   borderRadius: 16,
-                  fontWeight:
-                    language ===
-                    "tj"
-                      ? 700
-                      : 400,
+                  fontWeight: language === "tj" ? 700 : 400,
                 }}
-                icon={
-                  <GlobalOutlined />
-                }
-                type={
-                  language ===
-                  "tj"
-                    ? "primary"
-                    : "default"
-                }
-                onClick={() =>
-                  handleLanguageChange(
-                    "tj"
-                  )
-                }
+                icon={<GlobalOutlined />}
+                type={language === "tj" ? "primary" : "default"}
+                onClick={() => handleLanguageChange("tj")}
               >
                 TJ
               </Button>
 
               <Button
                 danger
-                icon={
-                  <QuestionCircleOutlined />
-                }
-                onClick={
-                  handleFAQ
-                }
+                icon={<QuestionCircleOutlined />}
+                onClick={handleFAQ}
               >
                 {t.faq}
               </Button>
 
               {isAdmin && (
                 <Dropdown
-                  open={
-                    notificationOpen
-                  }
-                  onOpenChange={(
-                    open
-                  ) => {
-                    setNotificationOpen(
-                      open
-                    );
+                  open={notificationOpen}
+                  onOpenChange={(open) => {
+                    setNotificationOpen(open);
 
                     if (open) {
                       loadUsers();
                     }
                   }}
-                  popupRender={() =>
-                    notificationContent
-                  }
-                  trigger={[
-                    "click",
-                  ]}
+                  popupRender={() => notificationContent}
+                  trigger={["click"]}
                   placement="bottomRight"
                 >
                   <Badge
-                    count={
-                      users.length
-                    }
-                    overflowCount={
-                      99
-                    }
+                    count={users.length}
+                    overflowCount={99}
                     size="small"
-                    offset={[
-                      -2,
-                      2,
-                    ]}
+                    offset={[-2, 2]}
                   >
                     <Button
                       danger
@@ -1419,12 +1103,9 @@ export const HRSystemLayout = () => {
                       style={{
                         width: 35,
                         height: 35,
-                        display:
-                          "flex",
-                        alignItems:
-                          "center",
-                        justifyContent:
-                          "center",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     />
                   </Badge>
@@ -1433,19 +1114,14 @@ export const HRSystemLayout = () => {
             </div>
           </div>
 
-
           <Content
             style={{
-              margin:
-                "0 15px 15px",
+              margin: "0 15px 15px",
               borderRadius: 25,
               padding: 25,
-              background:
-                "#fff",
-              overflow:
-                "auto",
-              minHeight:
-                "calc(100vh - 120px)",
+              background: "#fff",
+              overflow: "auto",
+              minHeight: "calc(100vh - 120px)",
             }}
           >
             <Outlet />
@@ -1453,20 +1129,15 @@ export const HRSystemLayout = () => {
         </Layout>
       </Layout>
 
-
       <Modal
         open={faqOpen}
-        onCancel={() =>
-          setFaqOpen(false)
-        }
+        onCancel={() => setFaqOpen(false)}
         footer={[
           <Button
             key="close"
             type="primary"
             danger
-            onClick={() =>
-              setFaqOpen(false)
-            }
+            onClick={() => setFaqOpen(false)}
             style={{
               borderRadius: 12,
               paddingLeft: 25,
@@ -1482,15 +1153,13 @@ export const HRSystemLayout = () => {
           <div
             style={{
               display: "flex",
-              alignItems:
-                "center",
+              alignItems: "center",
               gap: 10,
             }}
           >
             <QuestionCircleOutlined
               style={{
-                color:
-                  "#ef4444",
+                color: "#ef4444",
                 fontSize: 24,
               }}
             />
@@ -1515,45 +1184,34 @@ export const HRSystemLayout = () => {
             accordion
             bordered={false}
             style={{
-              background:
-                "#fafafa",
+              background: "#fafafa",
               borderRadius: 14,
             }}
           >
-            {t.faqQuestions.map(
-              (
-                item,
-                index
-              ) => (
-                <Panel
-                  key={index}
-                  header={
-                    <span
-                      style={{
-                        fontWeight: 600,
-                      }}
-                    >
-                      {index + 1}.{" "}
-                      {
-                        item.question
-                      }
-                    </span>
-                  }
-                >
-                  <Paragraph
+            {t.faqQuestions.map((item, index) => (
+              <Panel
+                key={index}
+                header={
+                  <span
                     style={{
-                      marginBottom: 0,
-                      color: "#555",
-                      lineHeight: 1.7,
+                      fontWeight: 600,
                     }}
                   >
-                    {
-                      item.answer
-                    }
-                  </Paragraph>
-                </Panel>
-              )
-            )}
+                    {index + 1}. {item.question}
+                  </span>
+                }
+              >
+                <Paragraph
+                  style={{
+                    marginBottom: 0,
+                    color: "#555",
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {item.answer}
+                </Paragraph>
+              </Panel>
+            ))}
           </Collapse>
         </div>
       </Modal>
