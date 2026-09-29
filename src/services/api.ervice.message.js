@@ -1,10 +1,11 @@
 import axios from "axios";
+import { CHAT_BASE, getLogin } from "./chat.config";
 
-const API = axios.create({
-    baseURL: import.meta.env.VITE_API_Chat,
-    headers: {
-        "Login": "amin", // TODO: заменить на реального пользователя, когда будет готова авторизация
-    },
+const API = axios.create({ baseURL: CHAT_BASE });
+
+API.interceptors.request.use((config) => {
+  config.headers.Login = getLogin();
+  return config;
 });
 
 export const getMessages = async (chatId, limit = 50) => {
@@ -35,11 +36,7 @@ export const sendFile = async (chatId, file) => {
     formData.append("chat_id", chatId);
     formData.append("file", file);
 
-    const res = await API.post(`/messages/file`, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
+    const res = await API.post(`/messages/file`, formData);
     return res.data;
   } catch (error) {
     console.error(error);
@@ -51,7 +48,7 @@ export const downloadFile = async (fileId) => {
   const res = await API.get(`/files/${fileId}/download`, {
     responseType: "blob",
   });
-  return res.data; 
+  return res.data;
 };
 
 export const updateMessage = async (messageId, content) => {
@@ -74,4 +71,16 @@ export const removeReactionApi = async (messageId, reaction) => {
     data: { reaction },
   });
   return res.data;
+};
+export const uploadAvatar = async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await API.post(`/users/avatar`, formData);
+    return res.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
 };

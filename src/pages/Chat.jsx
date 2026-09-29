@@ -17,17 +17,21 @@ export default function ChatPage() {
   return (
     <div className="h-[calc(100vh-32px)] min-h-[600px] bg-[#f5f7fb] p-4 md:p-6">
       <div className="mx-auto flex h-full max-w-[1500px] overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-        <ChatSidebar
-          selectedChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          hiddenOnMobile={mobileChatOpen}
-        />
+        <div className="h-full min-h-0 shrink-0">
+          <ChatSidebar
+            selectedChatId={activeChatId}
+            onSelectChat={handleSelectChat}
+            hiddenOnMobile={mobileChatOpen}
+          />
+        </div>
 
-        <ChatThread
-          chat={currentChat}
-          onBack={handleBack}
-          visibleOnMobile={mobileChatOpen}
-        />
+        <div className="h-full min-h-0 flex-1 overflow-hidden">
+          <ChatThread
+            chat={currentChat}
+            onBack={handleBack}
+            visibleOnMobile={mobileChatOpen}
+          />
+        </div>
       </div>
     </div>
   );

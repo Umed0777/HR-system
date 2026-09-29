@@ -50,3 +50,16 @@ export function getMessagePreview(message) {
   if (message.content) return message.content;
   return "📎 Вложение";
 }
+export const getSender = (msg, chat) => {
+  const id = msg.sender_id ?? msg.sender?.id ?? msg.user_id;
+  const member = chat?.members?.find(
+    (m) => (m.user_id ?? m.user?.id) === id,
+  )?.user;
+  const s = msg.sender ?? member;
+
+  return {
+    key: id ?? s?.username ?? msg.sender_username,
+    username: s?.username ?? msg.sender_username,
+    avatar_url: s?.avatar_url,
+  };
+};

@@ -50,21 +50,39 @@ export default function FileAttachment({ file }) {
   }
 
   const isImage = file.mime_type?.startsWith("image/");
+  const isVideo = file.mime_type?.startsWith("video/");
 
-  return isImage ? (
-    <Image
-      src={blobUrl}
-      alt={file.filename}
-      className="max-h-48 max-w-full rounded-lg object-cover"
-      style={{
-        maxHeight: 192,
-        maxWidth: "100%",
-        objectFit: "cover",
-        borderRadius: 8,
-      }}
-    />
-  ) : (
+  if (isImage) {
+    return (
+      <Image
+        src={blobUrl}
+        alt={file.filename}
+        className="max-h-48 max-w-full rounded-lg object-cover"
+        style={{
+          maxHeight: 192,
+          maxWidth: "100%",
+          objectFit: "cover",
+          borderRadius: 8,
+        }}
+      />
+    );
+  }
+
+  if (isVideo) {
+    return (
+      <video
+        src={blobUrl}
+        controls
+        preload="metadata"
+        className="max-h-64 max-w-full rounded-lg"
+        style={{ maxHeight: 256, maxWidth: "100%" }}
+      />
+    );
+  }
+
+  return (
     <a
+    
       href={blobUrl}
       download={file.filename}
       className="flex items-center gap-2 text-sm text-indigo-600 underline"
