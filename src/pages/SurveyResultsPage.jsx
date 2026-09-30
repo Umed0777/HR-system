@@ -497,9 +497,29 @@ export const SurveyResultsPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedResult, setSelectedResult] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [lang, setLang] = useState(() => {
-    return localStorage.getItem("survey_manager_lang") || "ru";
-  });
+ const [lang, setLang] = useState(
+  () =>
+    localStorage.getItem("survey_manager_lang") ||
+    localStorage.getItem("language") ||
+    "ru"
+);
+useEffect(() => {
+  const syncLang = () => {
+    const newLang =
+      localStorage.getItem("survey_manager_lang") ||
+      localStorage.getItem("language") ||
+      "ru";
+    setLang(newLang);
+  };
+  window.addEventListener("app-language-change", syncLang);
+  window.addEventListener("storage", syncLang);
+  window.addEventListener("focus", syncLang);
+  return () => {
+    window.removeEventListener("app-language-change", syncLang);
+    window.removeEventListener("storage", syncLang);
+    window.removeEventListener("focus", syncLang);
+  };
+}, []);
 
   const t = {
     ru: {
