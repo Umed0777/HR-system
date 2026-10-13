@@ -1,7 +1,6 @@
 import { Flex, Typography } from "antd";
 import { ArrowUpRight, BookOpen, GraduationCap } from "lucide-react";
 import Lerna from "../assets/Lerna.png";
-import Osbp from "../assets/OSBP.png";
 
 const { Title, Text } = Typography;
 
@@ -12,7 +11,8 @@ const courses = [
     subtitle: "Образование и профессиональное развитие",
     description:
       "Изучайте образовательные программы, развивайте профессиональные навыки и открывайте новые возможности.",
-    image:Osbp,
+    image:
+      "https://www.osbp-ca.org/images/ksep/logo/osbp-logo-transparent.png",
     url: "https://www.osbp-ca.org/",
     accent: "#ff4d4f",
     tag: "Образовательная платформа",
@@ -34,6 +34,7 @@ export default function CourseCatalog() {
   return (
     <section className="min-h-screen w-full bg-gradient-to-b from-white via-rose-50/40 to-white px-4 py-12 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl">
+        {/* Заголовок */}
         <div className="mb-12 text-center">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-100 bg-white px-4 py-2 text-sm font-semibold text-red-500 shadow-sm">
             <GraduationCap size={18} />
@@ -67,6 +68,8 @@ export default function CourseCatalog() {
             узнайте больше о доступных образовательных возможностях.
           </Text>
         </div>
+
+        {/* Карточки */}
         <Flex
           align="stretch"
           justify="center"
@@ -113,6 +116,8 @@ export default function CourseCatalog() {
                   <ArrowUpRight size={22} />
                 </div>
               </div>
+
+              {/* Нижняя часть карточки */}
               <div className="p-7">
                 <Flex align="center" gap={3} className="mb-3">
                   <div
@@ -163,6 +168,8 @@ export default function CourseCatalog() {
             </a>
           ))}
         </Flex>
+
+        {/* Нижняя информация */}
         <div className="mt-12 text-center">
           <Text style={{ color: "#9ca3af", fontSize: 13 }}>
             Выберите платформу, чтобы перейти на официальный сайт

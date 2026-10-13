@@ -37,16 +37,15 @@ import {
   GlobalOutlined,
   BellOutlined,
   LoginOutlined,
-  ExportOutlined,
-  PoweroffOutlined,
   BookOutlined,
+  HistoryOutlined,
 } from "@ant-design/icons";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
-import active from "../assets/ActivUpdate.png";
+import active from "../assets/active.png";
 
 // ==========================================
 // ZUSTAND NOTIFICATION STORE
@@ -78,39 +77,21 @@ export const HRSystemLayout = () => {
     fetchUsers,
   } = useUserNotificationStore();
 
-  // ==========================================
-  // LANGUAGE — единый ключ "language"
-  // ==========================================
   const [language, setLanguage] = useState(
-    () => localStorage.getItem("language") || "ru",
+    localStorage.getItem("language") || "ru",
   );
-
-  // Слушаем смену языка из других вкладок и из других компонентов
-  useEffect(() => {
-    const handler = (e) => {
-      const newLang =
-        (e?.type === "languagechange" ? e.detail : e?.newValue) ||
-        localStorage.getItem("language") ||
-        "ru";
-      setLanguage(newLang);
-    };
-
-    window.addEventListener("languagechange", handler);
-    window.addEventListener("storage", handler);
-
-    return () => {
-      window.removeEventListener("languagechange", handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, []);
 
   const navigate = useNavigate();
   const location = useLocation();
 
+  // ==========================================
+  // TRANSLATIONS
+  // ==========================================
+
   const translations = {
     ru: {
       loading: "Загрузка...",
-      systemTitle: "Система управления кадрами",
+      systemTitle: "HR Management System",
 
       administration: "Администрирование",
       management: "Управление",
@@ -127,11 +108,12 @@ export const HRSystemLayout = () => {
       surveys: "Опросы",
       surveyResults: "Результаты опросов",
       testResults: "Результаты тестов",
+      testHistory: "История стажеров",
 
       news: "Новости",
       myArticles: "Мои статьи",
       chat: "Чат",
-
+      courseCatalog: "Каталог курсов",
       logout: "Выйти",
 
       faq: "FAQ",
@@ -213,7 +195,7 @@ export const HRSystemLayout = () => {
 
     tj: {
       loading: "Боргир шуда истодааст...",
-      systemTitle: "Системаи идоракунии кадрҳо",
+      systemTitle: "Системаи идоракунии HR",
 
       administration: "Идоракунӣ",
       management: "Идоракунӣ",
@@ -230,13 +212,14 @@ export const HRSystemLayout = () => {
       surveys: "Пурсишҳо",
       surveyResults: "Натиҷаҳои пурсишҳо",
       testResults: "Натиҷаҳои тестҳо",
+      testHistory: "Таърихи супоридан",
 
       news: "Хабарҳо",
       myArticles: "Мақолаҳои ман",
       chat: "Чат",
 
       logout: "Баромадан",
-
+      courseCatalog: "Феҳристи курсҳо",
       faq: "FAQ",
       faqTitle: "Роҳнамо оид ба Пойгоҳи донишҳои Бонк",
       close: "Пӯшидан",
@@ -311,9 +294,6 @@ export const HRSystemLayout = () => {
 
   const t = translations[language];
 
-  // ==========================================
-  // ROLES
-  // ==========================================
   const roles = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("roles") || "[]");
@@ -327,13 +307,12 @@ export const HRSystemLayout = () => {
   // ==========================================
   // AUTH
   // ==========================================
+
   useEffect(() => {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      navigate("/login", {
-        replace: true,
-      });
+      navigate("/login", { replace: true });
     } else {
       setInitialized(true);
     }
@@ -342,6 +321,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // OPEN MENU
   // ==========================================
+
   useEffect(() => {
     if (!initialized) return;
 
@@ -360,7 +340,13 @@ export const HRSystemLayout = () => {
     }
 
     if (
-      ["/test", "/test-taking", "/surveys", "/survey-results"].includes(path)
+      [
+        "/test",
+        "/test-taking",
+        "/test-history",
+        "/surveys",
+        "/survey-results",
+      ].includes(path)
     ) {
       newOpenKeys.push("testing");
     }
@@ -371,11 +357,12 @@ export const HRSystemLayout = () => {
   // ==========================================
   // LOAD USERS FOR NOTIFICATIONS
   // ==========================================
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
 
     try {
-      await fetchUsers(1, 100);
+      await fetchUsers();
     } catch (error) {
       console.error("Ошибка загрузки пользователей:", error);
     }
@@ -384,6 +371,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // LOAD USERS
   // ==========================================
+
   useEffect(() => {
     if (!initialized || !isAdmin) {
       return;
@@ -391,6 +379,7 @@ export const HRSystemLayout = () => {
 
     loadUsers();
 
+    // Обновляем список пользователей каждые 30 секунд
     const interval = setInterval(() => {
       loadUsers();
     }, 30000);
@@ -403,28 +392,29 @@ export const HRSystemLayout = () => {
   // ==========================================
   // LOGOUT
   // ==========================================
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("user");
 
-    navigate("/login", {
-      replace: true,
-    });
+    navigate("/login", { replace: true });
   };
 
   // ==========================================
-  // LANGUAGE — оповещаем все компоненты
+  // LANGUAGE
   // ==========================================
+
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
+
     localStorage.setItem("language", lang);
-    window.dispatchEvent(new CustomEvent("languagechange", { detail: lang }));
   };
 
   // ==========================================
   // FAQ
   // ==========================================
+
   const handleFAQ = () => {
     setFaqOpen(true);
   };
@@ -432,10 +422,14 @@ export const HRSystemLayout = () => {
   // ==========================================
   // MENU
   // ==========================================
+
   const menuItems = useMemo(() => {
     const items = [];
 
+    // ========================================
     // ADMIN / SUPERADMIN
+    // ========================================
+
     if (isAdmin) {
       items.push(
         {
@@ -449,30 +443,23 @@ export const HRSystemLayout = () => {
               icon: <ApartmentOutlined />,
               label: t.management,
             },
+
             {
               key: "/position",
               icon: <IdcardOutlined />,
               label: t.position,
             },
+
             {
               key: "/subdepartment",
               icon: <ClusterOutlined />,
               label: t.department,
             },
+
             {
               key: "/employee",
               icon: <TeamOutlined />,
               label: t.employees,
-            },
-            {
-              key: "/test-taking",
-              icon: <CheckSquareOutlined />,
-              label: t.testResults,
-            },
-            {
-              key: "/survey-results",
-              icon: <BarChartOutlined />,
-              label: t.surveyResults,
             },
           ],
         },
@@ -488,16 +475,18 @@ export const HRSystemLayout = () => {
               icon: <VideoCameraOutlined />,
               label: t.videoLessons,
             },
+
             {
               key: "/documentation",
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
-                     {
-  key: "/course-catalog",
-  icon: <BookOutlined />,
-  label: t.courseCatalog,
-},
+
+                    {
+          key: "/course-catalog",
+          icon: <ReadOutlined />,
+          label: t.courseCatalog,
+        },
           ],
         },
 
@@ -512,17 +501,51 @@ export const HRSystemLayout = () => {
               icon: <FormOutlined />,
               label: t.tests,
             },
+
             {
               key: "/surveys",
               icon: <BarsOutlined />,
               label: t.surveys,
             },
+
+            {
+              key: "/survey-results",
+              icon: <BarChartOutlined />,
+              label: t.surveyResults,
+            },
+
+            {
+              key: "/test-taking",
+              icon: <CheckSquareOutlined />,
+              label: t.testResults,
+            },
+
+            {
+              key: "/test-history",
+              icon: <HistoryOutlined />,
+              label: t.testHistory,
+            },
           ],
         },
+
+        // {
+        //   key: "/article",
+        //   icon: <ReadOutlined />,
+        //   label: t.news,
+        // },
+
+        // {
+        //   key: "/my-articles",
+        //   icon: <UserOutlined />,
+        //   label: t.myArticles,
+        // },
       );
     }
 
+    // ========================================
     // BASIC
+    // ========================================
+
     if (
       roles.includes("Basic") &&
       !roles.includes("Admin") &&
@@ -540,12 +563,13 @@ export const HRSystemLayout = () => {
               icon: <VideoCameraOutlined />,
               label: t.videoLessons,
             },
+
             {
               key: "/documentation",
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
-                     {
+{
   key: "/course-catalog",
   icon: <BookOutlined />,
   label: t.courseCatalog,
@@ -564,6 +588,7 @@ export const HRSystemLayout = () => {
               icon: <FormOutlined />,
               label: t.tests,
             },
+
             {
               key: "/surveys",
               icon: <BarsOutlined />,
@@ -572,6 +597,13 @@ export const HRSystemLayout = () => {
           ],
         },
       );
+      items.push({
+      key: "/chat",
+      icon: <MessageOutlined />,
+      label: t.chat,
+    });
+
+    return items;
     }
 
     return items;
@@ -580,6 +612,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // MENU OPEN
   // ==========================================
+
   const handleOpenChange = (keys) => {
     setOpenKeys(keys);
   };
@@ -587,6 +620,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // MENU CLICK
   // ==========================================
+
   const handleMenuClick = ({ key }) => {
     if (key.startsWith("/")) {
       navigate(key);
@@ -596,6 +630,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // GET USER NAME
   // ==========================================
+
   const getUserName = (item) => {
     const firstName =
       item?.firstName || item?.FirstName || item?.first_name || "";
@@ -622,6 +657,10 @@ export const HRSystemLayout = () => {
     return item?.email || item?.Email || "Email не указан";
   };
 
+  // ==========================================
+  // GET USER ROLE
+  // ==========================================
+
   const getUserRoles = (item) => {
     if (Array.isArray(item?.roles)) {
       return item.roles.join(", ");
@@ -633,6 +672,10 @@ export const HRSystemLayout = () => {
 
     return item?.role || item?.Role || "Basic";
   };
+
+  // ==========================================
+  // GET LOGIN / CREATED DATE
+  // ==========================================
 
   const getLoginTime = (item) => {
     return (
@@ -650,6 +693,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // NOTIFICATION CONTENT
   // ==========================================
+
   const notificationContent = (
     <div
       style={{
@@ -662,6 +706,8 @@ export const HRSystemLayout = () => {
         padding: 12,
       }}
     >
+      {/* HEADER */}
+
       <div
         style={{
           display: "flex",
@@ -707,6 +753,8 @@ export const HRSystemLayout = () => {
         )}
       </div>
 
+      {/* LOADING */}
+
       {usersLoading && (
         <div
           style={{
@@ -720,6 +768,8 @@ export const HRSystemLayout = () => {
         </div>
       )}
 
+      {/* EMPTY */}
+
       {!usersLoading && users.length === 0 && (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -730,14 +780,19 @@ export const HRSystemLayout = () => {
         />
       )}
 
+      {/* USERS */}
+
       {!usersLoading && users.length > 0 && (
         <List
           dataSource={users}
           split
           renderItem={(item, index) => {
             const userName = getUserName(item);
+
             const email = getUserEmail(item);
+
             const userRoles = getUserRoles(item);
+
             const loginTime = getLoginTime(item);
 
             return (
@@ -793,6 +848,8 @@ export const HRSystemLayout = () => {
                         lineHeight: 1.7,
                       }}
                     >
+                      {/* EMAIL */}
+
                       <div
                         style={{
                           fontSize: 13,
@@ -801,6 +858,8 @@ export const HRSystemLayout = () => {
                       >
                         <strong>{t.email}:</strong> {email}
                       </div>
+
+                      {/* LOGIN TIME */}
 
                       {loginTime && (
                         <div
@@ -838,6 +897,7 @@ export const HRSystemLayout = () => {
   // ==========================================
   // INITIAL LOADING
   // ==========================================
+
   if (!initialized) {
     return (
       <Layout
@@ -875,7 +935,10 @@ export const HRSystemLayout = () => {
           background: "linear-gradient(135deg,#4b0000,#8b0000,#c1121f)",
         }}
       >
-        {/* SIDEBAR */}
+        {/* ==========================================
+            SIDEBAR
+        ========================================== */}
+
         <Sider
           collapsed={collapsed}
           trigger={null}
@@ -901,6 +964,8 @@ export const HRSystemLayout = () => {
               overflow: "hidden",
             }}
           >
+            {/* LOGO */}
+
             <div
               style={{
                 height: 90,
@@ -908,17 +973,17 @@ export const HRSystemLayout = () => {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: collapsed ? "center" : "space-between",
-                padding: "0 2px",
+                padding: "0 18px",
                 borderBottom: "1px solid rgba(255,255,255,0.1)",
               }}
             >
               <img
                 src={active}
                 style={{
-                  width: 90,
-                  height: 90,
+                  width: 45,
+                  height: 45,
                   borderRadius: "50%",
-                  objectFit: "contain",
+                  objectFit: "cover",
                 }}
                 alt="Logo"
               />
@@ -939,6 +1004,8 @@ export const HRSystemLayout = () => {
               )}
             </div>
 
+            {/* COLLAPSED */}
+
             {collapsed && (
               <Button
                 type="text"
@@ -957,6 +1024,8 @@ export const HRSystemLayout = () => {
                 }}
               />
             )}
+
+            {/* MENU */}
 
             <div
               style={{
@@ -981,6 +1050,8 @@ export const HRSystemLayout = () => {
               />
             </div>
 
+            {/* LOGOUT */}
+
             <div
               style={{
                 display: "flex",
@@ -992,14 +1063,14 @@ export const HRSystemLayout = () => {
             >
               <Button
                 type="text"
-                icon={<PoweroffOutlined />}
+                icon={<LogoutOutlined />}
                 onClick={handleLogout}
                 style={{
-                  width: collapsed ? "60px" : "100px",
+                  width: collapsed ? "60px" : "90px",
                   height: "34px",
                   color: "#fff",
                   fontSize: 14,
-                  padding: "0 12px",
+                  padding: "0 10px",
                 }}
               >
                 {!collapsed && t.logout}
@@ -1007,6 +1078,10 @@ export const HRSystemLayout = () => {
             </div>
           </div>
         </Sider>
+
+        {/* ==========================================
+            MAIN
+        ========================================== */}
 
         <Layout
           style={{
@@ -1017,6 +1092,7 @@ export const HRSystemLayout = () => {
           }}
         >
           {/* HEADER */}
+
           <div
             style={{
               height: 75,
@@ -1030,6 +1106,8 @@ export const HRSystemLayout = () => {
               boxShadow: "0 5px 20px rgba(0,0,0,.08)",
             }}
           >
+            {/* TITLE */}
+
             <h2
               style={{
                 margin: 0,
@@ -1040,6 +1118,8 @@ export const HRSystemLayout = () => {
               {t.systemTitle}
             </h2>
 
+            {/* HEADER ACTIONS */}
+
             <div
               style={{
                 display: "flex",
@@ -1047,6 +1127,8 @@ export const HRSystemLayout = () => {
                 gap: 10,
               }}
             >
+              {/* RU */}
+
               <Button
                 danger
                 style={{

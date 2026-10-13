@@ -14,6 +14,9 @@ import { Question } from "../pages/Question";
 import { TestManager } from "../pages/Test";
 import { Answer } from "../pages/Answer";
 import { TestSession } from "../pages/TestSession";
+import OneTimeHistoryPage from "../pages/OneTimeHistoryPage";
+import InternHistoryPage from "../pages/InternHistoryPage";
+import AttemptHistoryPage from "../pages/AttemptHistoryPage";
 import { EmployeeDashboard } from "../pages/EmployeeDashboard";
 import { EmployeeSelector } from "../pages/EmployeeSelector";
 import { VideoLesson } from "../pages/VideoLesson";
@@ -65,21 +68,19 @@ export const HRSystemRoutes = () => {
           </PrivateRoute>
         }
       >
-         <Route index element={<Dashboard />} /> 
+        <Route index element={<Dashboard />} />
         <Route path="announcement" element={<Announcement />} />
         <Route path="reply" element={<Answer />} />
         <Route path="department" element={<Departament />} />
         <Route path="position" element={<Position />} />
         <Route path="employee" element={<Employee />} />
         <Route path="question" element={<Question />} />
-        
         {/* ТЕСТЫ */}
-        <Route 
-          path="test" 
-          element={<TestManager onStartTest={handleStartTest} />} 
+        <Route
+          path="test"
+          element={<TestManager onStartTest={handleStartTest} />}
         />
         <Route path="test-taking" element={<TestSession />} />
-        
         <Route path="subdepartment" element={<Subdepartment />} />
         <Route path="video-lessons" element={<VideoLesson />} />
         <Route path="documentation" element={<Documentation />} />
@@ -87,13 +88,21 @@ export const HRSystemRoutes = () => {
         
         {/* ===== ОПРОСЫ ===== */}
         <Route path="surveys" element={<SurveyManager />} />
-        
         {/*  НОВЫЙ МАРШРУТ ДЛЯ РЕЗУЛЬТАТОВ ОПРОСОВ */}
         <Route path="survey-results" element={<SurveyResultsPage />} />
-        <Route path="article" element = {<Articles />} /> 
+        <Route path="test-history" element={<OneTimeHistoryPage />} />
+        <Route
+          path="test-history/intern/:internId"
+          element={<InternHistoryPage />}
+        />
+        <Route
+          path="test-history/attempt/:attemptId"
+          element={<AttemptHistoryPage />}
+        />
+        <Route path="article" element={<Articles />} />
         <Route path="article/:id" element={<ArticleDetail />} />
         <Route path="my-articles" element={<MyArticles />} />
-        <Route path="chat" element = {<Chat />} />
+        <Route path="chat" element={<Chat />} />
       </Route>
 
       {/* PUBLIC EXTRA */}
