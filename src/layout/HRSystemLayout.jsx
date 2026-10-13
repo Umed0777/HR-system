@@ -37,6 +37,7 @@ import {
   LoginOutlined,
   BookOutlined,
   HistoryOutlined,
+  ReadOutlined,
 } from "@ant-design/icons";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
