@@ -35,6 +35,7 @@ import {
   GlobalOutlined,
   BellOutlined,
   LoginOutlined,
+  BookOutlined,
   HistoryOutlined,
 } from "@ant-design/icons";
 
@@ -110,7 +111,7 @@ export const HRSystemLayout = () => {
       news: "Новости",
       myArticles: "Мои статьи",
       chat: "Чат",
-
+      courseCatalog: "Каталог курсов",
       logout: "Выйти",
 
       faq: "FAQ",
@@ -119,7 +120,7 @@ export const HRSystemLayout = () => {
 
       loginNotifications: "Пользователи",
       noLoginNotifications: "Пользователей нет",
-
+      courseCatalog: "Каталог курсов",
       user: "Пользователь",
       email: "Email",
       role: "Роль",
@@ -216,14 +217,14 @@ export const HRSystemLayout = () => {
       chat: "Чат",
 
       logout: "Баромадан",
-
+      courseCatalog: "Феҳристи курсҳо",
       faq: "FAQ",
       faqTitle: "Роҳнамо оид ба Пойгоҳи донишҳои Бонк",
       close: "Пӯшидан",
 
       loginNotifications: "Корбарон",
       noLoginNotifications: "Корбарон нестанд",
-
+      courseCatalog: "Феҳристи курсҳо",
       user: "Корбар",
       email: "Email",
       role: "Нақш",
@@ -290,10 +291,6 @@ export const HRSystemLayout = () => {
   };
 
   const t = translations[language];
-
-  // ==========================================
-  // ROLES
-  // ==========================================
 
   const roles = useMemo(() => {
     try {
@@ -483,6 +480,12 @@ export const HRSystemLayout = () => {
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
+
+                    {
+          key: "/course-catalog",
+          icon: <ReadOutlined />,
+          label: t.courseCatalog,
+        },
           ],
         },
 
@@ -561,6 +564,11 @@ export const HRSystemLayout = () => {
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
+{
+  key: "/course-catalog",
+  icon: <BookOutlined />,
+  label: t.courseCatalog,
+},
           ],
         },
 

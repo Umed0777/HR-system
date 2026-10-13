@@ -14,6 +14,9 @@ import { Question } from "../pages/Question";
 import { TestManager } from "../pages/Test";
 import { Answer } from "../pages/Answer";
 import { TestSession } from "../pages/TestSession";
+import OneTimeHistoryPage from "../pages/OneTimeHistoryPage";
+import InternHistoryPage from "../pages/InternHistoryPage";
+import AttemptHistoryPage from "../pages/AttemptHistoryPage";
 import { EmployeeDashboard } from "../pages/EmployeeDashboard";
 import { EmployeeSelector } from "../pages/EmployeeSelector";
 import { VideoLesson } from "../pages/VideoLesson";
@@ -25,9 +28,7 @@ import Chat from "../pages/Chat";
 import ArticleDetail from "../pages/ArticleDetail";
 import MyArticles from "../pages/MyArticles";
 import { Dashboard } from "../pages/Dashboard";
-import OneTimeHistoryPage from "../pages/OneTimeHistoryPage";
-import InternHistoryPage from "../pages/InternHistoryPage";
-import AttemptHistoryPage from "../pages/AttemptHistoryPage";
+import CourseCatalog from "../pages/CourseCatalog";
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem("token");
@@ -83,6 +84,8 @@ export const HRSystemRoutes = () => {
         <Route path="subdepartment" element={<Subdepartment />} />
         <Route path="video-lessons" element={<VideoLesson />} />
         <Route path="documentation" element={<Documentation />} />
+        <Route path="/course-catalog" element ={<CourseCatalog />} />
+        
         {/* ===== ОПРОСЫ ===== */}
         <Route path="surveys" element={<SurveyManager />} />
         {/*  НОВЫЙ МАРШРУТ ДЛЯ РЕЗУЛЬТАТОВ ОПРОСОВ */}
@@ -92,7 +95,6 @@ export const HRSystemRoutes = () => {
           path="test-history/intern/:internId"
           element={<InternHistoryPage />}
         />
-        import AttemptHistoryPage from "../pages/AttemptHistoryPage";
         <Route
           path="test-history/attempt/:attemptId"
           element={<AttemptHistoryPage />}
