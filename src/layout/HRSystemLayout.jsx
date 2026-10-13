@@ -39,6 +39,7 @@ import {
   LoginOutlined,
   ExportOutlined,
   PoweroffOutlined,
+  BookOutlined,
 } from "@ant-design/icons";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -139,7 +140,7 @@ export const HRSystemLayout = () => {
 
       loginNotifications: "Пользователи",
       noLoginNotifications: "Пользователей нет",
-
+      courseCatalog: "Каталог курсов",
       user: "Пользователь",
       email: "Email",
       role: "Роль",
@@ -242,7 +243,7 @@ export const HRSystemLayout = () => {
 
       loginNotifications: "Корбарон",
       noLoginNotifications: "Корбарон нестанд",
-
+      courseCatalog: "Феҳристи курсҳо",
       user: "Корбар",
       email: "Email",
       role: "Нақш",
@@ -492,6 +493,11 @@ export const HRSystemLayout = () => {
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
+                     {
+  key: "/course-catalog",
+  icon: <BookOutlined />,
+  label: t.courseCatalog,
+},
           ],
         },
 
@@ -539,6 +545,11 @@ export const HRSystemLayout = () => {
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
+                     {
+  key: "/course-catalog",
+  icon: <BookOutlined />,
+  label: t.courseCatalog,
+},
           ],
         },
 
