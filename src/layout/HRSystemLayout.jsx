@@ -22,9 +22,7 @@ import {
   IdcardOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  ReadOutlined,
   TeamOutlined,
-  UserOutlined,
   DashboardOutlined,
   FileTextOutlined,
   VideoCameraOutlined,
@@ -303,6 +301,7 @@ export const HRSystemLayout = () => {
   }, []);
 
   const isAdmin = roles.includes("Admin") || roles.includes("SuperAdmin");
+  const isBasic = roles.includes("Basic") && !isAdmin;
 
   // ==========================================
   // AUTH
@@ -546,11 +545,7 @@ export const HRSystemLayout = () => {
     // BASIC
     // ========================================
 
-    if (
-      roles.includes("Basic") &&
-      !roles.includes("Admin") &&
-      !roles.includes("SuperAdmin")
-    ) {
+    if (isBasic) {
       items.push(
         {
           key: "announcement",
@@ -597,17 +592,22 @@ export const HRSystemLayout = () => {
           ],
         },
       );
-      items.push({
-      key: "/chat",
-      icon: <MessageOutlined />,
-      label: t.chat,
-    });
+    }
 
-    return items;
+    // ========================================
+    // CHAT — для Admin / SuperAdmin и Basic
+    // ========================================
+
+    if (isAdmin || isBasic) {
+      items.push({
+        key: "/chat",
+        icon: <MessageOutlined />,
+        label: t.chat,
+      });
     }
 
     return items;
-  }, [roles, t, isAdmin]);
+  }, [t, isAdmin, isBasic]);
 
   // ==========================================
   // MENU OPEN
