@@ -25,6 +25,7 @@ import Chat from "../pages/Chat";
 import ArticleDetail from "../pages/ArticleDetail";
 import MyArticles from "../pages/MyArticles";
 import { Dashboard } from "../pages/Dashboard";
+import CourseCatalog from "../pages/CourseCatalog";
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem("token");
@@ -82,6 +83,7 @@ export const HRSystemRoutes = () => {
         <Route path="subdepartment" element={<Subdepartment />} />
         <Route path="video-lessons" element={<VideoLesson />} />
         <Route path="documentation" element={<Documentation />} />
+        <Route path="/course-catalog" element ={<CourseCatalog />} />
         
         {/* ===== ОПРОСЫ ===== */}
         <Route path="surveys" element={<SurveyManager />} />

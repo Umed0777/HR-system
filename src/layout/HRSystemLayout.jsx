@@ -130,7 +130,7 @@ export const HRSystemLayout = () => {
       news: "Новости",
       myArticles: "Мои статьи",
       chat: "Чат",
-
+      courseCatalog: "Каталог курсов",
       logout: "Выйти",
 
       faq: "FAQ",
@@ -235,7 +235,7 @@ export const HRSystemLayout = () => {
       chat: "Чат",
 
       logout: "Баромадан",
-
+      courseCatalog: "Феҳристи курсҳо",
       faq: "FAQ",
       faqTitle: "Роҳнамо оид ба Пойгоҳи донишҳои Бонк",
       close: "Пӯшидан",
@@ -310,9 +310,6 @@ export const HRSystemLayout = () => {
 
   const t = translations[language];
 
-  // ==========================================
-  // ROLES
-  // ==========================================
   const roles = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("roles") || "[]");
@@ -492,6 +489,11 @@ export const HRSystemLayout = () => {
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
+                    {
+          key: "/course-catalog",
+          icon: <ReadOutlined />,
+          label: t.courseCatalog,
+        },
           ],
         },
 
@@ -539,6 +541,11 @@ export const HRSystemLayout = () => {
               icon: <FilePdfOutlined />,
               label: t.documentation,
             },
+            {
+  key: "/course-catalog",
+  icon: <BookOutlined />,
+  label: t.courseCatalog,
+},
           ],
         },
 
