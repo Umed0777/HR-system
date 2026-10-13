@@ -19,7 +19,6 @@ export default function UserHeader({ currentUsername }) {
   const name = me?.username ?? currentUsername;
   const isOnline = me ? onlineUserIds.includes(me.id) : false;
 
-  // как только в сторе появился новый avatar_url, локальное превью не нужно
   useEffect(() => {
     setPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
