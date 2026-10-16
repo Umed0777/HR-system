@@ -5,6 +5,7 @@ import { useChatStore } from "../store/useChat";
 import { useDebounce } from "../hooks/useDebounce";
 import { createChat } from "../services/api.service.chat";
 import { avatarSrc } from "../services/chat.config";
+import { getDisplayName } from "../utils/chat.utils";
 
 const ACCENT = "#ff4b2b";
 const MIN_MEMBERS = 2;
@@ -107,9 +108,9 @@ export default function CreateGroupModal({
               className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 text-sm"
             >
               <Avatar size={20} src={avatarSrc(u.avatar_url)}>
-                {!u.avatar_url && u.username?.[0]?.toUpperCase()}
+                {!u.avatar_url && getDisplayName(u)?.[0]?.toUpperCase()}
               </Avatar>
-              <span>{u.username}</span>
+              <span>{getDisplayName(u)}</span>
               <button
                 onClick={() => toggleUser(u)}
                 style={{ color: ACCENT }}
@@ -169,7 +170,7 @@ export default function CreateGroupModal({
                 <div className="relative shrink-0 ">
                   <Avatar size={38} src={avatarSrc(user.avatar_url)}>
                     {!user.avatar_url &&
-                      user.username?.slice(0, 1)?.toUpperCase()}
+                      getDisplayName(user)?.slice(0, 1)?.toUpperCase()}
                   </Avatar>
                   {user.is_online && (
                     <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500" />
@@ -178,7 +179,7 @@ export default function CreateGroupModal({
 
                 <div className="min-w-0 flex-1 ">
                   <p className="truncate text-sm font-medium text-gray-900">
-                    {user.full_name || user.username}
+                    {getDisplayName(user)}
                   </p>
                   <p className="truncate text-xs text-gray-400">
                     @{user.username}

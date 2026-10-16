@@ -8,6 +8,7 @@ import {
   markChatAsRead,
   searchUsers,
   getMe,
+  updateMe,
 } from "../services/api.service.chat";
 
 const normalize = (c) => ({ ...c, unread_count: c.unread_count ?? 0 });
@@ -16,7 +17,7 @@ const normalize = (c) => ({ ...c, unread_count: c.unread_count ?? 0 });
 const typingTimers = new Map();
 
 export const useChatStore = create((set, get) => ({
-  me: null, // текущий пользователь из GET /users/me
+  me: null, 
   chats: [],
   currentChat: null,
   activeChatId: null,
@@ -34,7 +35,20 @@ export const useChatStore = create((set, get) => ({
   loadMe: async () => {
     try {
       const res = await getMe();
-      set({ me: res?.data ?? res });
+      let me = res?.data ?? res;
+      set({ me });
+
+      // имя/фамилию отправляем только если их ещё нет на сервере
+      if (me && (!me.first_name || !me.last_name)) {
+        const user = JSON.parse(localStorage.getItem("user")) ?? {};
+        const first_name = (user.firstName ?? "").trim();
+        const last_name = (user.lastName ?? "").trim();
+        if (first_name || last_name) {
+          const upd = await updateMe({ first_name, last_name });
+          me = upd?.data ?? { ...me, first_name, last_name };
+          set({ me });
+        }
+      }
     } catch (err) {
       console.log(err);
     }

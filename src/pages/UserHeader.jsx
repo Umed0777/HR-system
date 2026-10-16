@@ -3,6 +3,7 @@ import { Avatar, App, Spin } from "antd";
 import { CameraOutlined } from "@ant-design/icons";
 import { useChatStore } from "../store/useChat";
 import { avatarSrc } from "../services/chat.config";
+import { getDisplayName } from "../utils/chat.utils";
 import { uploadAvatar } from "../services/api.ervice.message";
 
 const MAX_SIZE_MB = 5;
@@ -16,7 +17,7 @@ export default function UserHeader({ currentUsername }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(null);
 
-  const name = me?.username ?? currentUsername;
+  const name = getDisplayName(me) || currentUsername;
   const isOnline = me ? onlineUserIds.includes(me.id) : false;
 
   useEffect(() => {

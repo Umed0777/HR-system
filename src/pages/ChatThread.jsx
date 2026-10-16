@@ -15,7 +15,11 @@ import { useMessageActions } from "../hooks/useMessageActions";
 import { useChatActions } from "../hooks/useChatActions";
 import { sendSocket } from "../services/chat.socket";
 import { avatarSrc, getLogin } from "../services/chat.config";
-import { formatChatTime, getPeer } from "../utils/chat.utils";
+import {
+  formatChatTime,
+  getPeer,
+  getDisplayName,
+} from "../utils/chat.utils";
 import MessageItem from "./MessageItem";
 import ChatThreadMenu from "./ChatThreadMenu";
 import RenameChatModal from "./RenameChatModal";
@@ -213,7 +217,7 @@ export default function ChatThread({
   const peer = getPeer(chat, currentUsername);
   const peerId = peer?.id ?? peer?.user_id;
   const isPeerOnline = peerId != null && onlineUserIds.includes(peerId);
-  const headerName = peer?.username || chat.name;
+  const headerName = (peer && getDisplayName(peer)) || chat.name;
   const headerAvatar = peer?.avatar_url || chat.avatar_url;
   const groupedMessages = groupMessagesByDate(messages);
 
@@ -221,8 +225,9 @@ export default function ChatThread({
     .filter((id) => id !== me?.id)
     .map(
       (id) =>
-        chat.members?.find((m) => (m.user_id ?? m.user?.id) === id)?.user
-          ?.username,
+        getDisplayName(
+          chat.members?.find((m) => (m.user_id ?? m.user?.id) === id)?.user,
+        ),
     )
     .filter(Boolean);
   const typingText =

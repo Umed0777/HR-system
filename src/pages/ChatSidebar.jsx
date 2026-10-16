@@ -9,6 +9,8 @@ import {
   formatChatTime,
   getPeer,
   filterChatsByName,
+  getChatTitle,
+  getDisplayName,
   getExistingPeerUsernames,
   filterNewUsers,
   getMessagePreview,
@@ -46,7 +48,7 @@ export default function ChatSidebar({
   }, []);
 
   const filteredChats = useMemo(
-    () => filterChatsByName(chats, search),
+    () => filterChatsByName(chats, search, currentUsername),
     [chats, search],
   );
 
@@ -161,6 +163,7 @@ export default function ChatSidebar({
             const isOnline = peerId != null && onlineUserIds.includes(peerId);
             const avatarUrl = peer?.avatar_url || chat.avatar_url;
             const preview = getMessagePreview(chat.last_message);
+            const title = getChatTitle(chat, currentUsername);
 
             return (
               <div
@@ -172,7 +175,7 @@ export default function ChatSidebar({
               >
                 <div className="relative shrink-0">
                   <Avatar size={54} src={avatarSrc(avatarUrl)}>
-                    {!avatarUrl && chat.name?.slice(0, 1)?.toUpperCase()}
+                    {!avatarUrl && title?.slice(0, 1)?.toUpperCase()}
                   </Avatar>
                   {isOnline && (
                     <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-green-500" />
@@ -182,7 +185,7 @@ export default function ChatSidebar({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="truncate font-semibold text-gray-900">
-                      {chat.name}
+                      {title}
                     </h3>
                     <span className="shrink-0 text-xs text-gray-400">
                       {formatChatTime(
@@ -229,7 +232,7 @@ export default function ChatSidebar({
                   <div className="relative shrink-0">
                     <Avatar size={44} src={avatarSrc(user.avatar_url)}>
                       {!user.avatar_url &&
-                        user.username?.slice(0, 1)?.toUpperCase()}
+                        getDisplayName(user)?.slice(0, 1)?.toUpperCase()}
                     </Avatar>
                     {onlineUserIds.includes(user.id) && (
                       <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
@@ -237,7 +240,7 @@ export default function ChatSidebar({
                   </div>
                   <div className="min-w-0 flex-1">
                     <h4 className="truncate font-medium text-gray-900">
-                      {user.full_name || user.username}
+                      {getDisplayName(user)}
                     </h4>
                     <p className="truncate text-xs text-gray-400">
                       @{user.username}

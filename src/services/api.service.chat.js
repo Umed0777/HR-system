@@ -74,7 +74,7 @@ export const markChatAsRead = async (id, lastReadMessageId) => {
 
 export const searchUsers = async (query) => {
   try {
-    const res = await API.get(`/users/search?query=${query}`);
+    const res = await API.get(`/users/search`, { params: { query } });
     return res.data;
   } catch (error) {
     console.error(error);
@@ -84,7 +84,21 @@ export const searchUsers = async (query) => {
 
 export const getMe = async () => {
   try {
-    const res = await API.get(`/users/me`);
+    const res = await API.get(`/users/me`, {
+      params: { login: getLogin() },
+    });
+    return res.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
+
+export const updateMe = async (data) => {
+  try {
+    const res = await API.put(`/users/me`, data, {
+      params: { login: getLogin() },
+    });
     return res.data;
   } catch (error) {
     console.error(error);

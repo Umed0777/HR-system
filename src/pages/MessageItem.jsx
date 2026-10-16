@@ -11,7 +11,7 @@ import {
   CloseOutlined,
 } from "@ant-design/icons";
 import EmojiPicker from "emoji-picker-react";
-import { formatMessageTime } from "../utils/chat.utils";
+import { formatMessageTime, getDisplayName } from "../utils/chat.utils";
 import FileAttachment from "./FileAttachment";
 import { QUICK_REACTIONS } from "../hooks/useMessageActions";
 
@@ -151,7 +151,7 @@ export default function MessageItem({ msg, currentUsername, actions }) {
           <p
             className={`text-sm font-semibold ${isMine ? "text-indigo-600" : "text-indigo-500"}`}
           >
-            {isMine ? "Вы" : msg.sender?.username}
+            {isMine ? "Вы" : getDisplayName(msg.sender)}
           </p>
 
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
