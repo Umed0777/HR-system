@@ -1,5 +1,8 @@
-export const CHAT_BASE = import.meta.env.VITE_API_Chat;
-export const SERVER_URL = CHAT_BASE.replace(/\/api\/?$/, "");
+export const SERVER_URL = (import.meta.env.VITE_API_Chat ?? "")
+  .trim()
+  .replace(/\/+$/, "")
+  .replace(/\/api$/, "");
+export const CHAT_BASE = `${SERVER_URL}/api`;
 
 export const getLogin = () => {
   try {
