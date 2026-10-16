@@ -74,7 +74,9 @@ export const markChatAsRead = async (id, lastReadMessageId) => {
 
 export const searchUsers = async (query) => {
   try {
-    const res = await API.get(`/users/search`, { params: { query } });
+    const res = await API.get(`/users/search/name`, {
+      params: { query, login: getLogin() },
+    });
     return res.data;
   } catch (error) {
     console.error(error);
