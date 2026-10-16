@@ -12,14 +12,32 @@ export function formatChatTime(isoString) {
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 }
 
+// «Имя Фамилия», если есть, иначе логин
+export function getDisplayName(user) {
+  if (!user) return "";
+  const full =
+    user.full_name?.trim() ||
+    [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+  return full || user.username || "";
+}
+
+// для личного чата — имя собеседника, для группы — название
+export function getChatTitle(chat, currentUsername) {
+  const peer = getPeer(chat, currentUsername);
+  return peer ? getDisplayName(peer) || chat.name : chat.name;
+}
+
 export function getPeer(chat, currentUsername) {
   if (chat.type !== "direct") return null;
   return chat.members?.find((m) => m.user?.username !== currentUsername)?.user;
 }
 
-export function filterChatsByName(chats, search) {
+export function filterChatsByName(chats, search, currentUsername) {
+  const q = search.toLowerCase();
   return chats.filter((chat) =>
-    chat.name?.toLowerCase().includes(search.toLowerCase())
+    [getChatTitle(chat, currentUsername), chat.name].some((s) =>
+      s?.toLowerCase().includes(q),
+    ),
   );
 }
 

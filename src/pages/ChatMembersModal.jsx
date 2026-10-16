@@ -16,6 +16,7 @@ import {
 } from "../services/api.service.chat";
 import AddMembersModal from "./AddMembersModal";
 import { avatarSrc } from "../services/chat.config";
+import { getDisplayName } from "../utils/chat.utils";
 
 const ACCENT = "#ff4b2b";
 
@@ -72,7 +73,9 @@ export default function ChatMembersModal({
   const filteredMembers = useMemo(
     () =>
       members.filter((m) =>
-        m.user?.username?.toLowerCase().includes(search.trim().toLowerCase()),
+        [getDisplayName(m.user), m.user?.username].some((s) =>
+          s?.toLowerCase().includes(search.trim().toLowerCase()),
+        ),
       ),
     [members, search],
   );
@@ -94,7 +97,7 @@ export default function ChatMembersModal({
 
   const handleRemoveMember = (member) => {
     modal.confirm({
-      title: `Удалить ${member.user?.username} из группы?`,
+      title: `Удалить ${getDisplayName(member.user)} из группы?`,
       okText: "Удалить",
       okButtonProps: { danger: true },
       cancelText: "Отмена",
@@ -202,7 +205,7 @@ export default function ChatMembersModal({
                   <div className="relative shrink-0">
                     <Avatar size={40} src={avatarSrc(member.user?.avatar_url)}>
                       {!member.user?.avatar_url &&
-                        member.user?.username?.slice(0, 1)?.toUpperCase()}
+                        getDisplayName(member.user)?.slice(0, 1)?.toUpperCase()}
                     </Avatar>
                     {member.user?.is_online && (
                       <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500" />
@@ -212,7 +215,7 @@ export default function ChatMembersModal({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <p className="truncate text-sm font-medium text-gray-900">
-                        {member.user?.username}
+                        {getDisplayName(member.user)}
                       </p>
                       {isOwnerRow && (
                         <CrownOutlined

@@ -8,6 +8,7 @@ class ChatSocket {
     this.handlers = handlers;
     this.retry = 1000;
     this.closedByUser = false;
+    this.retryTimer = null;
     this.connect();
   }
 
@@ -33,7 +34,7 @@ class ChatSocket {
 
     this.ws.onclose = () => {
       if (this.closedByUser) return;
-      setTimeout(() => this.connect(), this.retry);
+      this.retryTimer = setTimeout(() => this.connect(), this.retry);
       this.retry = Math.min(this.retry * 2, 30000);
     };
   }
@@ -46,6 +47,8 @@ class ChatSocket {
 
   close() {
     this.closedByUser = true;
+    // иначе отложенный реконнект после close() откроет «висячий» сокет
+    clearTimeout(this.retryTimer);
     this.ws.close();
     if (instance === this) instance = null;
   }
