@@ -239,14 +239,19 @@ export const useChatStore = create((set, get) => ({
     try {
       const response = await searchUsers(query);
 
-      let usersData = [];
-      if (Array.isArray(response)) {
-        usersData = response;
-      } else if (response && Array.isArray(response.data)) {
-        usersData = response.data;
-      }
+      const d = response?.data ?? response;
+      const usersData = [d, d?.users, d?.items, d?.results].find(
+        Array.isArray,
+      ) ?? [];
 
-      set({ userResults: usersData, userSearchLoading: false });
+      // себя в результатах поиска не показываем
+      const login = getLogin().toLowerCase();
+      const myId = get().me?.id;
+      const others = usersData.filter(
+        (u) => u.username?.toLowerCase() !== login && (myId == null || u.id !== myId),
+      );
+
+      set({ userResults: others, userSearchLoading: false });
     } catch (err) {
       console.log(err);
       set({ userSearchError: err.message, userSearchLoading: false });
