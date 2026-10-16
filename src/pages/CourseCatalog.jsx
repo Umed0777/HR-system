@@ -1,6 +1,7 @@
 import { Flex, Typography } from "antd";
 import { ArrowUpRight, BookOpen, GraduationCap } from "lucide-react";
 import Lerna from "../assets/Lerna.png";
+import Osbp from "../assets/OSBP.png";
 
 const { Title, Text } = Typography;
 
@@ -11,8 +12,8 @@ const courses = [
     subtitle: "Образование и профессиональное развитие",
     description:
       "Изучайте образовательные программы, развивайте профессиональные навыки и открывайте новые возможности.",
-    image:
-      "https://www.osbp-ca.org/images/ksep/logo/osbp-logo-transparent.png",
+    image: Osbp,
+     
     url: "https://www.osbp-ca.org/",
     accent: "#ff4d4f",
     tag: "Образовательная платформа",
