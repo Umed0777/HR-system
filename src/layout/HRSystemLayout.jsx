@@ -44,7 +44,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
-import active from "../assets/active.png";
+import logo from "../assets/ActivUpdate.png";
 
 // ==========================================
 // ZUSTAND NOTIFICATION STORE
@@ -596,16 +596,14 @@ export const HRSystemLayout = () => {
     }
 
     // ========================================
-    // CHAT — для Admin / SuperAdmin и Basic
+    // CHAT — для всех пользователей
     // ========================================
 
-    if (isAdmin || isBasic) {
-      items.push({
-        key: "/chat",
-        icon: <MessageOutlined />,
-        label: t.chat,
-      });
-    }
+    items.push({
+      key: "/chat",
+      icon: <MessageOutlined />,
+      label: t.chat,
+    });
 
     return items;
   }, [t, isAdmin, isBasic]);
@@ -978,16 +976,28 @@ export const HRSystemLayout = () => {
                 borderBottom: "1px solid rgba(255,255,255,0.1)",
               }}
             >
-              <img
-                src={active}
+              {/* у картинки большие прозрачные поля — обрезаем их обёрткой */}
+              <div
                 style={{
-                  width: 45,
-                  height: 45,
-                  borderRadius: "50%",
-                  objectFit: "cover",
+                  width: collapsed ? 56 : 140,
+                  height: collapsed ? 56 : 80,
+                  overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
                 }}
-                alt="Logo"
-              />
+              >
+                <img
+                  src={logo}
+                  style={{
+                    width: collapsed ? 100 : 220,
+                    height: "auto",
+                    flexShrink: 0,
+                  }}
+                  alt="Logo"
+                />
+              </div>
 
               {!collapsed && (
                 <Button
@@ -1055,10 +1065,8 @@ export const HRSystemLayout = () => {
 
             <div
               style={{
-                display: "flex",
-                justifyContent: "end",
                 flexShrink: 0,
-                padding: collapsed ? "8px" : "10px 15px",
+                padding: collapsed ? "10px 8px" : "10px 12px",
                 borderTop: "1px solid rgba(255,255,255,0.12)",
               }}
             >
@@ -1066,12 +1074,25 @@ export const HRSystemLayout = () => {
                 type="text"
                 icon={<LogoutOutlined />}
                 onClick={handleLogout}
+                title={collapsed ? t.logout : undefined}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "rgba(255,255,255,0.12)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
                 style={{
-                  width: collapsed ? "60px" : "90px",
-                  height: "34px",
+                  width: "100%",
+                  height: 40,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: collapsed ? "center" : "flex-start",
+                  gap: 10,
                   color: "#fff",
                   fontSize: 14,
-                  padding: "0 10px",
+                  padding: collapsed ? 0 : "0 16px",
+                  border: "1px solid #fff",
+                  borderRadius: 10,
                 }}
               >
                 {!collapsed && t.logout}
