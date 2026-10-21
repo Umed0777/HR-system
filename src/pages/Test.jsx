@@ -107,13 +107,46 @@ const getOptTextSafe = (o, lang = "ru") => {
 // ============================================================
 // QuestionCreator
 // ============================================================
-const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
-  const { addQuestion } = useQuestionStore();
-  const [content, setContent] = useState("");
-  const [type, setType] = useState(1);
-  const [options, setOptions] = useState([]);
-  const [manualAnswer, setManualAnswer] = useState("");
-  const [ratingAnswer, setRatingAnswer] = useState(null);
+const QuestionCreator = ({
+  onQuestionCreated,
+  onQuestionUpdated,
+  onCancel,
+  initialQuestion = null,
+  lang,
+  t,
+}) => {
+  const { addQuestion, editQuestion } = useQuestionStore();
+  const isEdit = !!initialQuestion;
+  const initialType = isEdit ? getNumericType(initialQuestion.type) : 1;
+  const rawQText = (q) =>
+    (lang === "ru"
+      ? q.contentRu || q.content || q.contentTj
+      : q.contentTj || q.content || q.contentRu) || "";
+  const rawOptText = (o) =>
+    (lang === "ru"
+      ? o.textRu || o.text || o.textTj
+      : o.textTj || o.text || o.textRu) || "";
+
+  const [content, setContent] = useState(() =>
+    isEdit ? rawQText(initialQuestion) : "",
+  );
+  const [type, setType] = useState(initialType);
+  const [options, setOptions] = useState(() =>
+    isEdit && initialType === 1
+      ? (initialQuestion.options || []).map((o) => ({
+          text: rawOptText(o),
+          isCorrect: !!o.isCorrect,
+        }))
+      : [],
+  );
+  const [manualAnswer, setManualAnswer] = useState(() =>
+    isEdit && initialType === 2 && initialQuestion.options?.[0]
+      ? rawOptText(initialQuestion.options[0])
+      : "",
+  );
+  const [ratingAnswer, setRatingAnswer] = useState(() =>
+    isEdit && initialType === 3 ? (initialQuestion.optionId ?? null) : null,
+  );
   const [creating, setCreating] = useState(false);
 
   const letters = ["A", "B", "C", "D", "E", "F"];
@@ -197,6 +230,12 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
 
     setCreating(true);
     try {
+      if (isEdit) {
+        const response = await editQuestion(initialQuestion.id, payload);
+        message.success("Вопрос обновлён");
+        if (onQuestionUpdated) onQuestionUpdated(response, initialQuestion.id);
+        return;
+      }
       const response = await addQuestion(payload);
       message.success("Вопрос создан! 🎉");
       setContent("");
@@ -206,9 +245,12 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
       setType(1);
       if (onQuestionCreated && response) onQuestionCreated(response);
     } catch (err) {
-      console.error("Error creating question:", err);
+      console.error("Error saving question:", err);
       message.error(
-        err?.response?.data?.message || "Ошибка при создании вопроса",
+        err?.response?.data?.message ||
+          (isEdit
+            ? "Ошибка при сохранении вопроса"
+            : "Ошибка при создании вопроса"),
       );
     } finally {
       setCreating(false);
@@ -218,7 +260,7 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
   return (
     <div style={{ padding: "16px 0" }}>
       <Alert
-        message="Создание нового вопроса"
+        message={isEdit ? "Редактирование вопроса" : "Создание нового вопроса"}
         description="Заполните поля и сохраните вопрос."
         type="info"
         showIcon
@@ -378,22 +420,35 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
         </div>
       )}
 
-      <Button
-        type="primary"
-        onClick={handleSaveQuestion}
-        loading={creating}
-        style={{
-          marginTop: 16,
-          background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
-          border: "none",
-          borderRadius: 10,
-          width: "100%",
-          height: 44,
-        }}
-        icon={<SaveOutlined />}
-      >
-        {creating ? "Сохранение..." : "Создать вопрос"}
-      </Button>
+      <Flex gap={8} style={{ marginTop: 16 }}>
+        {onCancel && (
+          <Button
+            onClick={onCancel}
+            style={{ height: 44, borderRadius: 10, flex: "0 0 auto" }}
+          >
+            Отмена
+          </Button>
+        )}
+        <Button
+          type="primary"
+          onClick={handleSaveQuestion}
+          loading={creating}
+          style={{
+            flex: 1,
+            background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
+            border: "none",
+            borderRadius: 10,
+            height: 44,
+          }}
+          icon={<SaveOutlined />}
+        >
+          {creating
+            ? "Сохранение..."
+            : isEdit
+              ? "Сохранить изменения"
+              : "Создать вопрос"}
+        </Button>
+      </Flex>
     </div>
   );
 };
@@ -456,6 +511,14 @@ export const TestManager = ({ onStartTest }) => {
   const [canStartTest, setCanStartTest] = useState(true);
   const [existingSession, setExistingSession] = useState(null);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
+
+  // ---- Редактирование вопроса / добавление вопросов в готовый тест ----
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [addToTestOpen, setAddToTestOpen] = useState(false);
+  const [addTab, setAddTab] = useState("select");
+  const [addSelectedIds, setAddSelectedIds] = useState([]);
+  const [addSearch, setAddSearch] = useState("");
+  const [previewSaving, setPreviewSaving] = useState(false);
 
   // ---- Модалка генерации одноразовой ссылки для стажёра ----
   const [linkModalOpen, setLinkModalOpen] = useState(false);
@@ -949,32 +1012,26 @@ export const TestManager = ({ onStartTest }) => {
     setActiveTab("select");
   };
 
-  const handleDeleteQuestion = async (questionId) => {
-    try {
-      await removeQuestion(questionId);
-      setSelectedQuestionIds((prev) => prev.filter((id) => id !== questionId));
-      message.success("Вопрос удалён навсегда");
-      await fetchQuestions(1, 1000);
-    } catch (err) {
-      console.error("Delete question error:", err);
-      message.error("Ошибка удаления вопроса");
-    }
-  };
+  const getTestQuestionId = (q) => q?.id || q?.questionId;
 
-  // ==================== СОХРАНЕНИЕ ====================
-  const handleSave = async () => {
-    const currentTitle = lang === "ru" ? titleRu : titleTj;
-    if (!currentTitle.trim()) {
-      message.warning(t[lang].fillTitle);
-      return;
-    }
-    if (selectedQuestionIds.length === 0) {
-      message.warning(t[lang].selectQuestions);
-      return;
-    }
+  // актуальная версия теста из стора (после сохранений)
+  const previewTest = useMemo(() => {
+    if (!selectedTest) return null;
+    return tests.find((x) => x.id === selectedTest.id) || selectedTest;
+  }, [tests, selectedTest]);
 
-    const questionsData = selectedQuestionIds.map((questionId, index) => {
-      const question = questions.find((q) => q.id === questionId);
+  // вопросы теста: берём свежую версию из банка вопросов, если она есть
+  const previewQuestions = useMemo(
+    () =>
+      (previewTest?.questions || []).map(
+        (q) => questions.find((x) => x.id === getTestQuestionId(q)) || q,
+      ),
+    [previewTest, questions],
+  );
+
+  const buildQuestionsData = (questionIds, questionList) =>
+    questionIds.map((questionId, index) => {
+      const question = questionList.find((q) => q.id === questionId);
       const nType = getNumericType(question?.type);
       const apiType = getApiTypeString(nType);
 
@@ -1011,6 +1068,150 @@ export const TestManager = ({ onStartTest }) => {
         })),
       };
     });
+
+  const buildTestPayload = (test, questionIds, questionList) => ({
+    titleRu: test.titleRu || test.title || test.titleTj || "",
+    titleTj: test.titleTj || test.title || test.titleRu || "",
+    descriptionRu: test.descriptionRu || test.description || "",
+    descriptionTj: test.descriptionTj || test.description || "",
+    testType: test.testType ?? 1,
+    questions: buildQuestionsData(questionIds, questionList),
+  });
+
+  const saveTestQuestions = async (test, questionIds, questionList) => {
+    await editTest(test.id, buildTestPayload(test, questionIds, questionList));
+    await fetchTests(1, 1000);
+  };
+
+  const openEditQuestion = (question) => {
+    const fresh =
+      questions.find((q) => q.id === getTestQuestionId(question)) || question;
+    setEditingQuestion({ ...fresh, id: getTestQuestionId(fresh) });
+  };
+
+  const handleQuestionUpdated = async (_, questionId) => {
+    setEditingQuestion(null);
+    await fetchQuestions(1, 1000);
+    const freshQuestions = useQuestionStore.getState().questions || [];
+    // тест хранит копию вариантов и правильного ответа — пересохраняем тест,
+    // где используется вопрос (тест, открытый в мастере, сохранится сам)
+    const owners = testTests.filter(
+      (test) =>
+        (!editingItem || test.id !== editingItem.id) &&
+        test.questions?.some((q) => getTestQuestionId(q) === questionId),
+    );
+    try {
+      for (const test of owners) {
+        const ids = test.questions.map(getTestQuestionId).filter(Boolean);
+        await editTest(test.id, buildTestPayload(test, ids, freshQuestions));
+      }
+      if (owners.length) await fetchTests(1, 1000);
+    } catch (err) {
+      console.error("Resync test error:", err);
+      message.error("Вопрос сохранён, но тест не удалось обновить");
+    }
+  };
+
+  const openAddToTest = () => {
+    setAddSelectedIds([]);
+    setAddSearch("");
+    setAddTab("select");
+    setAddToTestOpen(true);
+  };
+
+  const previewQuestionIds = (previewTest?.questions || [])
+    .map(getTestQuestionId)
+    .filter(Boolean);
+
+  const addCandidates = previewTest
+    ? getAvailableQuestions(previewTest.id).filter(
+        (q) =>
+          !previewQuestionIds.includes(q.id) &&
+          getQuestionText(q).toLowerCase().includes(addSearch.toLowerCase()),
+      )
+    : [];
+
+  const handleAddQuestionsToTest = async (
+    extraIds,
+    questionList = questions,
+  ) => {
+    if (!previewTest || extraIds.length === 0) return;
+    setPreviewSaving(true);
+    try {
+      const ids = [
+        ...previewQuestionIds,
+        ...extraIds.filter((id) => !previewQuestionIds.includes(id)),
+      ];
+      await saveTestQuestions(previewTest, ids, questionList);
+      message.success(
+        extraIds.length === 1
+          ? "Вопрос добавлен в тест"
+          : `Добавлено вопросов: ${extraIds.length}`,
+      );
+      setAddToTestOpen(false);
+      setAddSelectedIds([]);
+    } catch (err) {
+      console.error("Add questions to test error:", err);
+      message.error(err.response?.data?.message || "Ошибка добавления");
+    } finally {
+      setPreviewSaving(false);
+    }
+  };
+
+  const handleCreatedForTest = async (newQuestion) => {
+    await fetchQuestions(1, 1000);
+    if (newQuestion?.id) {
+      await handleAddQuestionsToTest(
+        [newQuestion.id],
+        useQuestionStore.getState().questions || [],
+      );
+    }
+  };
+
+  const handleRemoveFromTest = async (questionId) => {
+    if (!previewTest) return;
+    const ids = previewQuestionIds.filter((id) => id !== questionId);
+    if (ids.length === 0) {
+      message.warning("В тесте должен остаться хотя бы один вопрос");
+      return;
+    }
+    setPreviewSaving(true);
+    try {
+      await saveTestQuestions(previewTest, ids, questions);
+      message.success("Вопрос убран из теста");
+    } catch (err) {
+      console.error("Remove from test error:", err);
+      message.error(err.response?.data?.message || "Ошибка сохранения");
+    } finally {
+      setPreviewSaving(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId) => {
+    try {
+      await removeQuestion(questionId);
+      setSelectedQuestionIds((prev) => prev.filter((id) => id !== questionId));
+      message.success("Вопрос удалён навсегда");
+      await fetchQuestions(1, 1000);
+    } catch (err) {
+      console.error("Delete question error:", err);
+      message.error("Ошибка удаления вопроса");
+    }
+  };
+
+  // ==================== СОХРАНЕНИЕ ====================
+  const handleSave = async () => {
+    const currentTitle = lang === "ru" ? titleRu : titleTj;
+    if (!currentTitle.trim()) {
+      message.warning(t[lang].fillTitle);
+      return;
+    }
+    if (selectedQuestionIds.length === 0) {
+      message.warning(t[lang].selectQuestions);
+      return;
+    }
+
+    const questionsData = buildQuestionsData(selectedQuestionIds, questions);
 
     const payload = {
       titleRu: titleRu || titleTj,
@@ -2507,6 +2708,18 @@ export const TestManager = ({ onStartTest }) => {
                                               </Popconfirm>
                                             )}
 
+                                            <Button
+                                              type="text"
+                                              size="small"
+                                              icon={<EditOutlined />}
+                                              title="Редактировать вопрос"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openEditQuestion(question);
+                                              }}
+                                              style={{ color: "#1677ff" }}
+                                            />
+
                                             <Popconfirm
                                               title="Удалить вопрос навсегда?"
                                               description="Вопрос исчезнет из базы данных. Действие нельзя отменить!"
@@ -2814,20 +3027,50 @@ export const TestManager = ({ onStartTest }) => {
           >
             <span style={{ fontSize: 18, fontWeight: 600 }}>
               {lang === "ru"
-                ? selectedTest?.titleRu || selectedTest?.title || "Без названия"
-                : selectedTest?.titleTj || selectedTest?.title || "Безунвон"}
+                ? previewTest?.titleRu || previewTest?.title || "Без названия"
+                : previewTest?.titleTj || previewTest?.title || "Безунвон"}
             </span>
-            <Tag color="blue" style={{ borderRadius: 20, padding: "4px 12px" }}>
-              <ClockCircleOutlined /> {selectedTest?.questions?.length || 0}{" "}
-              {t[lang].questionCount}
-            </Tag>
+            <Space wrap>
+              <Tag
+                color="blue"
+                style={{ borderRadius: 20, padding: "4px 12px" }}
+              >
+                <ClockCircleOutlined /> {previewTest?.questions?.length || 0}{" "}
+                {t[lang].questionCount}
+              </Tag>
+              {isAdmin && (
+                <>
+                  <Button
+                    icon={<PlusOutlined />}
+                    onClick={openAddToTest}
+                    style={{ borderRadius: 8 }}
+                  >
+                    {lang === "ru" ? "Добавить вопрос" : "Илова кардани савол"}
+                  </Button>
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() => {
+                      setPreviewOpen(false);
+                      openEditModal(previewTest);
+                    }}
+                    style={{
+                      borderRadius: 8,
+                      borderColor: "#ff4b2b",
+                      color: "#ff4b2b",
+                    }}
+                  >
+                    {t[lang].edit}
+                  </Button>
+                </>
+              )}
+            </Space>
           </div>
         }
       >
-        {selectedTest &&
-          (selectedTest.descriptionRu ||
-            selectedTest.description ||
-            selectedTest.descriptionTj) && (
+        {previewTest &&
+          (previewTest.descriptionRu ||
+            previewTest.description ||
+            previewTest.descriptionTj) && (
             <div
               style={{
                 marginBottom: 20,
@@ -2839,14 +3082,15 @@ export const TestManager = ({ onStartTest }) => {
             >
               <Text>
                 {lang === "ru"
-                  ? selectedTest.descriptionRu || selectedTest.description
-                  : selectedTest.descriptionTj || selectedTest.description}
+                  ? previewTest.descriptionRu || previewTest.description
+                  : previewTest.descriptionTj || previewTest.description}
               </Text>
             </div>
           )}
 
         <Table
-          dataSource={selectedTest?.questions || []}
+          dataSource={previewQuestions}
+          loading={previewSaving}
           rowKey={(r) => r.id || r.questionId}
           columns={[
             {
@@ -2973,6 +3217,42 @@ export const TestManager = ({ onStartTest }) => {
                 );
               },
             },
+            ...(isAdmin
+              ? [
+                  {
+                    title: "",
+                    key: "actions",
+                    width: 100,
+                    render: (_, record) => (
+                      <Space>
+                        <Button
+                          type="text"
+                          icon={<EditOutlined />}
+                          title="Редактировать вопрос"
+                          onClick={() => openEditQuestion(record)}
+                          style={{ color: "#1677ff" }}
+                        />
+                        <Popconfirm
+                          title="Убрать из теста?"
+                          description="Вопрос останется в базе данных"
+                          onConfirm={() =>
+                            handleRemoveFromTest(getTestQuestionId(record))
+                          }
+                          okText="Да"
+                          cancelText="Нет"
+                        >
+                          <Button
+                            type="text"
+                            icon={<MinusOutlined />}
+                            title="Убрать из теста"
+                            style={{ color: "#faad14" }}
+                          />
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]
+              : []),
           ]}
           pagination={false}
           locale={{ emptyText: t[lang].noQuestionsInTest }}
@@ -2993,7 +3273,7 @@ export const TestManager = ({ onStartTest }) => {
                   style={{ fontSize: 24, color: "#ff4b2b" }}
                 />
                 <div style={{ fontSize: 20, fontWeight: "bold" }}>
-                  {selectedTest?.questions?.length || 0}
+                  {previewTest?.questions?.length || 0}
                 </div>
                 <div style={{ fontSize: 12, color: "#8c8c8c" }}>
                   {t[lang].totalQuestionsLabel}
@@ -3006,8 +3286,8 @@ export const TestManager = ({ onStartTest }) => {
                   style={{ fontSize: 24, color: "#1890ff" }}
                 />
                 <div style={{ fontSize: 20, fontWeight: "bold" }}>
-                  {selectedTest?.createdAt
-                    ? new Date(selectedTest.createdAt).toLocaleDateString(
+                  {previewTest?.createdAt
+                    ? new Date(previewTest.createdAt).toLocaleDateString(
                         lang === "ru" ? "ru-RU" : "tj-TJ",
                       )
                     : "—"}
@@ -3019,6 +3299,191 @@ export const TestManager = ({ onStartTest }) => {
             </Col>
           </Row>
         </div>
+      </Modal>
+
+      {/* ==================== ДОБАВЛЕНИЕ ВОПРОСОВ В ТЕСТ ==================== */}
+      <Modal
+        open={addToTestOpen}
+        onCancel={() => setAddToTestOpen(false)}
+        width={800}
+        destroyOnClose
+        title={
+          <Space>
+            <PlusOutlined style={{ color: "#ff4b2b" }} />
+            {lang === "ru" ? "Добавить вопросы в тест" : "Илова ба тест"}
+          </Space>
+        }
+        footer={
+          addTab === "select" ? (
+            <Flex justify="space-between" align="center">
+              <Text type="secondary">
+                {t[lang].selected}: {addSelectedIds.length}
+              </Text>
+              <Space>
+                <Button onClick={() => setAddToTestOpen(false)}>
+                  {t[lang].cancel}
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  loading={previewSaving}
+                  disabled={addSelectedIds.length === 0}
+                  onClick={() => handleAddQuestionsToTest(addSelectedIds)}
+                  style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
+                >
+                  {lang === "ru" ? "Добавить" : "Илова"}
+                </Button>
+              </Space>
+            </Flex>
+          ) : null
+        }
+      >
+        <Tabs activeKey={addTab} onChange={setAddTab}>
+          <TabPane
+            key="select"
+            tab={
+              <span>
+                <FormOutlined /> {t[lang].selectQuestionsTab}
+              </span>
+            }
+          >
+            <Input
+              placeholder={t[lang].searchPlaceholder}
+              value={addSearch}
+              onChange={(e) => setAddSearch(e.target.value)}
+              prefix={<SearchOutlined />}
+              allowClear
+              style={{ marginBottom: 12, borderRadius: 20 }}
+            />
+            {addCandidates.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t[lang].noAvailableQuestions}
+              >
+                <Button
+                  type="primary"
+                  onClick={() => setAddTab("create")}
+                  style={{ borderRadius: 20, background: "#ff4b2b" }}
+                >
+                  {t[lang].createQuestionTab}
+                </Button>
+              </Empty>
+            ) : (
+              <div style={{ maxHeight: 400, overflow: "auto" }}>
+                {addCandidates.map((q) => {
+                  const checked = addSelectedIds.includes(q.id);
+                  const typeInfo = getTypeLabel(q.type);
+                  return (
+                    <Flex
+                      key={q.id}
+                      align="center"
+                      gap={10}
+                      onClick={() =>
+                        setAddSelectedIds((prev) =>
+                          prev.includes(q.id)
+                            ? prev.filter((id) => id !== q.id)
+                            : [...prev, q.id],
+                        )
+                      }
+                      style={{
+                        padding: "10px 12px",
+                        marginBottom: 6,
+                        borderRadius: 10,
+                        cursor: "pointer",
+                        border: checked
+                          ? "2px solid #ff4b2b"
+                          : "1px solid #f0f0f0",
+                        background: checked ? "#fff5f5" : "#fafafa",
+                      }}
+                    >
+                      <Checkbox checked={checked} />
+                      <Text style={{ flex: 1 }}>{getQuestionText(q)}</Text>
+                      <Tag
+                        color={typeInfo.color}
+                        style={{ borderRadius: 20, border: "none" }}
+                      >
+                        {typeInfo.label}
+                      </Tag>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<EditOutlined />}
+                        title="Редактировать вопрос"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditQuestion(q);
+                        }}
+                        style={{ color: "#1677ff" }}
+                      />
+                    </Flex>
+                  );
+                })}
+              </div>
+            )}
+          </TabPane>
+          <TabPane
+            key="create"
+            tab={
+              <span>
+                <PlusOutlined /> {t[lang].createQuestionTab}
+              </span>
+            }
+          >
+            <QuestionCreator
+              onQuestionCreated={handleCreatedForTest}
+              lang={lang}
+              t={{
+                question: t[lang].question,
+                answer: t[lang].answer,
+                correct: t[lang].correct,
+                variant: t[lang].variant,
+                add: t[lang].add,
+                test: t[lang].test,
+                manual: t[lang].manual,
+                rating: t[lang].rating,
+                correctAnswer: t[lang].correctAnswer,
+                selectRating: t[lang].selectRating,
+              }}
+            />
+          </TabPane>
+        </Tabs>
+      </Modal>
+
+      {/* ==================== РЕДАКТИРОВАНИЕ ВОПРОСА ==================== */}
+      <Modal
+        open={!!editingQuestion}
+        onCancel={() => setEditingQuestion(null)}
+        footer={null}
+        width={720}
+        destroyOnClose
+        title={
+          <Space>
+            <EditOutlined style={{ color: "#ff4b2b" }} />
+            {lang === "ru" ? "Редактирование вопроса" : "Тағйири савол"}
+          </Space>
+        }
+      >
+        {editingQuestion && (
+          <QuestionCreator
+            key={editingQuestion.id}
+            initialQuestion={editingQuestion}
+            onQuestionUpdated={handleQuestionUpdated}
+            onCancel={() => setEditingQuestion(null)}
+            lang={lang}
+            t={{
+                question: t[lang].question,
+                answer: t[lang].answer,
+                correct: t[lang].correct,
+                variant: t[lang].variant,
+                add: t[lang].add,
+                test: t[lang].test,
+                manual: t[lang].manual,
+                rating: t[lang].rating,
+                correctAnswer: t[lang].correctAnswer,
+                selectRating: t[lang].selectRating,
+              }}
+          />
+        )}
       </Modal>
 
       <OneTimeLinkModal
