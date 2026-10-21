@@ -271,12 +271,43 @@ const loadAllQuestionsFromApi = async (language = "Ru") => {
 // ============================================================
 // QuestionCreator — 3 типа
 // ============================================================
-const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
-  const { addQuestion } = useQuestionStore();
-  const [content, setContent] = useState("");
-  const [type, setType] = useState(1);
-  const [options, setOptions] = useState([]);
-  const [manualAnswer, setManualAnswer] = useState("");
+const QuestionCreator = ({
+  onQuestionCreated,
+  onQuestionUpdated,
+  onCancel,
+  initialQuestion = null,
+  lang,
+  t,
+}) => {
+  const { addQuestion, editQuestion } = useQuestionStore();
+  const isEdit = !!initialQuestion;
+  const initialType = isEdit ? getNumericType(initialQuestion.type) : 1;
+  const rawQText = (q) =>
+    (lang === "ru"
+      ? q.contentRu || q.content || q.contentTj
+      : q.contentTj || q.content || q.contentRu) || "";
+  const rawOptText = (o) =>
+    (lang === "ru"
+      ? o.textRu || o.text || o.textTj
+      : o.textTj || o.text || o.textRu) || "";
+
+  const [content, setContent] = useState(() =>
+    isEdit ? rawQText(initialQuestion) : "",
+  );
+  const [type, setType] = useState(initialType);
+  const [options, setOptions] = useState(() =>
+    isEdit && initialType === 1
+      ? (initialQuestion.options || []).map((o) => ({
+          text: rawOptText(o),
+          isCorrect: !!o.isCorrect,
+        }))
+      : [],
+  );
+  const [manualAnswer, setManualAnswer] = useState(() =>
+    isEdit && initialType === 2 && initialQuestion.options?.[0]
+      ? rawOptText(initialQuestion.options[0])
+      : "",
+  );
   const [creating, setCreating] = useState(false);
 
   const letters = ["A", "B", "C", "D", "E", "F"];
@@ -306,6 +337,7 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
       if (options.some((o) => !o.text.trim()))
         return message.warning("Заполните все варианты");
 
+      const hasCorrect = options.some((o) => o.isCorrect);
       payload = {
         contentRu: content,
         contentTj: content,
@@ -314,8 +346,8 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
         options: options.map((o, i) => ({
           textRu: o.text,
           textTj: o.text,
-          isCorrect: i === 0,
-          questionId: 0,
+          isCorrect: hasCorrect ? !!o.isCorrect : i === 0,
+          questionId: isEdit ? initialQuestion.id : 0,
         })),
       };
     } else if (nType === 2) {
@@ -330,7 +362,7 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
                 textRu: manualAnswer,
                 textTj: manualAnswer,
                 isCorrect: true,
-                questionId: 0,
+                questionId: isEdit ? initialQuestion.id : 0,
               },
             ]
           : [],
@@ -347,6 +379,12 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
 
     setCreating(true);
     try {
+      if (isEdit) {
+        const res = await editQuestion(initialQuestion.id, payload);
+        message.success("Вопрос обновлён");
+        if (onQuestionUpdated) onQuestionUpdated(res, initialQuestion.id);
+        return;
+      }
       const res = await addQuestion(payload);
       message.success("Вопрос создан! 🎉");
       setContent("");
@@ -355,14 +393,14 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
       setType(1);
       if (onQuestionCreated) onQuestionCreated(res);
     } catch (err) {
-      console.error("❌ Error creating question:", err);
+      console.error("❌ Error saving question:", err);
       console.error("❌ Response:", err?.response);
       console.error("❌ Payload was:", payload);
       message.error(
         err?.response?.data?.message ||
           err?.response?.data?.title ||
           err?.message ||
-          "Ошибка при создании",
+          (isEdit ? "Ошибка при сохранении" : "Ошибка при создании"),
       );
     } finally {
       setCreating(false);
@@ -372,7 +410,7 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
   return (
     <div style={{ padding: "16px 0" }}>
       <Alert
-        message="Создание нового вопроса"
+        message={isEdit ? "Редактирование вопроса" : "Создание нового вопроса"}
         description="«Тест» — с выбором ответа, «Ручной» — открытый, «Рейтинг» — оценка от 1 до 10."
         type="info"
         showIcon
@@ -506,22 +544,35 @@ const QuestionCreator = ({ onQuestionCreated, lang, t }) => {
         />
       )}
 
-      <Button
-        type="primary"
-        onClick={handleSave}
-        loading={creating}
-        icon={<SaveOutlined />}
-        style={{
-          marginTop: 16,
-          width: "100%",
-          height: 44,
-          borderRadius: 10,
-          background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
-          border: "none",
-        }}
-      >
-        {creating ? "Сохранение..." : "Создать вопрос"}
-      </Button>
+      <Flex gap={8} style={{ marginTop: 16 }}>
+        {onCancel && (
+          <Button
+            onClick={onCancel}
+            style={{ height: 44, borderRadius: 10, flex: "0 0 auto" }}
+          >
+            Отмена
+          </Button>
+        )}
+        <Button
+          type="primary"
+          onClick={handleSave}
+          loading={creating}
+          icon={<SaveOutlined />}
+          style={{
+            flex: 1,
+            height: 44,
+            borderRadius: 10,
+            background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
+            border: "none",
+          }}
+        >
+          {creating
+            ? "Сохранение..."
+            : isEdit
+              ? "Сохранить изменения"
+              : "Создать вопрос"}
+        </Button>
+      </Flex>
     </div>
   );
 };
@@ -931,6 +982,8 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const [selSubDeptId, setSelSubDeptId] = useState(null);
   const [selDuration, setSelDuration] = useState(5);
 
+  const [editingQuestion, setEditingQuestion] = useState(null);
+
   const [takingOpen, setTakingOpen] = useState(false);
   const [takingSurvey, setTakingSurvey] = useState(null);
   const [takingEmpId, setTakingEmpId] = useState(null);
@@ -1175,6 +1228,8 @@ export const SurveyManager = ({ onStartSurvey }) => {
       noAvailableQuestions: "Нет доступных вопросов",
       createQuestionFirst: "Создайте вопросы",
       selectedQuestionsTitle: "Выбранные вопросы",
+      addQuestion: "Добавить вопрос",
+      editQuestion: "Редактировать вопрос",
     },
     tj: {
       title: "Идоракунии пурсишҳо",
@@ -1237,6 +1292,8 @@ export const SurveyManager = ({ onStartSurvey }) => {
       noAvailableQuestions: "Саволҳо нестанд",
       createQuestionFirst: "Саволҳо эҷод кунед",
       selectedQuestionsTitle: "Саволҳои интихобшуда",
+      addQuestion: "Илова кардани савол",
+      editQuestion: "Тағйири савол",
     },
   };
 
@@ -1267,6 +1324,19 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const openPreview = (sv) => {
     setSelectedSurvey(sv);
     setPreviewOpen(true);
+  };
+
+  // Из предпросмотра: сразу на шаг «Вопросы» → вкладка создания
+  const openAddQuestions = (sv) => {
+    setPreviewOpen(false);
+    openEdit(sv);
+    setStep(1);
+    setActiveTab("create");
+  };
+
+  const handleQuestionUpdated = async () => {
+    setEditingQuestion(null);
+    await loadSurveyQuestions();
   };
 
   const handleNext = () => {
@@ -2549,6 +2619,16 @@ export const SurveyManager = ({ onStartSurvey }) => {
                                               <CheckCircleOutlined />
                                             </div>
                                           )}
+                                          <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<EditOutlined />}
+                                            style={{ color: "#ff4b2b" }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingQuestion(q);
+                                            }}
+                                          />
                                           <Popconfirm
                                             title="Удалить вопрос навсегда?"
                                             description="Вопрос исчезнет из базы данных."
@@ -2780,10 +2860,24 @@ export const SurveyManager = ({ onStartSurvey }) => {
                 selectedSurvey?.title ||
                 selectedSurvey?.titleTj}
             </span>
-            <Tag color="blue" style={{ borderRadius: 20 }}>
-              <ClockCircleOutlined /> {selectedSurvey?.questions?.length || 0}{" "}
-              {t[lang].questionCount}
-            </Tag>
+            <Space style={{ marginRight: 24 }}>
+              <Tag color="blue" style={{ borderRadius: 20 }}>
+                <ClockCircleOutlined />{" "}
+                {selectedSurvey?.questions?.length || 0}{" "}
+                {t[lang].questionCount}
+              </Tag>
+              {isAdmin && selectedSurvey && (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() => openAddQuestions(selectedSurvey)}
+                  style={{ background: "#ff4b2b", borderRadius: 20 }}
+                >
+                  {t[lang].addQuestion}
+                </Button>
+              )}
+            </Space>
           </div>
         }
       >
@@ -2878,10 +2972,62 @@ export const SurveyManager = ({ onStartSurvey }) => {
                 );
               },
             },
+            ...(isAdmin
+              ? [
+                  {
+                    title: "",
+                    key: "actions",
+                    width: 60,
+                    render: (_, r) => (
+                      <Button
+                        type="text"
+                        icon={<EditOutlined />}
+                        style={{ color: "#ff4b2b" }}
+                        onClick={() => setEditingQuestion(r)}
+                      />
+                    ),
+                  },
+                ]
+              : []),
           ]}
           pagination={false}
           locale={{ emptyText: t[lang].noQuestionsInSurvey }}
         />
+      </Modal>
+
+      {/* РЕДАКТИРОВАНИЕ ВОПРОСА */}
+      <Modal
+        open={!!editingQuestion}
+        onCancel={() => setEditingQuestion(null)}
+        footer={null}
+        width={700}
+        centered
+        destroyOnClose
+        title={
+          <Space>
+            <EditOutlined style={{ color: "#ff4b2b" }} />
+            {t[lang].editQuestion}
+          </Space>
+        }
+      >
+        {editingQuestion && (
+          <QuestionCreator
+            key={editingQuestion.id}
+            initialQuestion={editingQuestion}
+            onQuestionUpdated={handleQuestionUpdated}
+            onCancel={() => setEditingQuestion(null)}
+            lang={lang}
+            t={{
+              question: t[lang].question,
+              answer: t[lang].answer,
+              variant: t[lang].variant,
+              add: t[lang].add,
+              test: t[lang].test,
+              manual: t[lang].manual,
+              rating: t[lang].rating,
+            }}
+          />
+        )}
       </Modal>
     </div>
   );
