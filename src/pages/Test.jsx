@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useTestStore } from "../store/useTest";
 import { useQuestionStore } from "../store/useQuestion";
 import { useTestSessionStore } from "../store/useTestSession";
@@ -6,6 +6,11 @@ import { useEmployeeStore } from "../store/useEmployee";
 import { useTestAssignmentStore } from "../store/useTestAssignment";
 import { useSubDepartmentStore } from "../store/useSubdepartment";
 import OneTimeLinkModal from "./OneTimeLinkModal";
+import { BilingualInput } from "../components/BilingualInput";
+import {
+  isBilingualFilled,
+  isBilingualPartial,
+} from "../utils/bilingual";
 import {
   Button,
   Modal,
@@ -112,37 +117,34 @@ const QuestionCreator = ({
   onQuestionUpdated,
   onCancel,
   initialQuestion = null,
-  lang,
   t,
 }) => {
   const { addQuestion, editQuestion } = useQuestionStore();
   const isEdit = !!initialQuestion;
   const initialType = isEdit ? getNumericType(initialQuestion.type) : 1;
-  const rawQText = (q) =>
-    (lang === "ru"
-      ? q.contentRu || q.content || q.contentTj
-      : q.contentTj || q.content || q.contentRu) || "";
-  const rawOptText = (o) =>
-    (lang === "ru"
-      ? o.textRu || o.text || o.textTj
-      : o.textTj || o.text || o.textRu) || "";
-
-  const [content, setContent] = useState(() =>
-    isEdit ? rawQText(initialQuestion) : "",
+  const [contentRu, setContentRu] = useState(() =>
+    isEdit ? initialQuestion.contentRu || initialQuestion.content || "" : "",
+  );
+  const [contentTj, setContentTj] = useState(() =>
+    isEdit ? initialQuestion.contentTj || initialQuestion.content || "" : "",
   );
   const [type, setType] = useState(initialType);
   const [options, setOptions] = useState(() =>
     isEdit && initialType === 1
       ? (initialQuestion.options || []).map((o) => ({
-          text: rawOptText(o),
+          textRu: o.textRu || o.text || "",
+          textTj: o.textTj || o.text || "",
           isCorrect: !!o.isCorrect,
         }))
       : [],
   );
-  const [manualAnswer, setManualAnswer] = useState(() =>
-    isEdit && initialType === 2 && initialQuestion.options?.[0]
-      ? rawOptText(initialQuestion.options[0])
-      : "",
+  const initialManual =
+    isEdit && initialType === 2 ? initialQuestion.options?.[0] : null;
+  const [manualAnswerRu, setManualAnswerRu] = useState(
+    () => initialManual?.textRu || initialManual?.text || "",
+  );
+  const [manualAnswerTj, setManualAnswerTj] = useState(
+    () => initialManual?.textTj || initialManual?.text || "",
   );
   const [ratingAnswer, setRatingAnswer] = useState(() =>
     isEdit && initialType === 3 ? (initialQuestion.optionId ?? null) : null,
@@ -156,13 +158,11 @@ const QuestionCreator = ({
       message.warning("Максимум 6 вариантов");
       return;
     }
-    setOptions([...options, { text: "", isCorrect: false }]);
+    setOptions([...options, { textRu: "", textTj: "", isCorrect: false }]);
   };
 
-  const updateOption = (i, value) => {
-    const arr = [...options];
-    arr[i].text = value;
-    setOptions(arr);
+  const updateOption = (i, field, value) => {
+    setOptions(options.map((o, idx) => (idx === i ? { ...o, [field]: value } : o)));
   };
 
   const setCorrectOption = (index) => {
@@ -174,20 +174,24 @@ const QuestionCreator = ({
   };
 
   const handleSaveQuestion = async () => {
-    if (!content.trim()) {
-      message.warning("Введите текст вопроса");
+    if (!isBilingualFilled(contentRu, contentTj)) {
+      message.warning("Введите текст вопроса на двух языках (RU и TJ)");
       return;
     }
 
     let payload;
 
     if (type === 2) {
+      if (isBilingualPartial(manualAnswerRu, manualAnswerTj)) {
+        message.warning("Введите эталонный ответ на двух языках (RU и TJ)");
+        return;
+      }
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: "OpenEnded",
-        options: manualAnswer
-          ? [{ textRu: manualAnswer, textTj: manualAnswer, isCorrect: true }]
+        options: manualAnswerRu.trim()
+          ? [{ textRu: manualAnswerRu, textTj: manualAnswerTj, isCorrect: true }]
           : [],
       };
     } else if (type === 3) {
@@ -196,8 +200,8 @@ const QuestionCreator = ({
         return;
       }
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: "Rating",
         optionId: ratingAnswer,
         options: [],
@@ -211,18 +215,18 @@ const QuestionCreator = ({
         message.warning("Выберите правильный вариант");
         return;
       }
-      if (options.some((o) => !o.text.trim())) {
-        message.warning("Заполните все варианты");
+      if (options.some((o) => !isBilingualFilled(o.textRu, o.textTj))) {
+        message.warning("Заполните все варианты на двух языках (RU и TJ)");
         return;
       }
 
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: "MultipleChoice",
         options: options.map((o) => ({
-          textRu: o.text,
-          textTj: o.text,
+          textRu: o.textRu,
+          textTj: o.textTj,
           isCorrect: !!o.isCorrect,
         })),
       };
@@ -238,9 +242,11 @@ const QuestionCreator = ({
       }
       const response = await addQuestion(payload);
       message.success("Вопрос создан! 🎉");
-      setContent("");
+      setContentRu("");
+      setContentTj("");
       setOptions([]);
-      setManualAnswer("");
+      setManualAnswerRu("");
+      setManualAnswerTj("");
       setRatingAnswer(null);
       setType(1);
       if (onQuestionCreated && response) onQuestionCreated(response);
@@ -274,13 +280,13 @@ const QuestionCreator = ({
         >
           {t.question}:
         </Text>
-        <TextArea
+        <BilingualInput
+          textarea
           placeholder={t.question}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={3}
-          size="large"
-          style={{ borderRadius: 10 }}
+          valueRu={contentRu}
+          valueTj={contentTj}
+          onChangeRu={setContentRu}
+          onChangeTj={setContentTj}
         />
       </div>
 
@@ -296,7 +302,8 @@ const QuestionCreator = ({
           onChange={(e) => {
             setType(e.target.value);
             setOptions([]);
-            setManualAnswer("");
+            setManualAnswerRu("");
+            setManualAnswerTj("");
             setRatingAnswer(null);
           }}
         >
@@ -351,11 +358,12 @@ const QuestionCreator = ({
                       </Radio>
                     </Col>
                     <Col flex="auto">
-                      <Input
+                      <BilingualInput
                         placeholder={`${t.variant} ${letters[i]}`}
-                        value={o.text}
-                        onChange={(e) => updateOption(i, e.target.value)}
-                        size="large"
+                        valueRu={o.textRu}
+                        valueTj={o.textTj}
+                        onChangeRu={(v) => updateOption(i, "textRu", v)}
+                        onChangeTj={(v) => updateOption(i, "textTj", v)}
                       />
                     </Col>
                   </Row>
@@ -371,12 +379,12 @@ const QuestionCreator = ({
           <Text strong style={{ display: "block", marginBottom: 8 }}>
             Эталонный ответ (необязательно):
           </Text>
-          <Input
+          <BilingualInput
             placeholder={t.answer}
-            value={manualAnswer}
-            onChange={(e) => setManualAnswer(e.target.value)}
-            size="large"
-            style={{ borderRadius: 10 }}
+            valueRu={manualAnswerRu}
+            valueTj={manualAnswerTj}
+            onChangeRu={setManualAnswerRu}
+            onChangeTj={setManualAnswerTj}
           />
         </div>
       )}
@@ -674,9 +682,9 @@ export const TestManager = ({ onStartTest }) => {
       try {
         await Promise.all([
           fetchSessions(),
-          fetchTests(1, 1000),
+          fetchTests(1, 1000, lang),
           fetchEmployee(1, 1000),
-          fetchQuestions(1, 1000),
+          fetchQuestions(1, 1000, null, lang),
           fetchSubDepartments(),
           fetchTestAssignments(1, 1000),
         ]);
@@ -688,6 +696,17 @@ export const TestManager = ({ onStartTest }) => {
     };
     loadAllData();
   }, []);
+
+  // при смене языка бэк отдаёт тесты и вопросы на этом языке — перезапрашиваем
+  const langMounted = useRef(false);
+  useEffect(() => {
+    if (!langMounted.current) {
+      langMounted.current = true;
+      return;
+    }
+    fetchTests(1, 1000, lang);
+    fetchQuestions(1, 1000, null, lang);
+  }, [lang]);
 
   useEffect(() => {
     if (!dataLoaded) return;
@@ -765,7 +784,8 @@ export const TestManager = ({ onStartTest }) => {
       summary: "Сводка",
       totalQuestions: "Всего вопросов",
       testReady: "Тест готов к публикации",
-      fillTitle: "Пожалуйста, заполните название теста",
+      fillTitle: "Пожалуйста, заполните название теста на двух языках (RU и TJ)",
+      fillDescription: "Заполните описание на двух языках (RU и TJ) или оставьте оба поля пустыми",
       selectQuestions: "Пожалуйста, выберите хотя бы один вопрос",
       success: "Успешно!",
       warning: "Внимание",
@@ -857,7 +877,8 @@ export const TestManager = ({ onStartTest }) => {
       summary: "Хулоса",
       totalQuestions: "Ҳамагӣ саволҳо",
       testReady: "Тест барои нашр омода аст",
-      fillTitle: "Лутфан, номи тестро пур кунед",
+      fillTitle: "Лутфан, номи тестро бо ду забон (RU ва TJ) пур кунед",
+      fillDescription: "Тавсифро бо ду забон (RU ва TJ) пур кунед ё ҳарду майдонро холӣ гузоред",
       selectQuestions: "Лутфан, ҳадди ақал як саволро интихоб кунед",
       success: "Бомуваффақият!",
       warning: "Диққат",
@@ -965,9 +986,12 @@ export const TestManager = ({ onStartTest }) => {
 
   const handleNext = () => {
     if (currentStep === 0) {
-      const currentTitle = lang === "ru" ? titleRu : titleTj;
-      if (!currentTitle.trim()) {
+      if (!isBilingualFilled(titleRu, titleTj)) {
         message.warning(t[lang].fillTitle);
+        return;
+      }
+      if (isBilingualPartial(descriptionRu, descriptionTj)) {
+        message.warning(t[lang].fillDescription);
         return;
       }
     }
@@ -1201,8 +1225,7 @@ export const TestManager = ({ onStartTest }) => {
 
   // ==================== СОХРАНЕНИЕ ====================
   const handleSave = async () => {
-    const currentTitle = lang === "ru" ? titleRu : titleTj;
-    if (!currentTitle.trim()) {
+    if (!isBilingualFilled(titleRu, titleTj)) {
       message.warning(t[lang].fillTitle);
       return;
     }
@@ -1214,10 +1237,10 @@ export const TestManager = ({ onStartTest }) => {
     const questionsData = buildQuestionsData(selectedQuestionIds, questions);
 
     const payload = {
-      titleRu: titleRu || titleTj,
-      titleTj: titleTj || titleRu,
-      descriptionRu: descriptionRu || descriptionTj,
-      descriptionTj: descriptionTj || descriptionRu,
+      titleRu,
+      titleTj,
+      descriptionRu,
+      descriptionTj,
       testType: 1,
       questions: questionsData,
     };
@@ -2185,20 +2208,12 @@ export const TestManager = ({ onStartTest }) => {
                       {t[lang].testTitle}{" "}
                       <span style={{ color: "#ff4b2b" }}>*</span>
                     </Text>
-                    <Input
-                      value={lang === "ru" ? titleRu : titleTj}
-                      onChange={(e) =>
-                        lang === "ru"
-                          ? setTitleRu(e.target.value)
-                          : setTitleTj(e.target.value)
-                      }
-                      placeholder={
-                        lang === "ru"
-                          ? "Введите название теста"
-                          : "Номи тестро ворид кунед"
-                      }
-                      size="large"
-                      style={{ borderRadius: 12 }}
+                    <BilingualInput
+                      valueRu={titleRu}
+                      valueTj={titleTj}
+                      onChangeRu={setTitleRu}
+                      onChangeTj={setTitleTj}
+                      placeholder={t[lang].testTitle}
                     />
                   </div>
                   <div>
@@ -2212,21 +2227,14 @@ export const TestManager = ({ onStartTest }) => {
                     >
                       {t[lang].description}
                     </Text>
-                    <TextArea
-                      value={lang === "ru" ? descriptionRu : descriptionTj}
-                      onChange={(e) =>
-                        lang === "ru"
-                          ? setDescriptionRu(e.target.value)
-                          : setDescriptionTj(e.target.value)
-                      }
-                      placeholder={
-                        lang === "ru"
-                          ? "Введите описание теста"
-                          : "Тавсифи тестро ворид кунед"
-                      }
+                    <BilingualInput
+                      textarea
                       rows={4}
-                      size="large"
-                      style={{ borderRadius: 12 }}
+                      valueRu={descriptionRu}
+                      valueTj={descriptionTj}
+                      onChangeRu={setDescriptionRu}
+                      onChangeTj={setDescriptionTj}
+                      placeholder={t[lang].description}
                     />
                   </div>
                 </motion.div>

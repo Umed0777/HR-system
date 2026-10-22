@@ -7,18 +7,21 @@ import {
   deleteTest,
 } from "../services/api.service.tests";
 
-export const useTestStore = create((set) => ({
+export const useTestStore = create((set, get) => ({
   tests: [],
   currentTest: null,
   loading: false,
   error: null,
   totalRecords: 0,
+  // язык последнего запроса — повторные fetchTests без языка используют его
+  language: "ru",
 
- fetchTests: async (pageNumber = 1, pageSize = 100) => {
-  set({ loading: true, error: null });
+ fetchTests: async (pageNumber = 1, pageSize = 100, language = null) => {
+  const lang = language || get().language;
+  set({ loading: true, error: null, language: lang });
 
   try {
-    const res = await getTests(pageNumber, pageSize);
+    const res = await getTests(pageNumber, pageSize, lang);
 
     console.log("========== TESTS API ==========");
     console.log("FULL RESPONSE:", res);

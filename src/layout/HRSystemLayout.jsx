@@ -409,6 +409,9 @@ export const HRSystemLayout = () => {
     setLanguage(lang);
 
     localStorage.setItem("language", lang);
+    // страницы тестов/опросов подписаны на эти события
+    window.dispatchEvent(new CustomEvent("languagechange", { detail: lang }));
+    window.dispatchEvent(new CustomEvent("app-language-change", { detail: lang }));
   };
 
   // ==========================================

@@ -31,7 +31,11 @@ import {
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
-import img from "../assets/image2.jpg"; 
+import img from "../assets/image2.jpg";
+import { BilingualInput } from "../components/BilingualInput";
+import {
+  isBilingualFilled,
+} from "../utils/bilingual";
 const { Title, Text } = Typography;
 const letters = ["A", "B", "C", "D", "E", "F"];
 
@@ -135,10 +139,12 @@ export const Question = () => {
     const savedLang = localStorage.getItem("question_lang");
     return savedLang || "ru";
   });
-  const [content, setContent] = useState("");
+  const [contentRu, setContentRu] = useState("");
+  const [contentTj, setContentTj] = useState("");
   const [type, setType] = useState(1);
   const [options, setOptions] = useState([]);
-  const [manualAnswer, setManualAnswer] = useState("");
+  const [manualAnswerRu, setManualAnswerRu] = useState("");
+  const [manualAnswerTj, setManualAnswerTj] = useState("");
   const [hoveredCard, setHoveredCard] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [newQuestionId, setNewQuestionId] = useState(null);
@@ -149,8 +155,8 @@ export const Question = () => {
   const [selectedQuestionId, setSelectedQuestionId] = useState(null); // Добавляем состояние для выбранного вопроса
   
   useEffect(() => {
-    fetchQuestions(page, pageSize);
-  }, [page, pageSize]);
+    fetchQuestions(page, pageSize, null, lang);
+  }, [page, pageSize, lang]);
 
   const handleSetLang = (newLang) => {
     setLang(newLang);
@@ -212,54 +218,43 @@ export const Question = () => {
     },
   };
 
+  const resetForm = () => {
+    setContentRu("");
+    setContentTj("");
+    setOptions([]);
+    setManualAnswerRu("");
+    setManualAnswerTj("");
+    setRatingAnswer(null);
+  };
+
   const openModal = (item = null) => {
     setEditingItem(item);
+    resetForm();
 
     if (item) {
-      const questionText =
-        lang === "ru"
-          ? item.contentRu || item.content || ""
-          : item.contentTj || item.content || "";
-      setContent(questionText);
+      setContentRu(item.contentRu || item.content || "");
+      setContentTj(item.contentTj || item.content || "");
       setType(item.type || 1);
 
       if (item.type === 3) {
         setRatingAnswer(item.optionId || null);
-        setOptions([]);
-        setManualAnswer("");
-      }
-      else if (item.type === 2) {
-        if (item.options && item.options.length > 0) {
-          const option = item.options[0];
-          const answerText =
-            lang === "ru"
-              ? option.textRu || option.text || ""
-              : option.textTj || option.text || "";
-          setManualAnswer(answerText);
-        } else {
-          setManualAnswer("");
+      } else if (item.type === 2) {
+        const option = item.options?.[0];
+        if (option) {
+          setManualAnswerRu(option.textRu || option.text || "");
+          setManualAnswerTj(option.textTj || option.text || "");
         }
-        setOptions([]);
-        setRatingAnswer(null);
-      } 
-      else {
-        const loadedOptions = (
-          item.options && Array.isArray(item.options) ? item.options : []
-        ).map((o) => ({
-          text:
-            lang === "ru" ? o.textRu || o.text || "" : o.textTj || o.text || "",
-          isCorrect: o.isCorrect || false,
-        }));
-        setOptions(loadedOptions);
-        setManualAnswer("");
-        setRatingAnswer(null);
+      } else {
+        setOptions(
+          (Array.isArray(item.options) ? item.options : []).map((o) => ({
+            textRu: o.textRu || o.text || "",
+            textTj: o.textTj || o.text || "",
+            isCorrect: o.isCorrect || false,
+          })),
+        );
       }
     } else {
-      setContent("");
       setType(1);
-      setOptions([]);
-      setManualAnswer("");
-      setRatingAnswer(null);
     }
 
     setOpen(true);
@@ -268,19 +263,24 @@ export const Question = () => {
   const handleSave = async () => {
     let payload;
 
+    if (!isBilingualFilled(contentRu, contentTj)) {
+      message.warning("Пожалуйста, введите вопрос на двух языках (RU и TJ)");
+      return;
+    }
+
     if (type === 2) {
-      if (!manualAnswer) {
-        message.warning("Пожалуйста, введите ответ");
+      if (!isBilingualFilled(manualAnswerRu, manualAnswerTj)) {
+        message.warning("Пожалуйста, введите ответ на двух языках (RU и TJ)");
         return;
       }
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: 2,
         options: [
           {
-            textRu: manualAnswer,
-            textTj: manualAnswer,
+            textRu: manualAnswerRu,
+            textTj: manualAnswerTj,
             isCorrect: true,
           },
         ],
@@ -292,20 +292,20 @@ export const Question = () => {
         return;
       }
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: 3,
         optionId: ratingAnswer,
         options: [],
       };
     }
     else {
-      if (!content) {
-        message.warning("Пожалуйста, введите вопрос");
-        return;
-      }
       if (options.length === 0) {
         message.warning("Пожалуйста, добавьте хотя бы один вариант ответа");
+        return;
+      }
+      if (options.some((o) => !isBilingualFilled(o.textRu, o.textTj))) {
+        message.warning("Заполните все варианты на двух языках (RU и TJ)");
         return;
       }
       const hasCorrect = options.some((o) => o.isCorrect);
@@ -315,12 +315,12 @@ export const Question = () => {
       }
 
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: 1,
         options: options.map((o) => ({
-          textRu: o.text,
-          textTj: o.text,
+          textRu: o.textRu,
+          textTj: o.textTj,
           isCorrect: o.isCorrect,
         })),
       };
@@ -342,10 +342,7 @@ export const Question = () => {
 
       await fetchQuestions(page, pageSize);
       setOpen(false);
-      setContent("");
-      setOptions([]);
-      setManualAnswer("");
-      setRatingAnswer(null);
+      resetForm();
       setEditingItem(null);
     } catch (err) {
       console.log("ERROR:", err);
@@ -396,13 +393,11 @@ export const Question = () => {
       message.warning("Максимум 6 вариантов");
       return;
     }
-    setOptions([...options, { text: "", isCorrect: false }]);
+    setOptions([...options, { textRu: "", textTj: "", isCorrect: false }]);
   };
 
-  const updateOption = (i, value) => {
-    const arr = [...options];
-    arr[i].text = value;
-    setOptions(arr);
+  const updateOption = (i, field, value) => {
+    setOptions(options.map((o, idx) => (idx === i ? { ...o, [field]: value } : o)));
   };
 
   const setCorrectOption = (index) => {
@@ -900,13 +895,13 @@ export const Question = () => {
           <Text strong style={{ fontSize: 16, display: "block", marginBottom: 8 }}>
             {t[lang].question}:
           </Text>
-          <Input.TextArea
+          <BilingualInput
+            textarea
             placeholder={t[lang].question}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={3}
-            size="large"
-            style={{ borderRadius: 10 }}
+            valueRu={contentRu}
+            valueTj={contentTj}
+            onChangeRu={setContentRu}
+            onChangeTj={setContentTj}
           />
         </div>
 
@@ -919,7 +914,8 @@ export const Question = () => {
             onChange={(e) => {
               setType(e.target.value);
               setOptions([]);
-              setManualAnswer("");
+              setManualAnswerRu("");
+              setManualAnswerTj("");
               setRatingAnswer(null);
             }}
           >
@@ -976,11 +972,12 @@ export const Question = () => {
                         </Radio>
                       </Col>
                       <Col flex="auto">
-                        <Input
+                        <BilingualInput
                           placeholder={`${t[lang].variant} ${letters[i]}`}
-                          value={o.text}
-                          onChange={(e) => updateOption(i, e.target.value)}
-                          size="large"
+                          valueRu={o.textRu}
+                          valueTj={o.textTj}
+                          onChangeRu={(v) => updateOption(i, "textRu", v)}
+                          onChangeTj={(v) => updateOption(i, "textTj", v)}
                         />
                       </Col>
                     </Row>
@@ -997,12 +994,12 @@ export const Question = () => {
             <Text strong style={{ display: "block", marginBottom: 8 }}>
               {t[lang].correctAnswer}:
             </Text>
-            <Input
+            <BilingualInput
               placeholder={t[lang].answer}
-              value={manualAnswer}
-              onChange={(e) => setManualAnswer(e.target.value)}
-              size="large"
-              style={{ borderRadius: 10 }}
+              valueRu={manualAnswerRu}
+              valueTj={manualAnswerTj}
+              onChangeRu={setManualAnswerRu}
+              onChangeTj={setManualAnswerTj}
             />
           </div>
         )}
