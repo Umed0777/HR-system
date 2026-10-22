@@ -20,11 +20,19 @@ export const useQuestionStore = create((set, get) => ({
   loading: false,
   error: null,
   totalRecords: 0,
+  // язык последнего запроса — повторные fetchQuestions без языка используют его
+  language: "ru",
 
-  fetchQuestions: async (pageNumber = 1, pageSize = 10, type = null) => {
-    set({ loading: true, error: null });
+  fetchQuestions: async (
+    pageNumber = 1,
+    pageSize = 10,
+    type = null,
+    language = null,
+  ) => {
+    const lang = language || get().language;
+    set({ loading: true, error: null, language: lang });
     try {
-      const res = await getQuestions(pageNumber, pageSize, type);
+      const res = await getQuestions(pageNumber, pageSize, type, null, lang);
       console.log("Fetched questions:", res.data, "type:", type);
       set({
         questions: res.data,

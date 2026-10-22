@@ -990,7 +990,7 @@ useEffect(() => {
       try {
         await Promise.all([
           fetchSessions(1, 1000),
-          fetchTests(1, 1000),
+          fetchTests(1, 1000, lang),
           fetchEmployee(1, 1000),
         ]);
         setDataLoaded(true);
@@ -1014,6 +1014,16 @@ useEffect(() => {
     };
     loadAllData();
   }, []);
+
+  // при смене языка бэк отдаёт тесты на этом языке — перезапрашиваем
+  const langMounted = useRef(false);
+  useEffect(() => {
+    if (!langMounted.current) {
+      langMounted.current = true;
+      return;
+    }
+    fetchTests(1, 1000, lang);
+  }, [lang]);
 
   useEffect(() => {
     if (!dataLoaded || !sessions.length) return;

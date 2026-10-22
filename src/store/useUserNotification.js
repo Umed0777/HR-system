@@ -4,12 +4,11 @@ import { getUsers } from "../services/api.service.account";
 export const useUserNotificationStore = create((set) => ({
   users: [],
   loading: false,
-  pageNumber: 1,
-  pageSize: 5,
   total: 0,
   error: null,
 
-  fetchUsers: async (pageNumber = 1, pageSize = 10) => {
+  // без пагинации — загружаем всех пользователей одним запросом
+  fetchUsers: async (pageNumber = 1, pageSize = 10000) => {
     try {
       set({
         loading: true,
@@ -33,8 +32,6 @@ export const useUserNotificationStore = create((set) => ({
       set({
         users,
         loading: false,
-        pageNumber,
-        pageSize,
         total:
           response?.totalRecords ??
           response?.total ??

@@ -6,15 +6,13 @@ const API = axios.create({
 
 export const getTests = async (
   pageNumber = 1,
-  pageSize = 100
+  pageSize = 100,
+  language = null
 ) => {
   try {
-    const res = await API.get("/api/Test", {
-      params: {
-        pageNumber,
-        pageSize,
-      },
-    });
+    const params = { pageNumber, pageSize };
+    if (language) params.language = language;
+    const res = await API.get("/api/Test", { params });
 
     return res.data;
   } catch (error) {

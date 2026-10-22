@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import axios from "axios";
 import { useTestStore } from "../store/useTest";
 import { useQuestionStore } from "../store/useQuestion";
@@ -41,7 +41,6 @@ import {
   QuestionCircleOutlined,
   CheckCircleOutlined,
   ArrowRightOutlined,
-  ClockCircleOutlined,
   TrophyOutlined,
   PlusOutlined,
   MinusOutlined,
@@ -53,7 +52,6 @@ import {
   UserOutlined,
   ApartmentOutlined,
   PlayCircleOutlined,
-  HourglassOutlined,
   FormOutlined,
   SendOutlined,
   LeftOutlined,
@@ -61,6 +59,11 @@ import {
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
+import { BilingualInput } from "../components/BilingualInput";
+import {
+  isBilingualFilled,
+  isBilingualPartial,
+} from "../utils/bilingual";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -192,6 +195,16 @@ const getOptTextSafe = (o, lang = "ru") => {
   return text && text.trim() ? text : "—";
 };
 
+const getSurveyTitle = (sv, lang = "ru") =>
+  (lang === "ru"
+    ? sv?.titleRu || sv?.title || sv?.titleTj
+    : sv?.titleTj || sv?.title || sv?.titleRu) || "";
+
+const getSurveyDesc = (sv, lang = "ru") =>
+  (lang === "ru"
+    ? sv?.descriptionRu || sv?.description || sv?.descriptionTj
+    : sv?.descriptionTj || sv?.description || sv?.descriptionRu) || "";
+
 const readRoles = () => {
   try {
     const raw = JSON.parse(localStorage.getItem("roles") || "[]");
@@ -212,7 +225,7 @@ const isAdminOrSuper = (roles) =>
 // ============================================================
 // ⭐ ЗАГРУЗКА ВОПРОСОВ
 // ============================================================
-const loadAllQuestionsFromApi = async (language = "Ru") => {
+const loadAllQuestionsFromApi = async (language = "ru") => {
   const tryFetch = async (params) => {
     try {
       const r = await axios.get(`${API_BASE}/Question`, { params });
@@ -276,37 +289,34 @@ const QuestionCreator = ({
   onQuestionUpdated,
   onCancel,
   initialQuestion = null,
-  lang,
   t,
 }) => {
   const { addQuestion, editQuestion } = useQuestionStore();
   const isEdit = !!initialQuestion;
   const initialType = isEdit ? getNumericType(initialQuestion.type) : 1;
-  const rawQText = (q) =>
-    (lang === "ru"
-      ? q.contentRu || q.content || q.contentTj
-      : q.contentTj || q.content || q.contentRu) || "";
-  const rawOptText = (o) =>
-    (lang === "ru"
-      ? o.textRu || o.text || o.textTj
-      : o.textTj || o.text || o.textRu) || "";
-
-  const [content, setContent] = useState(() =>
-    isEdit ? rawQText(initialQuestion) : "",
+  const [contentRu, setContentRu] = useState(() =>
+    isEdit ? initialQuestion.contentRu || initialQuestion.content || "" : "",
+  );
+  const [contentTj, setContentTj] = useState(() =>
+    isEdit ? initialQuestion.contentTj || initialQuestion.content || "" : "",
   );
   const [type, setType] = useState(initialType);
   const [options, setOptions] = useState(() =>
     isEdit && initialType === 1
       ? (initialQuestion.options || []).map((o) => ({
-          text: rawOptText(o),
+          textRu: o.textRu || o.text || "",
+          textTj: o.textTj || o.text || "",
           isCorrect: !!o.isCorrect,
         }))
       : [],
   );
-  const [manualAnswer, setManualAnswer] = useState(() =>
-    isEdit && initialType === 2 && initialQuestion.options?.[0]
-      ? rawOptText(initialQuestion.options[0])
-      : "",
+  const initialManual =
+    isEdit && initialType === 2 ? initialQuestion.options?.[0] : null;
+  const [manualAnswerRu, setManualAnswerRu] = useState(
+    () => initialManual?.textRu || initialManual?.text || "",
+  );
+  const [manualAnswerTj, setManualAnswerTj] = useState(
+    () => initialManual?.textTj || initialManual?.text || "",
   );
   const [creating, setCreating] = useState(false);
 
@@ -314,19 +324,18 @@ const QuestionCreator = ({
 
   const addOption = () => {
     if (options.length >= 6) return message.warning("Максимум 6 вариантов");
-    setOptions([...options, { text: "" }]);
+    setOptions([...options, { textRu: "", textTj: "" }]);
   };
-  const updateOption = (i, v) => {
-    const arr = [...options];
-    arr[i].text = v;
-    setOptions(arr);
+  const updateOption = (i, field, v) => {
+    setOptions(options.map((o, idx) => (idx === i ? { ...o, [field]: v } : o)));
   };
   const deleteOption = (i) => {
     setOptions(options.filter((_, idx) => idx !== i));
   };
 
   const handleSave = async () => {
-    if (!content.trim()) return message.warning("Введите текст вопроса");
+    if (!isBilingualFilled(contentRu, contentTj))
+      return message.warning("Введите текст вопроса на двух языках (RU и TJ)");
 
     const apiType = normalizeTypeForApi(type);
     const nType = getNumericType(type);
@@ -334,33 +343,37 @@ const QuestionCreator = ({
     let payload;
     if (nType === 1) {
       if (!options.length) return message.warning("Добавьте варианты");
-      if (options.some((o) => !o.text.trim()))
-        return message.warning("Заполните все варианты");
+      if (options.some((o) => !isBilingualFilled(o.textRu, o.textTj)))
+        return message.warning("Заполните все варианты на двух языках (RU и TJ)");
 
       const hasCorrect = options.some((o) => o.isCorrect);
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: apiType,
         isSurvey: false,
         options: options.map((o, i) => ({
-          textRu: o.text,
-          textTj: o.text,
+          textRu: o.textRu,
+          textTj: o.textTj,
           isCorrect: hasCorrect ? !!o.isCorrect : i === 0,
           questionId: isEdit ? initialQuestion.id : 0,
         })),
       };
     } else if (nType === 2) {
+      if (isBilingualPartial(manualAnswerRu, manualAnswerTj))
+        return message.warning(
+          "Введите эталонный ответ на двух языках (RU и TJ)",
+        );
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: apiType,
         isSurvey: true,
-        options: manualAnswer
+        options: manualAnswerRu.trim()
           ? [
               {
-                textRu: manualAnswer,
-                textTj: manualAnswer,
+                textRu: manualAnswerRu,
+                textTj: manualAnswerTj,
                 isCorrect: true,
                 questionId: isEdit ? initialQuestion.id : 0,
               },
@@ -369,8 +382,8 @@ const QuestionCreator = ({
       };
     } else {
       payload = {
-        contentRu: content,
-        contentTj: content,
+        contentRu,
+        contentTj,
         type: apiType,
         isSurvey: true,
         options: [],
@@ -387,9 +400,11 @@ const QuestionCreator = ({
       }
       const res = await addQuestion(payload);
       message.success("Вопрос создан! 🎉");
-      setContent("");
+      setContentRu("");
+      setContentTj("");
       setOptions([]);
-      setManualAnswer("");
+      setManualAnswerRu("");
+      setManualAnswerTj("");
       setType(1);
       if (onQuestionCreated) onQuestionCreated(res);
     } catch (err) {
@@ -421,13 +436,13 @@ const QuestionCreator = ({
         <Text strong style={{ display: "block", marginBottom: 8 }}>
           {t.question}:
         </Text>
-        <TextArea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={3}
-          size="large"
+        <BilingualInput
+          textarea
           placeholder={t.question}
-          style={{ borderRadius: 10 }}
+          valueRu={contentRu}
+          valueTj={contentTj}
+          onChangeRu={setContentRu}
+          onChangeTj={setContentTj}
         />
       </div>
 
@@ -440,7 +455,8 @@ const QuestionCreator = ({
           onChange={(e) => {
             setType(e.target.value);
             setOptions([]);
-            setManualAnswer("");
+            setManualAnswerRu("");
+            setManualAnswerTj("");
           }}
         >
           <Radio value={1}>{t.test}</Radio>
@@ -503,11 +519,12 @@ const QuestionCreator = ({
                       </div>
                     </Col>
                     <Col flex="auto">
-                      <Input
-                        value={o.text}
-                        onChange={(e) => updateOption(i, e.target.value)}
+                      <BilingualInput
                         placeholder={`${t.variant} ${letters[i]}`}
-                        size="large"
+                        valueRu={o.textRu}
+                        valueTj={o.textTj}
+                        onChangeRu={(v) => updateOption(i, "textRu", v)}
+                        onChangeTj={(v) => updateOption(i, "textTj", v)}
                       />
                     </Col>
                   </Row>
@@ -523,12 +540,12 @@ const QuestionCreator = ({
           <Text strong style={{ display: "block", marginBottom: 8 }}>
             Эталонный ответ (необязательно):
           </Text>
-          <Input
-            value={manualAnswer}
-            onChange={(e) => setManualAnswer(e.target.value)}
-            size="large"
+          <BilingualInput
             placeholder={t.answer}
-            style={{ borderRadius: 10 }}
+            valueRu={manualAnswerRu}
+            valueTj={manualAnswerTj}
+            onChangeRu={setManualAnswerRu}
+            onChangeTj={setManualAnswerTj}
           />
         </div>
       )}
@@ -587,34 +604,14 @@ const SurveyTaking = ({
   onClose,
   employeeId,
   lang,
-  durationMinutes = 5,
 }) => {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [startTime] = useState(Date.now());
-  const [timeLeft, setTimeLeft] = useState(durationMinutes * 60);
-  const [timerActive, setTimerActive] = useState(true);
 
   const total = questions.length;
-
-  useEffect(() => {
-    if (!timerActive || timeLeft <= 0 || isCompleted) return;
-    const timer = setInterval(() => {
-      setTimeLeft((p) => {
-        if (p <= 1) {
-          clearInterval(timer);
-          setTimerActive(false);
-          handleComplete(true);
-          return 0;
-        }
-        return p - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line
-  }, [timerActive, isCompleted]);
 
   const currentQuestion = questions[idx];
   const answered = Object.keys(answers).length;
@@ -623,8 +620,8 @@ const SurveyTaking = ({
   const next = () => idx < total - 1 && setIdx(idx + 1);
   const prev = () => idx > 0 && setIdx(idx - 1);
 
-  const handleComplete = async (force = false) => {
-    if (!force && answered < total && timeLeft > 0) {
+  const handleComplete = async () => {
+    if (answered < total) {
       message.warning(`Ответьте на все вопросы. Осталось ${total - answered}`);
       return;
     }
@@ -662,9 +659,6 @@ const SurveyTaking = ({
     }
   };
 
-  const formatTime = (s) =>
-    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-
   if (!currentQuestion) return <Empty description="Вопросы не найдены" />;
 
   if (isCompleted) {
@@ -680,40 +674,9 @@ const SurveyTaking = ({
   }
 
   const ctype = getNumericType(currentQuestion?.type);
-  const timeUp = timeLeft <= 0;
-  const timeAlmost = timeLeft < 60;
 
   return (
     <div>
-      <div
-        style={{
-          marginBottom: 16,
-          padding: "10px 16px",
-          background: timeUp ? "#ff4d4f" : timeAlmost ? "#fff7e6" : "#fff5f5",
-          borderRadius: 12,
-          border: timeUp
-            ? "2px solid #ff4d4f"
-            : timeAlmost
-              ? "1px solid #ffa940"
-              : "1px solid #ff4b2b",
-          display: "flex",
-          justifyContent: "space-between",
-        }}
-      >
-        <Text style={{ color: timeUp ? "#fff" : "#ff4b2b", fontWeight: 500 }}>
-          <ClockCircleOutlined /> Осталось:
-        </Text>
-        <Text
-          style={{
-            fontSize: 20,
-            fontWeight: 700,
-            color: timeUp ? "#fff" : "#ff4b2b",
-          }}
-        >
-          {formatTime(timeLeft)}
-        </Text>
-      </div>
-
       <Flex justify="space-between" style={{ marginBottom: 8 }}>
         <Text strong>
           Вопрос {idx + 1} из {total}
@@ -725,7 +688,7 @@ const SurveyTaking = ({
       <Progress
         percent={Math.round((answered / total) * 100)}
         showInfo={false}
-        strokeColor={timeAlmost ? "#faad14" : "#ff4b2b"}
+        strokeColor="#ff4b2b"
         style={{ marginBottom: 16 }}
       />
 
@@ -847,7 +810,7 @@ const SurveyTaking = ({
         >
           Назад
         </Button>
-        {idx === total - 1 || timeUp ? (
+        {idx === total - 1 ? (
           <Button
             type="primary"
             icon={<SendOutlined />}
@@ -855,11 +818,11 @@ const SurveyTaking = ({
             loading={isSubmitting}
             size="large"
             style={{
-              background: timeUp ? "#ff4d4f" : "#52c41a",
+              background: "#52c41a",
               borderColor: "transparent",
             }}
           >
-            {timeUp ? "Завершить (время)" : "Завершить"}
+            Завершить
           </Button>
         ) : (
           <Button
@@ -964,8 +927,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const [filterType, setFilterType] = useState("all");
   const [activeTab, setActiveTab] = useState("select");
 
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
+  const [titleRu, setTitleRu] = useState("");
+  const [titleTj, setTitleTj] = useState("");
+  const [descRu, setDescRu] = useState("");
+  const [descTj, setDescTj] = useState("");
 
   const [hoveredCard, setHoveredCard] = useState(null);
 
@@ -980,7 +945,6 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const [selSurveyId, setSelSurveyId] = useState(null);
   const [selEmpId, setSelEmpId] = useState(null);
   const [selSubDeptId, setSelSubDeptId] = useState(null);
-  const [selDuration, setSelDuration] = useState(5);
 
   const [editingQuestion, setEditingQuestion] = useState(null);
 
@@ -996,7 +960,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const loadSurveyQuestions = useCallback(async () => {
     setSurveyQuestionsLoading(true);
     try {
-      const list = await loadAllQuestionsFromApi("Ru");
+      const list = await loadAllQuestionsFromApi(lang);
       setSurveyQuestions(list);
     } catch (e) {
       console.error("loadSurveyQuestions error:", e);
@@ -1004,7 +968,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
     } finally {
       setSurveyQuestionsLoading(false);
     }
-  }, []);
+  }, [lang]);
 
   const totalCount = surveyItems.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -1119,7 +1083,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
     (async () => {
       try {
         await Promise.all([
-          fetchTests(1, 1000),
+          fetchTests(1, 1000, lang),
           fetchEmployee(1, 1000),
           fetchSubDepartments(),
           fetchTestAssignments(1, 1000),
@@ -1133,6 +1097,18 @@ export const SurveyManager = ({ onStartSurvey }) => {
     })();
     // eslint-disable-next-line
   }, []);
+
+  // при смене языка бэк отдаёт опросы и вопросы на этом языке — перезапрашиваем
+  const langMounted = useRef(false);
+  useEffect(() => {
+    if (!langMounted.current) {
+      langMounted.current = true;
+      return;
+    }
+    fetchTests(1, 1000, lang);
+    loadSurveyQuestions();
+    // eslint-disable-next-line
+  }, [lang]);
 
   useEffect(() => {
     if (!dataLoaded) return;
@@ -1189,7 +1165,9 @@ export const SurveyManager = ({ onStartSurvey }) => {
       back: "Назад",
       totalQuestions: "Всего вопросов",
       surveyReady: "Опрос готов к публикации",
-      fillTitle: "Заполните название",
+      fillTitle: "Заполните название на двух языках (RU и TJ)",
+      fillDescription:
+        "Заполните описание на двух языках (RU и TJ) или оставьте оба поля пустыми",
       selectQuestions: "Выберите хотя бы один вопрос",
       success: "Успешно!",
       info: "Информация",
@@ -1253,7 +1231,9 @@ export const SurveyManager = ({ onStartSurvey }) => {
       back: "Қаблӣ",
       totalQuestions: "Ҳамагӣ",
       surveyReady: "Пурсиш омода аст",
-      fillTitle: "Номро пур кунед",
+      fillTitle: "Номро бо ду забон (RU ва TJ) пур кунед",
+      fillDescription:
+        "Тавсифро бо ду забон (RU ва TJ) пур кунед ё ҳарду майдонро холӣ гузоред",
       selectQuestions: "Як саволро интихоб кунед",
       success: "Бомуваффақият!",
       info: "Маълумот",
@@ -1300,8 +1280,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const openCreate = () => {
     setEditingItem(null);
     setStep(0);
-    setTitle("");
-    setDesc("");
+    setTitleRu("");
+    setTitleTj("");
+    setDescRu("");
+    setDescTj("");
     setSelectedQIds([]);
     setSearchTerm("");
     setFilterType("all");
@@ -1312,8 +1294,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const openEdit = (sv) => {
     setEditingItem(sv);
     setStep(0);
-    setTitle(sv.titleRu || sv.title || sv.titleTj || "");
-    setDesc(sv.descriptionRu || sv.description || sv.descriptionTj || "");
+    setTitleRu(sv.titleRu || sv.title || "");
+    setTitleTj(sv.titleTj || sv.title || "");
+    setDescRu(sv.descriptionRu || sv.description || "");
+    setDescTj(sv.descriptionTj || sv.description || "");
     const ids =
       sv.questions?.map((q) => q.id || q.questionId).filter(Boolean) || [];
     setSelectedQIds(ids);
@@ -1341,7 +1325,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
 
   const handleNext = () => {
     if (step === 0) {
-      if (!title.trim()) return message.warning(t[lang].fillTitle);
+      if (!isBilingualFilled(titleRu, titleTj))
+        return message.warning(t[lang].fillTitle);
+      if (isBilingualPartial(descRu, descTj))
+        return message.warning(t[lang].fillDescription);
     }
     if (step === 1 && selectedQIds.length === 0)
       return message.warning(t[lang].selectQuestions);
@@ -1380,7 +1367,8 @@ export const SurveyManager = ({ onStartSurvey }) => {
   };
 
   const handleSave = async () => {
-    if (!title.trim()) return message.warning(t[lang].fillTitle);
+    if (!isBilingualFilled(titleRu, titleTj))
+      return message.warning(t[lang].fillTitle);
     if (selectedQIds.length === 0)
       return message.warning(t[lang].selectQuestions);
 
@@ -1422,10 +1410,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
     });
 
     const payload = {
-      titleRu: title,
-      titleTj: title,
-      descriptionRu: desc,
-      descriptionTj: desc,
+      titleRu,
+      titleTj,
+      descriptionRu: descRu,
+      descriptionTj: descTj,
       testType: SURVEY_TEST_TYPE,
       questions: questionsData,
     };
@@ -1472,8 +1460,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
 
   const resetForm = () => {
     setEditingItem(null);
-    setTitle("");
-    setDesc("");
+    setTitleRu("");
+    setTitleTj("");
+    setDescRu("");
+    setDescTj("");
     setSelectedQIds([]);
     setSearchTerm("");
     setFilterType("all");
@@ -1511,13 +1501,12 @@ export const SurveyManager = ({ onStartSurvey }) => {
         surveyId: selSurveyId,
         employeeId: selEmpId,
         subDepartmentId: subId,
-        duration: selDuration,
         survey: sv,
       });
       return;
     }
 
-    setTakingSurvey({ ...sv, durationMinutes: selDuration });
+    setTakingSurvey(sv);
     setTakingEmpId(selEmpId);
     setTakingOpen(true);
   };
@@ -1748,8 +1737,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
                 const isHovered = hoveredCard === sv.id;
                 const isNew = newSurveyId === sv.id;
                 const questionCount = sv.questions?.length || 0;
-                const hasDescription =
-                  sv.descriptionRu || sv.description || sv.descriptionTj;
+                const hasDescription = getSurveyDesc(sv, lang);
 
                 return (
                   <Col xs={24} md={12} lg={8} key={sv.id}>
@@ -1848,15 +1836,12 @@ export const SurveyManager = ({ onStartSurvey }) => {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {sv.titleRu ||
-                                  sv.title ||
-                                  sv.titleTj ||
-                                  "Без названия"}
+                                {getSurveyTitle(sv, lang) || "Без названия"}
                               </Text>
 
                               <div style={{ marginTop: 10 }}>
                                 <Tag
-                                  icon={<ClockCircleOutlined />}
+                                  icon={<FileTextOutlined />}
                                   style={{
                                     background: "rgba(255, 255, 255, 0.25)",
                                     color: "#fff",
@@ -2026,8 +2011,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
                 optionLabelProp="label"
               >
                 {surveyItems.map((s) => {
-                  const label =
-                    s.titleRu || s.title || s.titleTj || `ID: ${s.id}`;
+                  const label = getSurveyTitle(s, lang) || `ID: ${s.id}`;
                   return (
                     <Option key={s.id} value={s.id} label={label}>
                       {label}
@@ -2035,50 +2019,6 @@ export const SurveyManager = ({ onStartSurvey }) => {
                   );
                 })}
               </Select>
-            </div>
-
-            <div>
-              <Text strong>{t[lang].selectDuration}:</Text>
-              <Input
-                type="number"
-                min={1}
-                max={480}
-                value={selDuration}
-                onChange={(e) =>
-                  setSelDuration(
-                    Math.max(1, Math.min(480, parseInt(e.target.value) || 5)),
-                  )
-                }
-                prefix={<HourglassOutlined />}
-                suffix={t[lang].minutesShort}
-                size="large"
-                style={{ marginTop: 8, borderRadius: 10 }}
-              />
-              <div
-                style={{
-                  marginTop: 10,
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                {[5, 10, 15, 20, 30, 45, 60, 90].map((m) => (
-                  <Button
-                    key={m}
-                    size="small"
-                    type={selDuration === m ? "primary" : "default"}
-                    onClick={() => setSelDuration(m)}
-                    style={{
-                      borderRadius: 20,
-                      ...(selDuration === m
-                        ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
-                        : {}),
-                    }}
-                  >
-                    {m}
-                  </Button>
-                ))}
-              </div>
             </div>
 
             <div>
@@ -2202,10 +2142,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
         title={
           <Space>
             <FormOutlined style={{ color: "#ff4b2b" }} />
-            {takingSurvey?.titleRu ||
-              takingSurvey?.titleTj ||
-              takingSurvey?.title ||
-              "Опрос"}
+            {getSurveyTitle(takingSurvey, lang) || "Опрос"}
           </Space>
         }
         onCancel={() => {
@@ -2227,7 +2164,6 @@ export const SurveyManager = ({ onStartSurvey }) => {
             }}
             employeeId={takingEmpId}
             lang={lang}
-            durationMinutes={takingSurvey.durationMinutes || 5}
           />
         )}
       </Modal>
@@ -2292,25 +2228,26 @@ export const SurveyManager = ({ onStartSurvey }) => {
                       {t[lang].surveyTitle}{" "}
                       <span style={{ color: "#ff4b2b" }}>*</span>
                     </Text>
-                    <Input
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      size="large"
-                      style={{ borderRadius: 12 }}
-                      placeholder="Введите название опроса"
+                    <BilingualInput
+                      valueRu={titleRu}
+                      valueTj={titleTj}
+                      onChangeRu={setTitleRu}
+                      onChangeTj={setTitleTj}
+                      placeholder={t[lang].surveyTitle}
                     />
                   </div>
                   <div>
                     <Text strong style={{ display: "block", marginBottom: 8 }}>
                       {t[lang].description}
                     </Text>
-                    <TextArea
-                      value={desc}
-                      onChange={(e) => setDesc(e.target.value)}
+                    <BilingualInput
+                      textarea
                       rows={4}
-                      size="large"
-                      style={{ borderRadius: 12 }}
-                      placeholder="Введите описание"
+                      valueRu={descRu}
+                      valueTj={descTj}
+                      onChangeRu={setDescRu}
+                      onChangeTj={setDescTj}
+                      placeholder={t[lang].description}
                     />
                   </div>
                 </motion.div>
@@ -2744,7 +2681,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
                         <FileTextOutlined />
                       </Avatar>
                       <div>
-                        <Text strong>{title}</Text>
+                        <Text strong>{lang === "ru" ? titleRu : titleTj}</Text>
                         <div>
                           <Tag color="blue">
                             {selectedQIds.length} {t[lang].totalQuestions}
@@ -2856,13 +2793,11 @@ export const SurveyManager = ({ onStartSurvey }) => {
             style={{ display: "flex", justifyContent: "space-between", gap: 8 }}
           >
             <span style={{ fontSize: 18, fontWeight: 600 }}>
-              {selectedSurvey?.titleRu ||
-                selectedSurvey?.title ||
-                selectedSurvey?.titleTj}
+              {getSurveyTitle(selectedSurvey, lang)}
             </span>
             <Space style={{ marginRight: 24 }}>
               <Tag color="blue" style={{ borderRadius: 20 }}>
-                <ClockCircleOutlined />{" "}
+                <FileTextOutlined />{" "}
                 {selectedSurvey?.questions?.length || 0}{" "}
                 {t[lang].questionCount}
               </Tag>
