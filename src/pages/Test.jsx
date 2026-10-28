@@ -1957,6 +1957,16 @@ export const TestManager = ({ onStartTest }) => {
               onChange={(value) => setSelectedTestId(value)}
               style={{ width: "100%", marginTop: 8 }}
               showSearch
+              // по умолчанию antd ищет по value (id), ищем по названию
+              filterOption={(input, option) => {
+                const test = testTests.find((x) => x.id === option?.value);
+                if (!test) return false;
+                return [test.titleRu, test.titleTj, test.title]
+                  .filter(Boolean)
+                  .join(" ")
+                  .toLowerCase()
+                  .includes(input.toLowerCase());
+              }}
               size="large"
             >
               {testTests.map((test) => (
@@ -2048,6 +2058,25 @@ export const TestManager = ({ onStartTest }) => {
                   }}
                   style={{ width: "100%", marginTop: 8 }}
                   showSearch
+                  // по умолчанию antd ищет по value (id), ищем по ФИО, email и отделу
+                  filterOption={(input, option) => {
+                    const emp = employees.find((e) => e.id === option?.value);
+                    if (!emp) return false;
+                    return [
+                      emp.firstName,
+                      emp.lastName,
+                      emp.middleName,
+                      emp.email,
+                      emp.department,
+                      emp.subDepartmentId
+                        ? getSubDepartmentName(emp.subDepartmentId)
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                      .toLowerCase()
+                      .includes(input.toLowerCase());
+                  }}
                   size="large"
                 >
                   {Object.entries(groupedEmployees).map(
