@@ -1,11 +1,26 @@
 import { create } from "zustand";
 import {
   getTests,
+  getMyTests,
   getTestById,
   createTest,
   updateTest,
   deleteTest,
 } from "../services/api.service.tests";
+
+// админы видят все тесты, остальные — только назначенные им
+const isAdminUser = () => {
+  try {
+    const roles = JSON.parse(localStorage.getItem("roles") || "[]");
+    return (Array.isArray(roles) ? roles : [roles]).some((r) =>
+      ["admin", "superadmin", "super_admin", "super-admin"].includes(
+        String(r).toLowerCase(),
+      ),
+    );
+  } catch {
+    return false;
+  }
+};
 
 export const useTestStore = create((set, get) => ({
   tests: [],
@@ -21,7 +36,9 @@ export const useTestStore = create((set, get) => ({
   set({ loading: true, error: null, language: lang });
 
   try {
-    const res = await getTests(pageNumber, pageSize, lang);
+    const res = isAdminUser()
+      ? await getTests(pageNumber, pageSize, lang)
+      : await getMyTests(lang);
 
     console.log("========== TESTS API ==========");
     console.log("FULL RESPONSE:", res);
