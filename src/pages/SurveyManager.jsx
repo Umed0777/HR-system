@@ -64,6 +64,12 @@ import {
   isBilingualFilled,
   isBilingualPartial,
 } from "../utils/bilingual";
+import { getCurrentEmployeeId } from "../utils/currentEmployee";
+import {
+  startTestSession,
+  submitSessionAnswer,
+  finishTestSession,
+} from "../services/api.service.testSession";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -610,6 +616,27 @@ const SurveyTaking = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [startTime] = useState(Date.now());
+  const [session, setSession] = useState(null);
+  const [starting, setStarting] = useState(true);
+
+  // сессия на бэке создаётся сразу при открытии опроса
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    (async () => {
+      try {
+        const res = await startTestSession(survey.id, employeeId);
+        setSession(res?.data || res);
+      } catch (e) {
+        message.error(
+          e?.response?.data?.message || "Ошибка при начале опроса",
+        );
+      } finally {
+        setStarting(false);
+      }
+    })();
+  }, [survey.id, employeeId]);
 
   const total = questions.length;
 
@@ -625,8 +652,24 @@ const SurveyTaking = ({
       message.warning(`Ответьте на все вопросы. Осталось ${total - answered}`);
       return;
     }
+    if (!session?.id) {
+      message.error("Сессия опроса не создана");
+      return;
+    }
     setIsSubmitting(true);
     try {
+      // ответы в том же формате, что и в TestSession
+      for (const q of questions) {
+        const v = answers[q.id];
+        const qType = getNumericType(q.type);
+        if (qType === 1) await submitSessionAnswer(session.id, q.id, v);
+        else if (qType === 2)
+          await submitSessionAnswer(session.id, q.id, null, String(v));
+        else if (qType === 3)
+          await submitSessionAnswer(session.id, q.id, v, `Рейтинг: ${v}/10`);
+      }
+      await finishTestSession(session.id, employeeId);
+
       const result = {
         surveyId: survey.id,
         employeeId,
@@ -653,11 +696,21 @@ const SurveyTaking = ({
       if (onComplete) onComplete(result);
       setTimeout(() => onClose && onClose(), 1500);
     } catch (e) {
-      message.error("Ошибка завершения");
+      message.error(e?.response?.data?.message || "Ошибка завершения");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (starting)
+    return (
+      <div style={{ textAlign: "center", padding: 60 }}>
+        <Spin size="large" />
+      </div>
+    );
+
+  if (!session)
+    return <Empty description="Не удалось начать опрос" />;
 
   if (!currentQuestion) return <Empty description="Вопросы не найдены" />;
 
@@ -955,6 +1008,17 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const roles = useMemo(() => readRoles(), []);
   const isAdmin = useMemo(() => isAdminOrSuper(roles), [roles]);
 
+  // админ назначает опрос, обычный пользователь проходит его сам за себя
+  const currentEmployeeId = useMemo(
+    () => (isAdmin ? null : getCurrentEmployeeId(employees, tests)),
+    [isAdmin, tests, employees],
+  );
+  const [assigning, setAssigning] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) setSelEmpId(currentEmployeeId);
+  }, [isAdmin, currentEmployeeId]);
+
   const surveyItems = useMemo(() => (tests || []).filter(isSurvey), [tests]);
 
   const loadSurveyQuestions = useCallback(async () => {
@@ -1082,7 +1146,8 @@ export const SurveyManager = ({ onStartSurvey }) => {
   useEffect(() => {
     (async () => {
       try {
-        await Promise.all([
+        // allSettled: у обычного пользователя часть справочников может быть недоступна
+        await Promise.allSettled([
           fetchTests(1, 1000, lang),
           fetchEmployee(1, 1000),
           fetchSubDepartments(),
@@ -1190,6 +1255,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
       createQuestionTab: "Создать вопрос",
       selectQuestionsTab: "Выбор вопросов",
       startSurvey: "Начать опрос",
+      assignSurvey: "Назначить опрос",
+      assign: "Назначить",
+      noEmployeeProfile: "Профиль сотрудника не найден",
+      noAssignedSurveys: "Вам пока не назначено ни одного опроса",
       selectSurvey: "Выберите опрос",
       selectEmployee: "Выберите сотрудника",
       close: "Закрыть",
@@ -1256,6 +1325,10 @@ export const SurveyManager = ({ onStartSurvey }) => {
       createQuestionTab: "Эҷоди савол",
       selectQuestionsTab: "Интихоби саволҳо",
       startSurvey: "Оғоз",
+      assignSurvey: "Таъин кардани пурсиш",
+      assign: "Таъин кардан",
+      noEmployeeProfile: "Профили корманд ёфт нашуд",
+      noAssignedSurveys: "Ба шумо ҳоло ягон пурсиш таъин нашудааст",
       selectSurvey: "Пурсишро интихоб кунед",
       selectEmployee: "Кормандра интихоб кунед",
       close: "Пӯшидан",
@@ -1485,11 +1558,45 @@ export const SurveyManager = ({ onStartSurvey }) => {
     }
   };
 
-  const handleStartSurvey = async () => {
+  // ==================== НАЗНАЧЕНИЕ ОПРОСА (админ) ====================
+  const handleAssignSurvey = async () => {
     if (!selSurveyId || !selEmpId)
       return message.warning("Выберите опрос и сотрудника");
+    const exists = testAssignments.some(
+      (a) => a.employeeId === selEmpId && a.testId === selSurveyId,
+    );
+    if (exists) return message.info("ℹ️ Опрос уже назначен этому сотруднику");
+
+    setAssigning(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(
+        `${API_BASE}/TestAssignment`,
+        { testId: Number(selSurveyId), employeeId: Number(selEmpId) },
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+      );
+      message.success("✅ Опрос назначен!");
+      await fetchTestAssignments(1, 1000);
+      setStartOpen(false);
+    } catch (e) {
+      if (e?.response?.status === 409) {
+        message.info("ℹ️ Назначение уже существует");
+        await fetchTestAssignments(1, 1000);
+      } else {
+        message.error(
+          "❌ Ошибка: " + (e?.response?.data?.message || e.message),
+        );
+      }
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  // ==================== ПРОХОЖДЕНИЕ (пользователь) ====================
+  const handleStartSurvey = async () => {
+    if (!selEmpId) return message.error(t[lang].noEmployeeProfile);
+    if (!selSurveyId) return message.warning(t[lang].selectSurvey);
     const subId = getEmployeeSubDepartment(selEmpId);
-    if (!subId) return message.warning(t[lang].noSubDepartments);
 
     const sv = surveyItems.find((s) => s.id === selSurveyId);
     if (!sv) return message.error("Опрос не найден");
@@ -1670,7 +1777,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
               borderRadius: 20,
             }}
           >
-            {t[lang].startSurvey}
+            {isAdmin ? t[lang].assignSurvey : t[lang].startSurvey}
           </Button>
 
           {isAdmin && (
@@ -1984,7 +2091,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
             <Flex align="center" gap={12}>
               <PlayCircleOutlined style={{ fontSize: 24 }} />
               <Title level={3} style={{ color: "#fff", margin: 0 }}>
-                {t[lang].startSurvey}
+                {isAdmin ? t[lang].assignSurvey : t[lang].startSurvey}
               </Title>
             </Flex>
           </div>
@@ -1998,6 +2105,16 @@ export const SurveyManager = ({ onStartSurvey }) => {
               gap: 20,
             }}
           >
+            {!isAdmin && dataLoaded && !selEmpId && (
+              <Alert
+                message={t[lang].noEmployeeProfile}
+                type="error"
+                showIcon
+              />
+            )}
+            {!isAdmin && dataLoaded && surveyItems.length === 0 && (
+              <Alert message={t[lang].noAssignedSurveys} type="info" showIcon />
+            )}
             <div>
               <Text strong>{t[lang].selectSurvey}:</Text>
               <Select
@@ -2021,6 +2138,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
               </Select>
             </div>
 
+            {isAdmin && (
             <div>
               <Text strong>{t[lang].selectEmployee}:</Text>
               <Select
@@ -2092,8 +2210,9 @@ export const SurveyManager = ({ onStartSurvey }) => {
                 ))}
               </Select>
             </div>
+            )}
 
-            {selSubDeptId && (
+            {isAdmin && selSubDeptId && (
               <Card
                 size="small"
                 style={{ background: "#f6ffed", borderColor: "#b7eb8f" }}
@@ -2117,16 +2236,17 @@ export const SurveyManager = ({ onStartSurvey }) => {
               </Button>
               <Button
                 type="primary"
-                onClick={handleStartSurvey}
-                disabled={!selSurveyId || !selEmpId}
-                icon={<PlayCircleOutlined />}
+                onClick={isAdmin ? handleAssignSurvey : handleStartSurvey}
+                disabled={!selSurveyId || !selEmpId || assigning}
+                loading={assigning}
+                icon={isAdmin ? <UserOutlined /> : <PlayCircleOutlined />}
                 style={{
                   background: "linear-gradient(135deg, #ff416c, #ff4b2b)",
                   border: "none",
                   borderRadius: 10,
                 }}
               >
-                {t[lang].startSurvey}
+                {isAdmin ? t[lang].assign : t[lang].startSurvey}
               </Button>
             </Flex>
           </div>

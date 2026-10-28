@@ -4,6 +4,12 @@ const API = axios.create({
   baseURL: import.meta.env.VITE_API,
 });
 
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 export const getTests = async (
   pageNumber = 1,
   pageSize = 100,
@@ -17,6 +23,20 @@ export const getTests = async (
     return res.data;
   } catch (error) {
     console.error("getTests error:", error);
+    throw error;
+  }
+};
+
+// тесты и опросы, назначенные текущему пользователю
+export const getMyTests = async (language = null) => {
+  try {
+    const params = {};
+    if (language) params.language = language;
+    const res = await API.get("/api/Test/my", { params });
+
+    return res.data;
+  } catch (error) {
+    console.error("getMyTests error:", error);
     throw error;
   }
 };

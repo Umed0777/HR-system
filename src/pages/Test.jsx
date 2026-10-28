@@ -7,10 +7,8 @@ import { useTestAssignmentStore } from "../store/useTestAssignment";
 import { useSubDepartmentStore } from "../store/useSubdepartment";
 import OneTimeLinkModal from "./OneTimeLinkModal";
 import { BilingualInput } from "../components/BilingualInput";
-import {
-  isBilingualFilled,
-  isBilingualPartial,
-} from "../utils/bilingual";
+import { isBilingualFilled, isBilingualPartial } from "../utils/bilingual";
+import { getCurrentEmployeeId } from "../utils/currentEmployee";
 import {
   Button,
   Modal,
@@ -162,7 +160,9 @@ const QuestionCreator = ({
   };
 
   const updateOption = (i, field, value) => {
-    setOptions(options.map((o, idx) => (idx === i ? { ...o, [field]: value } : o)));
+    setOptions(
+      options.map((o, idx) => (idx === i ? { ...o, [field]: value } : o)),
+    );
   };
 
   const setCorrectOption = (index) => {
@@ -191,7 +191,13 @@ const QuestionCreator = ({
         contentTj,
         type: "OpenEnded",
         options: manualAnswerRu.trim()
-          ? [{ textRu: manualAnswerRu, textTj: manualAnswerTj, isCorrect: true }]
+          ? [
+              {
+                textRu: manualAnswerRu,
+                textTj: manualAnswerTj,
+                isCorrect: true,
+              },
+            ]
           : [],
       };
     } else if (type === 3) {
@@ -485,9 +491,26 @@ export const TestManager = ({ onStartTest }) => {
     useTestAssignmentStore();
   const { subdepartments = [], fetchSubDepartments } = useSubDepartmentStore();
 
+  // язык берётся из общего меню (HRSystemLayout)
   const [lang, setLang] = useState(
-    () => localStorage.getItem("test_manager_lang") || "ru",
+    () => localStorage.getItem("language") || "ru",
   );
+
+  useEffect(() => {
+    const handler = (e) => {
+      const newLang =
+        (e?.type === "languagechange" ? e.detail : e?.newValue) ||
+        localStorage.getItem("language") ||
+        "ru";
+      setLang(newLang);
+    };
+    window.addEventListener("languagechange", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("languagechange", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -540,6 +563,16 @@ export const TestManager = ({ onStartTest }) => {
     }
   }, []);
   const isAdmin = roles.includes("Admin") || roles.includes("SuperAdmin");
+
+  // сотрудник текущего пользователя — обычный пользователь проходит тест сам за себя
+  const currentEmployeeId = useMemo(
+    () => (isAdmin ? null : getCurrentEmployeeId(employees, tests)),
+    [isAdmin, tests, employees],
+  );
+
+  useEffect(() => {
+    if (!isAdmin) setSelectedEmployeeId(currentEmployeeId);
+  }, [isAdmin, currentEmployeeId]);
 
   const testTests = tests.filter((test) => test.testType !== 0);
 
@@ -680,7 +713,8 @@ export const TestManager = ({ onStartTest }) => {
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        await Promise.all([
+        // allSettled: у обычного пользователя часть справочников может быть недоступна
+        await Promise.allSettled([
           fetchSessions(),
           fetchTests(1, 1000, lang),
           fetchEmployee(1, 1000),
@@ -784,8 +818,10 @@ export const TestManager = ({ onStartTest }) => {
       summary: "Сводка",
       totalQuestions: "Всего вопросов",
       testReady: "Тест готов к публикации",
-      fillTitle: "Пожалуйста, заполните название теста на двух языках (RU и TJ)",
-      fillDescription: "Заполните описание на двух языках (RU и TJ) или оставьте оба поля пустыми",
+      fillTitle:
+        "Пожалуйста, заполните название теста на двух языках (RU и TJ)",
+      fillDescription:
+        "Заполните описание на двух языках (RU и TJ) или оставьте оба поля пустыми",
       selectQuestions: "Пожалуйста, выберите хотя бы один вопрос",
       success: "Успешно!",
       warning: "Внимание",
@@ -827,6 +863,10 @@ export const TestManager = ({ onStartTest }) => {
       selectQuestionsTab: "Выбор вопросов",
       createQuestionTab: "Создать вопрос",
       startTest: "Начать тест",
+      assignTest: "Назначить тест",
+      assign: "Назначить",
+      noEmployeeProfile: "Профиль сотрудника не найден",
+      noAssignedTests: "Вам пока не назначено ни одного теста",
       selectTest: "Выберите тест",
       selectEmployee: "Выберите сотрудника",
       selectTestDuration: "Длительность теста",
@@ -878,7 +918,8 @@ export const TestManager = ({ onStartTest }) => {
       totalQuestions: "Ҳамагӣ саволҳо",
       testReady: "Тест барои нашр омода аст",
       fillTitle: "Лутфан, номи тестро бо ду забон (RU ва TJ) пур кунед",
-      fillDescription: "Тавсифро бо ду забон (RU ва TJ) пур кунед ё ҳарду майдонро холӣ гузоред",
+      fillDescription:
+        "Тавсифро бо ду забон (RU ва TJ) пур кунед ё ҳарду майдонро холӣ гузоред",
       selectQuestions: "Лутфан, ҳадди ақал як саволро интихоб кунед",
       success: "Бомуваффақият!",
       warning: "Диққат",
@@ -920,6 +961,10 @@ export const TestManager = ({ onStartTest }) => {
       selectQuestionsTab: "Интихоби саволҳо",
       createQuestionTab: "Эҷоди савол",
       startTest: "Оғози тест",
+      assignTest: "Таъин кардани тест",
+      assign: "Таъин кардан",
+      noEmployeeProfile: "Профили корманд ёфт нашуд",
+      noAssignedTests: "Ба шумо ҳоло ягон тест таъин нашудааст",
       selectTest: "Тестро интихоб кунед",
       selectEmployee: "Кормандра интихоб кунед",
       selectTestDuration: "Давомнокии тест",
@@ -972,10 +1017,6 @@ export const TestManager = ({ onStartTest }) => {
   const openPreview = (test) => {
     setSelectedTest(test);
     setPreviewOpen(true);
-  };
-  const handleSetLang = (newLang) => {
-    setLang(newLang);
-    localStorage.setItem("test_manager_lang", newLang);
   };
 
   // ---- Открытие модалки генерации одноразовой ссылки ----
@@ -1296,27 +1337,87 @@ export const TestManager = ({ onStartTest }) => {
     setActiveTab("select");
   };
 
-  // ==================== НАЧАЛО ТЕСТА ====================
-  const handleStartTest = async () => {
+  // ==================== НАЗНАЧЕНИЕ ТЕСТА (админ) ====================
+  // админ только назначает тест сотруднику, сам тест не проходит
+  const handleAssignTest = async () => {
     if (!selectedTestId || !selectedEmployeeId) {
       message.warning("Выберите тест и сотрудника");
       return;
     }
-    const subDeptId = getEmployeeSubDepartment(selectedEmployeeId);
-    if (!subDeptId) {
-      message.warning("У сотрудника не указано отделение");
-      return;
-    }
-    setSelectedSubDepartmentId(subDeptId);
     if (!canStartTest) {
       message.error("Сотрудник уже прошел этот тест.");
       return;
     }
 
+    const hasAssignment = testAssignments.some(
+      (a) => a.employeeId === selectedEmployeeId && a.testId === selectedTestId,
+    );
+    if (hasAssignment) {
+      message.info("ℹ️ Тест уже назначен этому сотруднику");
+      return;
+    }
+
+    setIsCreatingAssignment(true);
+    message.loading({
+      content: "Создание назначения...",
+      key: "creating",
+      duration: 0,
+    });
+    try {
+      const url = `${API_BASE}/TestAssignment`;
+      const token = localStorage.getItem("token");
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          testId: Number(selectedTestId),
+          employeeId: Number(selectedEmployeeId),
+        }),
+      });
+      const text = await response.text();
+      message.destroy("creating");
+      if (response.ok) {
+        message.success("✅ Тест назначен!");
+        await fetchTestAssignments(1, 1000);
+        setTestModalOpen(false);
+      } else if (response.status === 409) {
+        message.info("ℹ️ Назначение уже существует");
+        await fetchTestAssignments(1, 1000);
+      } else {
+        message.error("❌ Ошибка: " + (text || "Неизвестная ошибка"));
+      }
+    } catch (error) {
+      message.destroy("creating");
+      message.error("Ошибка при создании назначения: " + error.message);
+    } finally {
+      setIsCreatingAssignment(false);
+    }
+  };
+
+  // ==================== НАЧАЛО ТЕСТА (пользователь) ====================
+  // пользователь проходит только назначенные ему тесты (список из /api/Test/my)
+  const handleStartTest = () => {
+    if (!selectedEmployeeId) {
+      message.error(t[lang].noEmployeeProfile);
+      return;
+    }
+    if (!selectedTestId) {
+      message.warning(t[lang].selectTest);
+      return;
+    }
+    if (!canStartTest) {
+      message.error(t[lang].alreadyPassed);
+      return;
+    }
+    const subDeptId = getEmployeeSubDepartment(selectedEmployeeId);
+
     if (existingSession) {
       Modal.confirm({
         title: "Незавершенная сессия",
-        content: "У сотрудника есть незавершенная сессия. Продолжить?",
+        content: "У вас есть незавершенная сессия. Продолжить?",
         okText: "Продолжить",
         cancelText: "Отмена",
         onOk: () => {
@@ -1332,51 +1433,6 @@ export const TestManager = ({ onStartTest }) => {
         },
       });
       return;
-    }
-
-    let hasAssignment = testAssignments.some(
-      (a) => a.employeeId === selectedEmployeeId && a.testId === selectedTestId,
-    );
-
-    if (!hasAssignment) {
-      setIsCreatingAssignment(true);
-      message.loading({
-        content: "Создание назначения...",
-        key: "creating",
-        duration: 0,
-      });
-      try {
-        const url = `${API_BASE}/TestAssignment`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            testId: Number(selectedTestId),
-            employeeId: Number(selectedEmployeeId),
-          }),
-        });
-        const text = await response.text();
-        message.destroy("creating");
-        if (response.ok || response.status === 200) {
-          message.success("✅ Назначение создано!");
-          await fetchTestAssignments(1, 1000);
-          hasAssignment = true;
-        } else if (response.status === 409) {
-          message.info("ℹ️ Назначение уже существует");
-          await fetchTestAssignments(1, 1000);
-          hasAssignment = true;
-        } else {
-          message.error("❌ Ошибка: " + (text || "Неизвестная ошибка"));
-          setIsCreatingAssignment(false);
-          return;
-        }
-        setIsCreatingAssignment(false);
-      } catch (error) {
-        message.destroy("creating");
-        message.error("Ошибка при создании назначения: " + error.message);
-        setIsCreatingAssignment(false);
-        return;
-      }
     }
 
     setTestModalOpen(false);
@@ -1454,40 +1510,9 @@ export const TestManager = ({ onStartTest }) => {
         </div>
         <Space size="middle">
           <Button
-            type={lang === "ru" ? "primary" : "default"}
-            onClick={() => handleSetLang("ru")}
-            style={
-              lang === "ru"
-                ? {
-                    background: "#ff4b2b",
-                    borderColor: "#ff4b2b",
-                    borderRadius: 20,
-                  }
-                : { borderRadius: 20 }
-            }
-          >
-            RU
-          </Button>
-          <Button
-            type={lang === "tj" ? "primary" : "default"}
-            onClick={() => handleSetLang("tj")}
-            style={
-              lang === "tj"
-                ? {
-                    background: "#ff4b2b",
-                    borderColor: "#ff4b2b",
-                    borderRadius: 20,
-                  }
-                : { borderRadius: 20 }
-            }
-          >
-            TJ
-          </Button>
-
-          <Button
             type="primary"
             onClick={() => setTestModalOpen(true)}
-            icon={<PlayCircleOutlined />}
+            icon={isAdmin ? <UserOutlined /> : <PlayCircleOutlined />}
             size="large"
             style={{
               background: "#ff4b2b",
@@ -1495,7 +1520,7 @@ export const TestManager = ({ onStartTest }) => {
               borderRadius: 20,
             }}
           >
-            {t[lang].startTest}
+            {isAdmin ? t[lang].assignTest : t[lang].startTest}
           </Button>
 
           {isAdmin && (
@@ -1876,7 +1901,7 @@ export const TestManager = ({ onStartTest }) => {
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <PlayCircleOutlined style={{ color: "#ff4b2b" }} />
-            <span>{t[lang].startTest}</span>
+            <span>{isAdmin ? t[lang].assignTest : t[lang].startTest}</span>
           </div>
         }
         open={testModalOpen}
@@ -1885,24 +1910,45 @@ export const TestManager = ({ onStartTest }) => {
           <Button key="cancel" onClick={() => setTestModalOpen(false)}>
             {t[lang].close}
           </Button>,
-          <Button
-            key="start"
-            type="primary"
-            onClick={handleStartTest}
-            style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
-            disabled={
-              !canStartTest || !selectedSubDepartmentId || isCreatingAssignment
-            }
-            loading={isCreatingAssignment}
-          >
-            {isCreatingAssignment
-              ? t[lang].creatingAssignment
-              : `${t[lang].startTest} (${selectedTestDuration} мин)`}
-          </Button>,
+          isAdmin ? (
+            <Button
+              key="assign"
+              type="primary"
+              onClick={handleAssignTest}
+              style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
+              disabled={
+                !selectedTestId ||
+                !selectedEmployeeId ||
+                !canStartTest ||
+                isCreatingAssignment
+              }
+              loading={isCreatingAssignment}
+            >
+              {isCreatingAssignment
+                ? t[lang].creatingAssignment
+                : t[lang].assign}
+            </Button>
+          ) : (
+            <Button
+              key="start"
+              type="primary"
+              onClick={handleStartTest}
+              style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
+              disabled={!selectedTestId || !selectedEmployeeId || !canStartTest}
+            >
+              {`${t[lang].startTest} (${selectedTestDuration} мин)`}
+            </Button>
+          ),
         ]}
         width={650}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {!isAdmin && dataLoaded && !selectedEmployeeId && (
+            <Alert message={t[lang].noEmployeeProfile} type="error" showIcon />
+          )}
+          {!isAdmin && dataLoaded && testTests.length === 0 && (
+            <Alert message={t[lang].noAssignedTests} type="info" showIcon />
+          )}
           <div>
             <Text strong>{t[lang].test}:</Text>
             <Select
@@ -1928,154 +1974,168 @@ export const TestManager = ({ onStartTest }) => {
             </Select>
           </div>
 
-          <div>
-            <Text strong>{t[lang].selectTestDuration}:</Text>
-            <div style={{ marginTop: 8 }}>
-              <Input
-                type="number"
-                placeholder={t[lang].customDuration}
-                value={selectedTestDuration}
-                onChange={(e) => handleDurationChange(e.target.value)}
-                min={1}
-                max={480}
-                step={1}
-                size="large"
-                prefix={<HourglassOutlined />}
-                suffix={t[lang].minutesShort}
-                style={{ width: "100%" }}
-              />
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {t[lang].presetTimes}
-              </Text>
-              {[5, 10, 15, 20, 30, 45, 60, 90].map((min) => (
-                <Button
-                  key={min}
-                  size="small"
-                  type={selectedTestDuration === min ? "primary" : "default"}
-                  onClick={() => setSelectedTestDuration(min)}
-                  style={
-                    selectedTestDuration === min
-                      ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
-                      : {}
-                  }
-                >
-                  {min} мин
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <Alert
-            message="Информация"
-            description={`На прохождение теста дается ${selectedTestDuration} минут.`}
-            type="info"
-            showIcon
-            icon={<HourglassOutlined />}
-          />
-
-          <div>
-            <Text strong>Сотрудника</Text>
-            <Select
-              placeholder={t[lang].selectEmployee}
-              value={selectedEmployeeId}
-              onChange={(value) => {
-                setSelectedEmployeeId(value);
-                setSelectedSubDepartmentId(null);
-              }}
-              style={{ width: "100%", marginTop: 8 }}
-              showSearch
-              size="large"
-            >
-              {Object.entries(groupedEmployees).map(
-                ([department, deptEmployees]) => (
-                  <Select.OptGroup
-                    key={department}
-                    label={`Отдел: ${department}`}
-                  >
-                    {deptEmployees.map((emp) => (
-                      <Option key={emp.id} value={emp.id}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <UserOutlined /> {emp.firstName} {emp.lastName}
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {emp.email}
-                          </Text>
-                          {emp.subDepartmentId && (
-                            <Tag color="green" style={{ marginLeft: 4 }}>
-                              <ApartmentOutlined />{" "}
-                              {getSubDepartmentName(emp.subDepartmentId)}
-                            </Tag>
-                          )}
-                        </div>
-                      </Option>
-                    ))}
-                  </Select.OptGroup>
-                ),
-              )}
-            </Select>
-          </div>
-
-          <div>
-            <Text strong>Отделение</Text>
-            {selectedEmployeeId ? (
-              selectedSubDepartmentId ? (
-                <Card
-                  size="small"
+          {!isAdmin && (
+            <>
+              <div>
+                <Text strong>{t[lang].selectTestDuration}:</Text>
+                <div style={{ marginTop: 8 }}>
+                  <Input
+                    type="number"
+                    placeholder={t[lang].customDuration}
+                    value={selectedTestDuration}
+                    onChange={(e) => handleDurationChange(e.target.value)}
+                    min={1}
+                    max={480}
+                    step={1}
+                    size="large"
+                    prefix={<HourglassOutlined />}
+                    suffix={t[lang].minutesShort}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div
                   style={{
                     marginTop: 8,
-                    background: "#f6ffed",
-                    borderColor: "#b7eb8f",
-                    borderRadius: 8,
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    alignItems: "center",
                   }}
                 >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 12 }}
-                  >
-                    <ApartmentOutlined
-                      style={{ color: "#52c41a", fontSize: 20 }}
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {t[lang].presetTimes}
+                  </Text>
+                  {[5, 10, 15, 20, 30, 45, 60, 90].map((min) => (
+                    <Button
+                      key={min}
+                      size="small"
+                      type={
+                        selectedTestDuration === min ? "primary" : "default"
+                      }
+                      onClick={() => setSelectedTestDuration(min)}
+                      style={
+                        selectedTestDuration === min
+                          ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
+                          : {}
+                      }
+                    >
+                      {min} мин
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <Alert
+                message="Информация"
+                description={`На прохождение теста дается ${selectedTestDuration} минут.`}
+                type="info"
+                showIcon
+                icon={<HourglassOutlined />}
+              />
+            </>
+          )}
+
+          {isAdmin && (
+            <>
+              <div>
+                <Text strong>Сотрудника</Text>
+                <Select
+                  placeholder={t[lang].selectEmployee}
+                  value={selectedEmployeeId}
+                  onChange={(value) => {
+                    setSelectedEmployeeId(value);
+                    setSelectedSubDepartmentId(null);
+                  }}
+                  style={{ width: "100%", marginTop: 8 }}
+                  showSearch
+                  size="large"
+                >
+                  {Object.entries(groupedEmployees).map(
+                    ([department, deptEmployees]) => (
+                      <Select.OptGroup
+                        key={department}
+                        label={`Отдел: ${department}`}
+                      >
+                        {deptEmployees.map((emp) => (
+                          <Option key={emp.id} value={emp.id}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <UserOutlined /> {emp.firstName} {emp.lastName}
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                {emp.email}
+                              </Text>
+                              {emp.subDepartmentId && (
+                                <Tag color="green" style={{ marginLeft: 4 }}>
+                                  <ApartmentOutlined />{" "}
+                                  {getSubDepartmentName(emp.subDepartmentId)}
+                                </Tag>
+                              )}
+                            </div>
+                          </Option>
+                        ))}
+                      </Select.OptGroup>
+                    ),
+                  )}
+                </Select>
+              </div>
+
+              <div>
+                <Text strong>Отделение</Text>
+                {selectedEmployeeId ? (
+                  selectedSubDepartmentId ? (
+                    <Card
+                      size="small"
+                      style={{
+                        marginTop: 8,
+                        background: "#f6ffed",
+                        borderColor: "#b7eb8f",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                        }}
+                      >
+                        <ApartmentOutlined
+                          style={{ color: "#52c41a", fontSize: 20 }}
+                        />
+                        <Text strong style={{ fontSize: 16 }}>
+                          {getSubDepartmentName(selectedSubDepartmentId)}
+                        </Text>
+                        <Tag color="green" style={{ marginLeft: "auto" }}>
+                          <CheckCircleOutlined />
+                        </Tag>
+                      </div>
+                    </Card>
+                  ) : (
+                    <Alert
+                      message="У сотрудника не указано отделение"
+                      type="warning"
+                      showIcon
+                      style={{ marginTop: 8 }}
                     />
-                    <Text strong style={{ fontSize: 16 }}>
-                      {getSubDepartmentName(selectedSubDepartmentId)}
-                    </Text>
-                    <Tag color="green" style={{ marginLeft: "auto" }}>
-                      <CheckCircleOutlined />
-                    </Tag>
-                  </div>
-                </Card>
-              ) : (
-                <Alert
-                  message="У сотрудника не указано отделение"
-                  type="warning"
-                  showIcon
-                  style={{ marginTop: 8 }}
-                />
-              )
-            ) : (
-              <Select
-                placeholder="Выберите отделение"
-                disabled
-                style={{ width: "100%", marginTop: 8 }}
-              >
-                <Option value="">Сначала выберите сотрудника</Option>
-              </Select>
-            )}
-          </div>
+                  )
+                ) : (
+                  <Select
+                    placeholder="Выберите отделение"
+                    disabled
+                    style={{ width: "100%", marginTop: 8 }}
+                  >
+                    <Option value="">Сначала выберите сотрудника</Option>
+                  </Select>
+                )}
+              </div>
+            </>
+          )}
 
           {selectedEmployeeId && selectedTestId && !canStartTest && (
             <Alert
@@ -2087,33 +2147,36 @@ export const TestManager = ({ onStartTest }) => {
             />
           )}
 
-          {selectedEmployeeId && selectedTestId && existingSession && (
-            <Alert
-              message={t[lang].hasUnfinished}
-              description={t[lang].continueExisting}
-              type="warning"
-              showIcon
-              action={
-                <Button
-                  size="small"
-                  type="primary"
-                  onClick={() => {
-                    onStartTest({
-                      testId: selectedTestId,
-                      employeeId: selectedEmployeeId,
-                      duration: selectedTestDuration,
-                      subDepartmentId: selectedSubDepartmentId,
-                      session: existingSession,
-                      action: "continue",
-                    });
-                    setTestModalOpen(false);
-                  }}
-                >
-                  {t[lang].continue}
-                </Button>
-              }
-            />
-          )}
+          {!isAdmin &&
+            selectedEmployeeId &&
+            selectedTestId &&
+            existingSession && (
+              <Alert
+                message={t[lang].hasUnfinished}
+                description={t[lang].continueExisting}
+                type="warning"
+                showIcon
+                action={
+                  <Button
+                    size="small"
+                    type="primary"
+                    onClick={() => {
+                      onStartTest({
+                        testId: selectedTestId,
+                        employeeId: selectedEmployeeId,
+                        duration: selectedTestDuration,
+                        subDepartmentId: selectedSubDepartmentId,
+                        session: existingSession,
+                        action: "continue",
+                      });
+                      setTestModalOpen(false);
+                    }}
+                  >
+                    {t[lang].continue}
+                  </Button>
+                }
+              />
+            )}
         </div>
       </Modal>
 
@@ -3479,17 +3542,17 @@ export const TestManager = ({ onStartTest }) => {
             onCancel={() => setEditingQuestion(null)}
             lang={lang}
             t={{
-                question: t[lang].question,
-                answer: t[lang].answer,
-                correct: t[lang].correct,
-                variant: t[lang].variant,
-                add: t[lang].add,
-                test: t[lang].test,
-                manual: t[lang].manual,
-                rating: t[lang].rating,
-                correctAnswer: t[lang].correctAnswer,
-                selectRating: t[lang].selectRating,
-              }}
+              question: t[lang].question,
+              answer: t[lang].answer,
+              correct: t[lang].correct,
+              variant: t[lang].variant,
+              add: t[lang].add,
+              test: t[lang].test,
+              manual: t[lang].manual,
+              rating: t[lang].rating,
+              correctAnswer: t[lang].correctAnswer,
+              selectRating: t[lang].selectRating,
+            }}
           />
         )}
       </Modal>

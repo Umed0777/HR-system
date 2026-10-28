@@ -855,19 +855,14 @@ export const TestSession = ({ testData, onClose }) => {
   const { tests = [], fetchTests } = useTestStore();
   const { employees = [], fetchEmployee } = useEmployeeStore();
 
+ // язык берётся из общего меню (HRSystemLayout)
  const [lang, setLang] = useState(
-  () =>
-    localStorage.getItem("test_manager_lang") ||
-    localStorage.getItem("language") ||
-    "ru"
+  () => localStorage.getItem("language") || "ru"
 );
 
 useEffect(() => {
   const syncLang = () => {
-    const newLang =
-      localStorage.getItem("test_manager_lang") ||
-      localStorage.getItem("language") ||
-      "ru";
+    const newLang = localStorage.getItem("language") || "ru";
     setLang(newLang);
   };
   window.addEventListener("app-language-change", syncLang);
@@ -1469,10 +1464,6 @@ useEffect(() => {
     setSessionModalVisible(true);
   };
   const answeredCount = answersHistory.filter((a) => a).length;
-  const handleSetLang = (newLang) => {
-    setLang(newLang);
-    localStorage.setItem("testsession_lang", newLang);
-  };
 
   const toggleRanking = () => {
     setShowRanking((prev) => {
@@ -2197,29 +2188,6 @@ useEffect(() => {
             </Text>
           </div>
           <Space>
-            <Button
-              type={lang === "ru" ? "primary" : "default"}
-              onClick={() => handleSetLang("ru")}
-              style={
-                lang === "ru"
-                  ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
-                  : {}
-              }
-            >
-              RU
-            </Button>
-            <Button
-              type={lang === "tj" ? "primary" : "default"}
-              onClick={() => handleSetLang("tj")}
-              style={
-                lang === "tj"
-                  ? { background: "#ff4b2b", borderColor: "#ff4b2b" }
-                  : {}
-              }
-            >
-              TJ
-            </Button>
-
             <Tooltip
               title={showRanking ? t[lang].hideRanking : t[lang].showRanking}
             >
