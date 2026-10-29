@@ -497,19 +497,13 @@ export const SurveyResultsPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedResult, setSelectedResult] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+ // язык берётся из общего меню (HRSystemLayout)
  const [lang, setLang] = useState(
-  () =>
-    localStorage.getItem("survey_manager_lang") ||
-    localStorage.getItem("language") ||
-    "ru"
+  () => localStorage.getItem("language") || "ru"
 );
 useEffect(() => {
   const syncLang = () => {
-    const newLang =
-      localStorage.getItem("survey_manager_lang") ||
-      localStorage.getItem("language") ||
-      "ru";
-    setLang(newLang);
+    setLang(localStorage.getItem("language") || "ru");
   };
   window.addEventListener("app-language-change", syncLang);
   window.addEventListener("storage", syncLang);
@@ -845,11 +839,6 @@ useEffect(() => {
         )
       : 0;
 
-  const handleSetLang = (newLang) => {
-    setLang(newLang);
-    localStorage.setItem("survey_manager_lang", newLang);
-  };
-
   // Колонки
   const columns = [
     {
@@ -1039,36 +1028,6 @@ useEffect(() => {
           </div>
 
           <Space wrap>
-            <Button
-              type={lang === "ru" ? "primary" : "default"}
-              onClick={() => handleSetLang("ru")}
-              style={
-                lang === "ru"
-                  ? {
-                      background: RED,
-                      borderColor: RED,
-                      borderRadius: 20,
-                    }
-                  : { borderRadius: 20 }
-              }
-            >
-              RU
-            </Button>
-            <Button
-              type={lang === "tj" ? "primary" : "default"}
-              onClick={() => handleSetLang("tj")}
-              style={
-                lang === "tj"
-                  ? {
-                      background: RED,
-                      borderColor: RED,
-                      borderRadius: 20,
-                    }
-                  : { borderRadius: 20 }
-              }
-            >
-              TJ
-            </Button>
             <Button
               icon={<FileExcelOutlined />}
               onClick={exportToExcel}

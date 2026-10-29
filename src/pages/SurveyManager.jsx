@@ -65,6 +65,8 @@ import {
   isBilingualPartial,
 } from "../utils/bilingual";
 import { getCurrentEmployeeId } from "../utils/currentEmployee";
+import { BulkEmployeeSelect } from "../components/BulkEmployeeSelect";
+import { createTestAssignmentsBulk } from "../services/api.service.testAssignment";
 import {
   startTestSession,
   submitSessionAnswer,
@@ -997,7 +999,7 @@ export const SurveyManager = ({ onStartSurvey }) => {
   const [startOpen, setStartOpen] = useState(false);
   const [selSurveyId, setSelSurveyId] = useState(null);
   const [selEmpId, setSelEmpId] = useState(null);
-  const [selSubDeptId, setSelSubDeptId] = useState(null);
+  const [bulkEmployeeIds, setBulkEmployeeIds] = useState([]);
 
   const [editingQuestion, setEditingQuestion] = useState(null);
 
@@ -1126,22 +1128,21 @@ export const SurveyManager = ({ onStartSurvey }) => {
     [subdepartments],
   );
 
-  const groupedEmployees = useMemo(
-    () =>
-      employees.reduce((g, e) => {
-        const d = e.department || "Без отдела";
-        if (!g[d]) g[d] = [];
-        g[d].push(e);
-        return g;
-      }, {}),
-    [employees],
-  );
+  // кому выбранный опрос уже назначен напрямую — повторно не назначаем
+  const excludedEmployeeIds = useMemo(() => {
+    const ids = new Map();
+    if (!selSurveyId) return ids;
+    testAssignments.forEach((a) => {
+      if (a.testId === selSurveyId && a.employeeId)
+        ids.set(a.employeeId, "assigned");
+    });
+    return ids;
+  }, [selSurveyId, testAssignments]);
 
-  const getEmployeeFullName = useCallback((emp) => {
-    if (!emp) return "—";
-    const name = [emp.firstName, emp.lastName].filter(Boolean).join(" ").trim();
-    return name || `ID: ${emp.id}`;
-  }, []);
+  const assignEmployeeIds = useMemo(
+    () => bulkEmployeeIds.filter((id) => !excludedEmployeeIds.has(id)),
+    [bulkEmployeeIds, excludedEmployeeIds],
+  );
 
   useEffect(() => {
     (async () => {
@@ -1174,14 +1175,6 @@ export const SurveyManager = ({ onStartSurvey }) => {
     loadSurveyQuestions();
     // eslint-disable-next-line
   }, [lang]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    if (selEmpId) {
-      const subId = getEmployeeSubDepartment(selEmpId);
-      setSelSubDeptId(subId || null);
-    } else setSelSubDeptId(null);
-  }, [selEmpId, dataLoaded, getEmployeeSubDepartment]);
 
   const currentEditingId = editingItem?.id;
   const availableQuestions = getAvailableQuestions(currentEditingId);
@@ -1559,34 +1552,34 @@ export const SurveyManager = ({ onStartSurvey }) => {
   };
 
   // ==================== НАЗНАЧЕНИЕ ОПРОСА (админ) ====================
+  // админ назначает опрос одному или сразу нескольким сотрудникам
   const handleAssignSurvey = async () => {
-    if (!selSurveyId || !selEmpId)
-      return message.warning("Выберите опрос и сотрудника");
-    const exists = testAssignments.some(
-      (a) => a.employeeId === selEmpId && a.testId === selSurveyId,
-    );
-    if (exists) return message.info("ℹ️ Опрос уже назначен этому сотруднику");
+    const ids = assignEmployeeIds;
+    const skipped = bulkEmployeeIds.length - ids.length;
+    if (!selSurveyId || bulkEmployeeIds.length === 0)
+      return message.warning("Выберите опрос и сотрудников");
+    if (ids.length === 0)
+      return message.info("Всем выбранным сотрудникам этот опрос уже назначен");
 
     setAssigning(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `${API_BASE}/TestAssignment`,
-        { testId: Number(selSurveyId), employeeId: Number(selEmpId) },
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+      const { created, failed } = await createTestAssignmentsBulk(
+        selSurveyId,
+        ids,
       );
-      message.success("✅ Опрос назначен!");
       await fetchTestAssignments(1, 1000);
-      setStartOpen(false);
-    } catch (e) {
-      if (e?.response?.status === 409) {
-        message.info("ℹ️ Назначение уже существует");
-        await fetchTestAssignments(1, 1000);
-      } else {
-        message.error(
-          "❌ Ошибка: " + (e?.response?.data?.message || e.message),
+      if (failed === 0) {
+        message.success(
+          `✅ Опрос назначен сотрудникам: ${created}` +
+            (skipped ? `, пропущено (уже назначено): ${skipped}` : ""),
         );
+        setBulkEmployeeIds([]);
+        setStartOpen(false);
+      } else {
+        message.warning(`Назначено: ${created}, с ошибкой: ${failed}`);
       }
+    } catch (e) {
+      message.error("❌ Ошибка: " + (e?.response?.data?.message || e.message));
     } finally {
       setAssigning(false);
     }
@@ -1725,47 +1718,6 @@ export const SurveyManager = ({ onStartSurvey }) => {
           </Text>
         </div>
         <Space wrap>
-          {isAdmin && (
-            <>
-              <Button
-                type={lang === "ru" ? "primary" : "default"}
-                onClick={() => {
-                  setLang("ru");
-                  localStorage.setItem("survey_manager_lang", "ru");
-                }}
-                style={
-                  lang === "ru"
-                    ? {
-                        background: "#ff4b2b",
-                        borderColor: "#ff4b2b",
-                        borderRadius: 20,
-                      }
-                    : { borderRadius: 20 }
-                }
-              >
-                RU
-              </Button>
-              <Button
-                type={lang === "tj" ? "primary" : "default"}
-                onClick={() => {
-                  setLang("tj");
-                  localStorage.setItem("survey_manager_lang", "tj");
-                }}
-                style={
-                  lang === "tj"
-                    ? {
-                        background: "#ff4b2b",
-                        borderColor: "#ff4b2b",
-                        borderRadius: 20,
-                      }
-                    : { borderRadius: 20 }
-                }
-              >
-                TJ
-              </Button>
-            </>
-          )}
-
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
@@ -2139,92 +2091,14 @@ export const SurveyManager = ({ onStartSurvey }) => {
             </div>
 
             {isAdmin && (
-            <div>
-              <Text strong>{t[lang].selectEmployee}:</Text>
-              <Select
-                value={selEmpId}
-                onChange={setSelEmpId}
-                showSearch
-                size="large"
-                style={{ width: "100%", marginTop: 8 }}
-                placeholder={t[lang].selectEmployee}
-                optionFilterProp="label"
-                optionLabelProp="label"
-                filterOption={(input, option) => {
-                  const emp = employees.find((e) => e.id === option?.value);
-                  if (!emp) return false;
-                  const haystack = [
-                    emp.firstName,
-                    emp.lastName,
-                    emp.middleName,
-                    emp.email,
-                    emp.department,
-                    emp.subDepartmentId
-                      ? getSubDepartmentName(emp.subDepartmentId)
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")
-                    .toLowerCase();
-                  return haystack.includes(input.toLowerCase());
-                }}
-                notFoundContent={
-                  employees.length === 0 ? (
-                    <div style={{ padding: 12, textAlign: "center" }}>
-                      <Text type="secondary">Сотрудники не загружены</Text>
-                    </div>
-                  ) : null
-                }
-              >
-                {Object.entries(groupedEmployees).map(([dep, list]) => (
-                  <Select.OptGroup key={dep} label={`Отдел: ${dep}`}>
-                    {list.map((e) => {
-                      const fullName = getEmployeeFullName(e);
-                      return (
-                        <Option key={e.id} value={e.id} label={fullName}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <UserOutlined /> {fullName}
-                            {e.email && (
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                {e.email}
-                              </Text>
-                            )}
-                            {e.subDepartmentId && (
-                              <Tag color="green" style={{ marginLeft: 4 }}>
-                                <ApartmentOutlined />{" "}
-                                {getSubDepartmentName(e.subDepartmentId)}
-                              </Tag>
-                            )}
-                          </div>
-                        </Option>
-                      );
-                    })}
-                  </Select.OptGroup>
-                ))}
-              </Select>
-            </div>
-            )}
-
-            {isAdmin && selSubDeptId && (
-              <Card
-                size="small"
-                style={{ background: "#f6ffed", borderColor: "#b7eb8f" }}
-              >
-                <Space>
-                  <ApartmentOutlined style={{ color: "#52c41a" }} />
-                  <Text strong>{getSubDepartmentName(selSubDeptId)}</Text>
-                  <Tag color="green">
-                    <CheckCircleOutlined />
-                  </Tag>
-                </Space>
-              </Card>
+              <BulkEmployeeSelect
+                employees={employees}
+                value={bulkEmployeeIds}
+                onChange={setBulkEmployeeIds}
+                getSubDepartmentName={getSubDepartmentName}
+                excludedIds={excludedEmployeeIds}
+                lang={lang}
+              />
             )}
 
             <Flex justify="flex-end" gap={8}>
@@ -2237,7 +2111,11 @@ export const SurveyManager = ({ onStartSurvey }) => {
               <Button
                 type="primary"
                 onClick={isAdmin ? handleAssignSurvey : handleStartSurvey}
-                disabled={!selSurveyId || !selEmpId || assigning}
+                disabled={
+                  !selSurveyId ||
+                  (isAdmin ? bulkEmployeeIds.length === 0 : !selEmpId) ||
+                  assigning
+                }
                 loading={assigning}
                 icon={isAdmin ? <UserOutlined /> : <PlayCircleOutlined />}
                 style={{

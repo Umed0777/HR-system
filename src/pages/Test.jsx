@@ -9,6 +9,8 @@ import OneTimeLinkModal from "./OneTimeLinkModal";
 import { BilingualInput } from "../components/BilingualInput";
 import { isBilingualFilled, isBilingualPartial } from "../utils/bilingual";
 import { getCurrentEmployeeId } from "../utils/currentEmployee";
+import { BulkEmployeeSelect } from "../components/BulkEmployeeSelect";
+import { createTestAssignmentsBulk } from "../services/api.service.testAssignment";
 import {
   Button,
   Modal,
@@ -542,6 +544,7 @@ export const TestManager = ({ onStartTest }) => {
   const [canStartTest, setCanStartTest] = useState(true);
   const [existingSession, setExistingSession] = useState(null);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
+  const [bulkEmployeeIds, setBulkEmployeeIds] = useState([]);
 
   // ---- Редактирование вопроса / добавление вопросов в готовый тест ----
   const [editingQuestion, setEditingQuestion] = useState(null);
@@ -703,12 +706,26 @@ export const TestManager = ({ onStartTest }) => {
     [sessions],
   );
 
-  const groupedEmployees = employees.reduce((groups, employee) => {
-    const department = employee.department || "Без отдела";
-    if (!groups[department]) groups[department] = [];
-    groups[department].push(employee);
-    return groups;
-  }, {});
+  // кому выбранный тест назначать нельзя: уже назначен напрямую или уже пройден
+  const excludedEmployeeIds = useMemo(() => {
+    const ids = new Map();
+    if (!selectedTestId) return ids;
+    testAssignments.forEach((a) => {
+      if (a.testId === selectedTestId && a.employeeId)
+        ids.set(a.employeeId, "assigned");
+    });
+    sessions.forEach((s) => {
+      if (s.testId === selectedTestId && s.status === 2 && s.employeeId)
+        ids.set(s.employeeId, "passed");
+    });
+    return ids;
+  }, [selectedTestId, testAssignments, sessions]);
+
+  // выбор не трогаем — при назначении просто пропускаем тех, кому тест уже назначен
+  const assignEmployeeIds = useMemo(
+    () => bulkEmployeeIds.filter((id) => !excludedEmployeeIds.has(id)),
+    [bulkEmployeeIds, excludedEmployeeIds],
+  );
 
   useEffect(() => {
     const loadAllData = async () => {
@@ -1338,22 +1355,16 @@ export const TestManager = ({ onStartTest }) => {
   };
 
   // ==================== НАЗНАЧЕНИЕ ТЕСТА (админ) ====================
-  // админ только назначает тест сотруднику, сам тест не проходит
+  // админ только назначает тест сотрудникам (одному или сразу нескольким), сам тест не проходит
   const handleAssignTest = async () => {
-    if (!selectedTestId || !selectedEmployeeId) {
-      message.warning("Выберите тест и сотрудника");
+    const ids = assignEmployeeIds;
+    const skipped = bulkEmployeeIds.length - ids.length;
+    if (!selectedTestId || bulkEmployeeIds.length === 0) {
+      message.warning("Выберите тест и сотрудников");
       return;
     }
-    if (!canStartTest) {
-      message.error("Сотрудник уже прошел этот тест.");
-      return;
-    }
-
-    const hasAssignment = testAssignments.some(
-      (a) => a.employeeId === selectedEmployeeId && a.testId === selectedTestId,
-    );
-    if (hasAssignment) {
-      message.info("ℹ️ Тест уже назначен этому сотруднику");
+    if (ids.length === 0) {
+      message.info("Всем выбранным сотрудникам этот тест уже назначен");
       return;
     }
 
@@ -1364,34 +1375,28 @@ export const TestManager = ({ onStartTest }) => {
       duration: 0,
     });
     try {
-      const url = `${API_BASE}/TestAssignment`;
-      const token = localStorage.getItem("token");
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          testId: Number(selectedTestId),
-          employeeId: Number(selectedEmployeeId),
-        }),
-      });
-      const text = await response.text();
+      const { created, failed } = await createTestAssignmentsBulk(
+        selectedTestId,
+        ids,
+      );
       message.destroy("creating");
-      if (response.ok) {
-        message.success("✅ Тест назначен!");
-        await fetchTestAssignments(1, 1000);
+      await fetchTestAssignments(1, 1000);
+      if (failed === 0) {
+        message.success(
+          `✅ Тест назначен сотрудникам: ${created}` +
+            (skipped ? `, пропущено (уже назначено): ${skipped}` : ""),
+        );
+        setBulkEmployeeIds([]);
         setTestModalOpen(false);
-      } else if (response.status === 409) {
-        message.info("ℹ️ Назначение уже существует");
-        await fetchTestAssignments(1, 1000);
       } else {
-        message.error("❌ Ошибка: " + (text || "Неизвестная ошибка"));
+        message.warning(`Назначено: ${created}, с ошибкой: ${failed}`);
       }
     } catch (error) {
       message.destroy("creating");
-      message.error("Ошибка при создании назначения: " + error.message);
+      message.error(
+        "❌ Ошибка при создании назначения: " +
+          (error?.response?.data?.message || error.message),
+      );
     } finally {
       setIsCreatingAssignment(false);
     }
@@ -1918,8 +1923,7 @@ export const TestManager = ({ onStartTest }) => {
               style={{ background: "#ff4b2b", borderColor: "#ff4b2b" }}
               disabled={
                 !selectedTestId ||
-                !selectedEmployeeId ||
-                !canStartTest ||
+                bulkEmployeeIds.length === 0 ||
                 isCreatingAssignment
               }
               loading={isCreatingAssignment}
@@ -1957,6 +1961,16 @@ export const TestManager = ({ onStartTest }) => {
               onChange={(value) => setSelectedTestId(value)}
               style={{ width: "100%", marginTop: 8 }}
               showSearch
+              // по умолчанию antd ищет по value (id), ищем по названию
+              filterOption={(input, option) => {
+                const test = testTests.find((x) => x.id === option?.value);
+                if (!test) return false;
+                return [test.titleRu, test.titleTj, test.title]
+                  .filter(Boolean)
+                  .join(" ")
+                  .toLowerCase()
+                  .includes(input.toLowerCase());
+              }}
               size="large"
             >
               {testTests.map((test) => (
@@ -2036,105 +2050,14 @@ export const TestManager = ({ onStartTest }) => {
           )}
 
           {isAdmin && (
-            <>
-              <div>
-                <Text strong>Сотрудника</Text>
-                <Select
-                  placeholder={t[lang].selectEmployee}
-                  value={selectedEmployeeId}
-                  onChange={(value) => {
-                    setSelectedEmployeeId(value);
-                    setSelectedSubDepartmentId(null);
-                  }}
-                  style={{ width: "100%", marginTop: 8 }}
-                  showSearch
-                  size="large"
-                >
-                  {Object.entries(groupedEmployees).map(
-                    ([department, deptEmployees]) => (
-                      <Select.OptGroup
-                        key={department}
-                        label={`Отдел: ${department}`}
-                      >
-                        {deptEmployees.map((emp) => (
-                          <Option key={emp.id} value={emp.id}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <UserOutlined /> {emp.firstName} {emp.lastName}
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                {emp.email}
-                              </Text>
-                              {emp.subDepartmentId && (
-                                <Tag color="green" style={{ marginLeft: 4 }}>
-                                  <ApartmentOutlined />{" "}
-                                  {getSubDepartmentName(emp.subDepartmentId)}
-                                </Tag>
-                              )}
-                            </div>
-                          </Option>
-                        ))}
-                      </Select.OptGroup>
-                    ),
-                  )}
-                </Select>
-              </div>
-
-              <div>
-                <Text strong>Отделение</Text>
-                {selectedEmployeeId ? (
-                  selectedSubDepartmentId ? (
-                    <Card
-                      size="small"
-                      style={{
-                        marginTop: 8,
-                        background: "#f6ffed",
-                        borderColor: "#b7eb8f",
-                        borderRadius: 8,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 12,
-                        }}
-                      >
-                        <ApartmentOutlined
-                          style={{ color: "#52c41a", fontSize: 20 }}
-                        />
-                        <Text strong style={{ fontSize: 16 }}>
-                          {getSubDepartmentName(selectedSubDepartmentId)}
-                        </Text>
-                        <Tag color="green" style={{ marginLeft: "auto" }}>
-                          <CheckCircleOutlined />
-                        </Tag>
-                      </div>
-                    </Card>
-                  ) : (
-                    <Alert
-                      message="У сотрудника не указано отделение"
-                      type="warning"
-                      showIcon
-                      style={{ marginTop: 8 }}
-                    />
-                  )
-                ) : (
-                  <Select
-                    placeholder="Выберите отделение"
-                    disabled
-                    style={{ width: "100%", marginTop: 8 }}
-                  >
-                    <Option value="">Сначала выберите сотрудника</Option>
-                  </Select>
-                )}
-              </div>
-            </>
+            <BulkEmployeeSelect
+              employees={employees}
+              value={bulkEmployeeIds}
+              onChange={setBulkEmployeeIds}
+              getSubDepartmentName={getSubDepartmentName}
+              excludedIds={excludedEmployeeIds}
+              lang={lang}
+            />
           )}
 
           {selectedEmployeeId && selectedTestId && !canStartTest && (
