@@ -65,6 +65,18 @@ const getNumericType = (type) => {
   return 1;
 };
 
+// опрос (Quiz) — та же логика, что в SurveyManager
+const isSurvey = (t) => {
+  if (!t) return false;
+  const v = t.testType ?? t.test_type ?? t.categoryType;
+  if (v === undefined || v === null || v === "") return false;
+  const s = String(v).trim().toLowerCase();
+  if (s === "quiz" || s === "survey" || s === "опрос" || s === "questionnaire")
+    return true;
+  const n = Number(s);
+  return !Number.isNaN(n) && n >= 2;
+};
+
 const getStatusNum = (status) => {
   if (status === null || status === undefined) return null;
   const s = String(status).toLowerCase().trim();
@@ -841,7 +853,7 @@ const SessionDetailsModal = ({
 // ==================== ОСНОВНОЙ КОМПОНЕНТ ====================
 export const TestSession = ({ testData, onClose }) => {
   const {
-    sessions = [],
+    sessions: allSessions = [],
     currentSession: storeCurrentSession,
     loading,
     startSession,
@@ -852,7 +864,7 @@ export const TestSession = ({ testData, onClose }) => {
     clearCurrentSession,
   } = useTestSessionStore();
 
-  const { tests = [], fetchTests } = useTestStore();
+  const { tests: allTests = [], fetchTests } = useTestStore();
   const { employees = [], fetchEmployee } = useEmployeeStore();
 
  // язык берётся из общего меню (HRSystemLayout)
@@ -908,6 +920,20 @@ useEffect(() => {
   const [historyPageSize, setHistoryPageSize] = useState(10);
 
   const scrollRef = useRef(null);
+
+  // опросы показываются на отдельной странице (SurveyResultsPage)
+  const tests = useMemo(() => allTests.filter((t) => !isSurvey(t)), [allTests]);
+  const sessions = useMemo(() => {
+    const surveyIds = new Set(
+      allTests.filter(isSurvey).map((t) => Number(t.id)),
+    );
+    return allSessions.filter((s) => {
+      // бэк отдаёт testType в сессии; если его нет — смотрим тип теста
+      if (s.testType != null) return !isSurvey(s);
+      // пока тесты не загружены, опросы не отличить от тестов
+      return dataLoaded && !surveyIds.has(Number(s.testId));
+    });
+  }, [allSessions, allTests, dataLoaded]);
 
   const stats = useMemo(() => {
     const total = sessions.length;
@@ -988,11 +1014,12 @@ useEffect(() => {
           fetchTests(1, 1000, lang),
           fetchEmployee(1, 1000),
         ]);
-        setDataLoaded(true);
       } catch (error) {
         console.error("Ошибка загрузки данных:", error);
         message.error("Ошибка загрузки данных");
       }
+      // даже при ошибке одного из запросов историю показываем
+      setDataLoaded(true);
 
       try {
         const res = await fetch(
@@ -2120,7 +2147,7 @@ useEffect(() => {
     },
   };
 
-  if (loading && sessions.length === 0) {
+  if ((loading || !dataLoaded) && sessions.length === 0) {
     return (
       <div
         style={{

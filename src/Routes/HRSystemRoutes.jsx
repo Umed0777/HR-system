@@ -22,7 +22,6 @@ import { EmployeeSelector } from "../pages/EmployeeSelector";
 import { VideoLesson } from "../pages/VideoLesson";
 import { Documentation } from "../pages/Documentation";
 import Login from "../pages/Login";
-import Register from "../pages/Register";
 import Articles from "../pages/Articles";
 import Chat from "../pages/Chat";
 import ArticleDetail from "../pages/ArticleDetail";
@@ -58,7 +57,6 @@ export const HRSystemRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
 
       <Route
         path="/"

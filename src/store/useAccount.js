@@ -1,10 +1,6 @@
 import { create } from "zustand";
 
-import {
-  login,
-  register,
-  registerAdmin,
-} from "../services/api.service.account";
+import { login } from "../services/api.service.account";
 
 export const useAccountStore = create((set) => ({
   user: JSON.parse(localStorage.getItem("user")) || null,
@@ -66,61 +62,6 @@ export const useAccountStore = create((set) => ({
         loading: false,
 
         error: error.message,
-      });
-
-      throw error;
-    }
-  },
-
-  // ================= REGISTER =================
-
-  registerUser: async (data) => {
-    set({
-      loading: true,
-      error: null,
-    });
-
-    try {
-      const res = await register(data);
-
-      set({
-        loading: false,
-      });
-
-      return res;
-    } catch (error) {
-      set({
-        loading: false,
-
-        error: error.response?.data || error.message,
-      });
-
-      throw error;
-    }
-  },
-
-  // ================= REGISTER ADMIN =================
-
-  registerAdminUser: async (data) => {
-    set({
-      loading: true,
-
-      error: null,
-    });
-
-    try {
-      const res = await registerAdmin(data);
-
-      set({
-        loading: false,
-      });
-
-      return res;
-    } catch (error) {
-      set({
-        loading: false,
-
-        error: error.response?.data || error.message,
       });
 
       throw error;
