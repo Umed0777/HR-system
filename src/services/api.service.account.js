@@ -26,27 +26,6 @@ export const login = async (data) => {
     }
 }
 
-export const register = async (data) => {
-    try{
-        const res = await API_URL.post("/api/Account/register", data);
-        console.log("register", data);
-        return res.data
-    }catch(error){
-        console.error(error);
-        throw error;
-    }
-}
-
-
-export const registerAdmin = async(data) =>{
-    try{
-        const res = await API_URL.post("/api/Account/register-admin", data);
-        return res.data;
-    }catch(error){
-        console.error(error);
-        throw error;
-    }
-}
 export const getUsers = async (pageNumber = 1, pageSize = 10) => {
   try {
     const res = await API_URL.get("/api/User", {

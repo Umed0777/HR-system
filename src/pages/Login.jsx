@@ -1,6 +1,5 @@
 import { Form, Input, Button, message, Card, Typography } from "antd";
 import { useAccountStore } from "../store/useAccount";
-import { Link } from "react-router-dom";
 const { Title, Text } = Typography;
 import { useNavigate } from "react-router-dom";
 const Login = () => {
@@ -76,11 +75,6 @@ const Login = () => {
             </Button>
           </Form.Item>
         </Form>
-        {/* <Form.Item style={{ textAlign: "center", marginTop: 10 }}>
-          <Text>
-            Нет аккаунта? <Link to="/register" style={{color: '#f00'}}>Регистрация</Link>
-          </Text>
-        </Form.Item> */}
       </Card>
     </div>
   );

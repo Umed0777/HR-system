@@ -38,6 +38,9 @@ import {
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import * as XLSX from "xlsx";
+import { useTestSessionStore } from "../store/useTestSession";
+import { useTestStore } from "../store/useTest";
+import { useEmployeeStore } from "../store/useEmployee";
 
 const { Title, Text } = Typography;
 
@@ -63,6 +66,25 @@ const getNumericType = (type) => {
 
 const isSameId = (a, b) =>
   a != null && b != null && String(a) === String(b);
+
+// "САИДМАҲМУД БОБОЕВ" -> "Саидмаҳмуд Бобоев"
+const formatName = (name) =>
+  String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/(^|[\s-])(\S)/g, (_, sep, ch) => sep + ch.toUpperCase());
+
+// опрос (Quiz) — та же логика, что в SurveyManager
+const isSurvey = (t) => {
+  if (!t) return false;
+  const v = t.testType ?? t.test_type ?? t.categoryType;
+  if (v === undefined || v === null || v === "") return false;
+  const s = String(v).trim().toLowerCase();
+  if (s === "quiz" || s === "survey" || s === "опрос" || s === "questionnaire")
+    return true;
+  const n = Number(s);
+  return !Number.isNaN(n) && n >= 2;
+};
 
 const getManualCorrectAnswer = (q) => {
   if (!q) return null;
@@ -254,7 +276,7 @@ const SurveyResultDetailModal = ({ visible, result, onClose, lang }) => {
             >
               <Text type="secondary">{t[lang].employee}:</Text>
               <Text strong>
-                {result.employeeName || `ID: ${result.employeeId}`}
+                {formatName(result.employeeName) || `ID: ${result.employeeId}`}
               </Text>
             </div>
           </Col>
@@ -497,6 +519,10 @@ export const SurveyResultsPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedResult, setSelectedResult] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const fetchSessions = useTestSessionStore((s) => s.fetchSessions);
+  const fetchTests = useTestStore((s) => s.fetchTests);
+  const fetchEmployee = useEmployeeStore((s) => s.fetchEmployee);
  // язык берётся из общего меню (HRSystemLayout)
  const [lang, setLang] = useState(
   () => localStorage.getItem("language") || "ru"
@@ -570,18 +596,72 @@ useEffect(() => {
     },
   };
 
-  const loadResults = useCallback(() => {
+  // результаты опросов — сессии TestSession по тестам с testType "Quiz"
+  const loadResults = useCallback(async () => {
     setLoading(true);
     try {
-      const saved = JSON.parse(localStorage.getItem("survey_results") || "[]");
-      setResults(saved);
+      const [sessions, tests] = await Promise.all([
+        fetchSessions(1, 1000),
+        fetchTests(1, 1000, lang),
+        // без сотрудников покажем ID вместо имени
+        fetchEmployee(1, 1000).catch(() => null),
+      ]);
+      const employees = useEmployeeStore.getState().employees || [];
+      const surveys = new Map(
+        (useTestStore.getState().tests || tests || [])
+          .filter(isSurvey)
+          .map((sv) => [Number(sv.id), sv]),
+      );
+
+      // бэк отдаёт testType в сессии; если его нет — смотрим тип теста
+      const surveySessions = (sessions || []).filter((s) =>
+        s.testType != null ? isSurvey(s) : surveys.has(Number(s.testId)),
+      );
+      const attemptsOf = (s) =>
+        surveySessions.filter(
+          (x) =>
+            isSameId(x.employeeId, s.employeeId) &&
+            isSameId(x.testId, s.testId) &&
+            x.id <= s.id,
+        ).length;
+
+      const mapped = surveySessions.map((s) => {
+        const sv = surveys.get(Number(s.testId));
+        const emp = employees.find((e) => isSameId(e.id, s.employeeId));
+        const questions = sv?.questions || [];
+        const finished = String(s.status).toLowerCase() === "finished";
+        return {
+          sessionId: s.id,
+          surveyId: s.testId,
+          employeeId: s.employeeId,
+          employeeName: emp
+            ? `${emp.firstName} ${emp.lastName}`
+            : `ID: ${s.employeeId}`,
+          // без названия таблица покажет "Опрос {id}"
+          surveyName:
+            (lang === "ru"
+              ? sv?.titleRu || sv?.title
+              : sv?.titleTj || sv?.title) || null,
+          questions,
+          totalQuestions: questions.length,
+          answers: (s.answers || []).map((a) => ({
+            questionId: a.questionId,
+            answer: a.optionId ?? a.textAnswer,
+          })),
+          completedAt: s.finishedAt || s.startedAt,
+          timeSpent: Math.round((s.durationMinutes || 0) * 60),
+          isCompleted: finished,
+          attemptCount: attemptsOf(s),
+        };
+      });
+      setResults(mapped);
     } catch (error) {
       console.error("Error loading results:", error);
       message.error("Ошибка загрузки результатов");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [lang, fetchSessions, fetchTests, fetchEmployee]);
 
   useEffect(() => {
     loadResults();
@@ -854,17 +934,18 @@ useEffect(() => {
     {
       title: t[lang].employee,
       key: "employee",
+      width: 260,
       render: (_, record) => (
-        <Space>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Avatar
-            size={28}
+            size={32}
             icon={<UserOutlined />}
-            style={{ background: RED_GRADIENT }}
+            style={{ background: RED_GRADIENT, flexShrink: 0 }}
           />
-          <Text strong>
-            {record.employeeName || `ID: ${record.employeeId}`}
+          <Text strong style={{ wordBreak: "normal", lineHeight: 1.3 }}>
+            {formatName(record.employeeName) || `ID: ${record.employeeId}`}
           </Text>
-        </Space>
+        </div>
       ),
     },
     {
@@ -1157,6 +1238,7 @@ useEffect(() => {
               dataSource={results}
               columns={columns}
               rowKey={(record, index) =>
+                record.sessionId ??
                 `${record.surveyId}-${record.employeeId}-${index}`
               }
               pagination={{

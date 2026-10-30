@@ -85,6 +85,18 @@ const getNumericType = (type) => {
   return 1;
 };
 
+// опрос (Quiz) — та же логика, что в SurveyManager
+const isSurvey = (t) => {
+  if (!t) return false;
+  const v = t.testType ?? t.test_type ?? t.categoryType;
+  if (v === undefined || v === null || v === "") return false;
+  const s = String(v).trim().toLowerCase();
+  if (s === "quiz" || s === "survey" || s === "опрос" || s === "questionnaire")
+    return true;
+  const n = Number(s);
+  return !Number.isNaN(n) && n >= 2;
+};
+
 const getApiTypeString = (nType) => {
   if (nType === 2) return "OpenEnded";
   if (nType === 3) return "Rating";
@@ -577,7 +589,10 @@ export const TestManager = ({ onStartTest }) => {
     if (!isAdmin) setSelectedEmployeeId(currentEmployeeId);
   }, [isAdmin, currentEmployeeId]);
 
-  const testTests = tests.filter((test) => test.testType !== 0);
+  // опросы показываются на странице «Опросы»
+  const testTests = tests.filter(
+    (test) => test.testType !== 0 && !isSurvey(test),
+  );
 
   const totalCount = testTests.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
